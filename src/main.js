@@ -16,7 +16,7 @@ import { glowTexture } from './gfx/textures.js';
 import { Player } from './game/player.js';
 import { Combat } from './game/combat.js';
 import { Director } from './game/enemies.js';
-import { Chest, BiscuitTin, Pickup, LookingGlass } from './game/interactables.js';
+import { Chest, BiscuitTin, Pickup, LookingGlass, TeaTable } from './game/interactables.js';
 import { RARITY } from './game/items.js';
 import { HUD } from './ui/hud.js';
 
@@ -214,6 +214,11 @@ class Game {
       const s = w.freeSpot(2, avoid);
       avoid.push({ ...s, r: 3 });
       this.interactables.push(new BiscuitTin(this, s.x, s.z));
+    }
+    for (let i = 0; i < 2; i++) {
+      const s = w.freeSpot(3, avoid);
+      avoid.push({ ...s, r: 4 });
+      this.interactables.push(new TeaTable(this, s.x, s.z));
     }
     this.director.reset();
     if (this.player) {

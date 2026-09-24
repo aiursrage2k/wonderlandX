@@ -468,7 +468,7 @@ export class HUD {
     const tp = g.teleporter;
     let obj = 'Find the Looking Glass';
     if (tp.state === 'charging') obj = tp.inZone ? 'Hold the ground before the Looking Glass' : 'Return to the Looking Glass!';
-    if (tp.state === 'charged') obj = 'Slay the White Rabbit';
+    if (tp.state === 'charged') obj = `Slay ${g.boss ? g.boss.name : 'the boss'}`;
     if (tp.state === 'ready') obj = 'Step through the Looking Glass';
     this.setText('objective', obj);
     const charging = tp.state === 'charging';
@@ -530,7 +530,7 @@ export class HUD {
     for (const it of g.interactables) {
       if (it.used) continue;
       const [cx, cz] = m(it.pos.x, it.pos.z);
-      x.fillStyle = it.kind === 'tin' ? '#a08040' : it.big ? '#ff5060' : '#ffd060';
+      x.fillStyle = it.kind === 'tin' ? '#a08040' : it.kind === 'shrine' ? '#60e0ff' : it.big ? '#ff5060' : '#ffd060';
       x.fillRect(cx - 3, cz - 3, 6, 6);
     }
     for (const it of g.pickups) {

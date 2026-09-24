@@ -1,7 +1,7 @@
 // Tea chests, biscuit tins, dropped items, and the Looking Glass (teleporter).
 
 import * as THREE from 'three';
-import { buildChest, buildLookingGlass, mat } from '../gfx/models.js';
+import { buildChest, buildLookingGlass, buildTeaTable, mat } from '../gfx/models.js';
 import { rollItem, RARITY } from './items.js';
 import { rand, TAU } from '../engine/util.js';
 import { sfx } from '../engine/audio.js';
@@ -57,6 +57,77 @@ export class Chest {
     } else if (!this.used) {
       this.parts.glow.opacity = 0.25 + Math.sin(this.game.time * 3) * 0.15;
     }
+  }
+}
+
+// Chance shrine: pay the Hatter, and maybe he pours you something good.
+const HATTER_MISSES = [
+  'The Hatter sips his tea and says nothing.',
+  '“Why is a raven like a writing desk?” He keeps your gold.',
+  '“No room! No room!” Nothing for you.',
+  'The Dormouse snores. Your gold vanishes into the teapot.',
+];
+export class TeaTable {
+  constructor(game, x, z) {
+    this.game = game;
+    this.kind = 'shrine';
+    const b = buildTeaTable();
+    this.model = b.root;
+    this.parts = b.parts;
+    const y = game.world.height(x, z);
+    this.pos = new THREE.Vector3(x, y, z);
+    this.model.position.copy(this.pos);
+    this.model.rotation.y = rand() * TAU;
+    game.scene.add(this.model);
+    this.uses = 0;
+    this.priceMult = 1;
+    this.used = false;
+    this.wait = 0;
+  }
+
+  get cost() {
+    return Math.round(18 * this.priceMult * this.game.difficulty() ** 1.25);
+  }
+
+  label() {
+    if (this.wait > 0) return null;
+    return `<kbd>E</kbd> Pour the Hatter a cup <span style="color:#ffd24a">◈ ${this.cost}</span>`;
+  }
+
+  interact() {
+    const g = this.game;
+    const p = g.player;
+    if (p.gold < this.cost) {
+      g.hud.banner('Not enough gold', `The Hatter wants ◈ ${this.cost}.`, '#a08080', '🎩');
+      return;
+    }
+    p.gold -= this.cost;
+    this.wait = 0.6;
+    this.priceMult *= 1.5;
+    const hatPos = this.parts.hat.getWorldPosition(new THREE.Vector3());
+    if (rand() < 0.45) {
+      this.uses++;
+      const item = rollItem(rand, { legendary: 0.03, uncommon: 0.2 });
+      g.spawnPickup(item, hatPos.clone().setY(hatPos.y + 0.6), new THREE.Vector3((rand() - 0.5) * 3, 8, (rand() - 0.5) * 3));
+      g.fx.burst(hatPos, 30, '#ffd070', { speed: 6, size: 0.3, life: 0.7 });
+      sfx('chest');
+      if (this.uses >= 2) {
+        this.used = true;
+        g.hud.banner('Clean cup, move down!', 'The tea party moves on without you.', '#c9a45a', '🎩');
+      }
+    } else {
+      g.hud.banner('No luck', HATTER_MISSES[Math.floor(rand() * HATTER_MISSES.length)], '#a08888', '🫖');
+      g.fx.smoke(hatPos, '#8a7a90', 6, 0.4);
+      sfx('boil');
+    }
+  }
+
+  update(dt) {
+    this.wait = Math.max(0, this.wait - dt);
+    const t = this.game.time;
+    this.parts.hat.position.y = 1.06 + (this.wait > 0 ? Math.sin(this.wait * 30) * 0.1 : 0);
+    this.parts.hat.rotation.y = t * 0.6;
+    this.parts.glow.opacity = this.used ? 0 : 0.3 + Math.sin(t * 3) * 0.2;
   }
 }
 
@@ -212,10 +283,12 @@ export class LookingGlass {
       this.state = 'charging';
       sfx('boss');
       sfx('bell');
-      g.hud.banner('The White Rabbit', '“I’m late! I’m late! For a very important date!”', '#ff3a50', '🐇');
+      const queen = g.depth % 2 === 0;
+      if (queen) g.hud.banner('The Queen of Hearts', '“Who has been painting my roses red?”', '#ff3a50', '👑');
+      else g.hud.banner('The White Rabbit', '“I’m late! I’m late! For a very important date!”', '#ff3a50', '🐇');
       g.camShake(0.6);
       const a = rand() * TAU;
-      g.boss = g.director.spawn('rabbit', this.pos.x + Math.cos(a) * 14, this.pos.z + Math.sin(a) * 14, null);
+      g.boss = g.director.spawn(queen ? 'queen' : 'rabbit', this.pos.x + Math.cos(a) * 14, this.pos.z + Math.sin(a) * 14, null);
       this.zoneRing = g.fx.ring(this.pos.x, this.pos.z, { r0: this.radius, r1: this.radius, dur: 1e9, color: '#ff2a5a', pulse: true, opacity: 0.4 });
       this.zoneRing.hold = true;
     } else if (this.state === 'ready') {
@@ -243,7 +316,7 @@ export class LookingGlass {
       }
       if (this.charge >= 1) {
         this.state = 'charged';
-        g.hud.banner('The Glass is Charged', 'Only the Rabbit stands in your way.', '#ff8aa0', '🪞');
+        g.hud.banner('The Glass is Charged', 'Only the boss stands in your way.', '#ff8aa0', '🪞');
         sfx('bell');
       }
     }

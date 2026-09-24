@@ -53,6 +53,7 @@ export class Combat {
       tea: new THREE.MeshBasicMaterial({ color: '#ff8a30' }),
       bolt: new THREE.MeshBasicMaterial({ color: '#c890ff' }),
       clock: new THREE.MeshBasicMaterial({ color: '#ffd060' }),
+      heart: new THREE.MeshBasicMaterial({ color: '#ff3050' }),
     };
   }
 
@@ -324,7 +325,7 @@ export class Combat {
       s.prev.copy(s.pos);
       s.pos.addScaledVector(s.vel, dt);
       s.mesh.position.copy(s.pos);
-      const col = s.kind === 'tea' ? '#ff7a20' : s.kind === 'clock' ? '#ffc040' : '#a060ff';
+      const col = s.kind === 'tea' ? '#ff7a20' : s.kind === 'clock' ? '#ffc040' : s.kind === 'heart' ? '#ff3050' : '#a060ff';
       g.fx.trail(s.pos, col, 0.6 * s.size, 0.25, 0.8);
       if (pl.alive && segHitsSphere(s.prev, s.pos, pl.center, 0.55 + s.size * 0.15)) {
         if (s.splash) this.explode(s.pos.clone(), s.splash, 0, { dmg: s.dmg, color: col });

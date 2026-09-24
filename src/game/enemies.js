@@ -1,7 +1,7 @@
 // Enemies, their AI, and the credit-based spawn Director.
 
 import * as THREE from 'three';
-import { buildCardGuard, buildTeacup, buildClockWisp, buildWhiteRabbit } from '../gfx/models.js';
+import { buildCardGuard, buildTeacup, buildClockWisp, buildWhiteRabbit, buildQueen } from '../gfx/models.js';
 import { rand, clamp, lerp, angleDiff, TAU } from '../engine/util.js';
 import { sfx } from '../engine/audio.js';
 import { rollItem } from './items.js';
@@ -759,6 +759,215 @@ export class WhiteRabbit extends Enemy {
   }
 }
 
+
+// ───────────────────────── The Queen of Hearts ─────────────────────────
+export class QueenOfHearts extends Enemy {
+  constructor(game, x, z, o) {
+    super(game, buildQueen(), x, z, { ...o, hp: 2700, gold: 160, elite: null });
+    this.name = 'The Queen of Hearts';
+    this.subtitle = 'Sovereign of Severance';
+    this.boss = true;
+    this.radius = 1.9;
+    this.height = 6.2;
+    this.hitR = 2.1;
+    this.hitOffset = 3.0;
+    this.speed = 4.2;
+    this.cooldown = 2;
+    this.summonT = 10;
+    this.bloodColor = '#b01020';
+  }
+
+  think(dt) {
+    const g = this.game;
+    const p = g.player;
+    const d = this.distToPlayer();
+    const parts = this.parts;
+    this.cooldown -= dt;
+    this.summonT -= dt;
+    const enraged = this.hp < this.maxHp * 0.5;
+    switch (this.state) {
+      case 'chase':
+        this.steer(p.pos.x, p.pos.z, this.speed * (enraged ? 1.3 : 1), dt);
+        this.faceToward(p.pos.x, p.pos.z, dt, 3);
+        if (this.cooldown <= 0 && p.alive) {
+          this.t = 0;
+          this.didHit = false;
+          this.fired = 0;
+          if (d < 7) this.state = 'sweep';
+          else if (this.summonT <= 0) this.state = 'summon';
+          else {
+            const r = rand();
+            this.state = r < 0.38 ? 'decree' : r < 0.7 ? 'hearts' : 'cards';
+          }
+          if (this.state === 'decree') {
+            g.hud.banner('“Off with her head!”', '', '#ff3048', '👑');
+            sfx('boss');
+          } else sfx('telegraph');
+        }
+        break;
+      case 'sweep': {
+        this.vel.multiplyScalar(Math.exp(-8 * dt));
+        if (this.t < 0.7) this.faceToward(p.pos.x, p.pos.z, dt, 5);
+        if (this.t > 0.7 && !this.didHit) {
+          this.didHit = true;
+          const fwd = tmp.set(Math.sin(this.yaw), 0, Math.cos(this.yaw));
+          const to = tmp2.set(p.pos.x - this.pos.x, 0, p.pos.z - this.pos.z);
+          if (to.length() < 8 && fwd.dot(to.normalize()) > 0.1) p.hurt(26 * this.dmgMult);
+          const c = this.pos.clone().addScaledVector(fwd, 3.5);
+          g.fx.ring(c.x, c.z, { r0: 1, r1: 6, dur: 0.35, color: '#ff2040' });
+          g.fx.burst(c.setY(c.y + 2), 30, '#ff4060', { speed: 12, size: 0.35, life: 0.35 });
+          g.camShake(0.35);
+          sfx('slash3');
+        }
+        if (this.t > 1.3) this.endAttack(1.1);
+        break;
+      }
+      case 'decree': {
+        // lines of rose thorns race toward Alice, re-aiming each wave
+        this.vel.multiplyScalar(Math.exp(-8 * dt));
+        this.faceToward(p.pos.x, p.pos.z, dt, 4);
+        const waves = enraged ? 4 : 3;
+        if (this.t > 0.6 + this.fired * 0.9 && this.fired < waves) {
+          this.fired++;
+          const base = Math.atan2(p.pos.x - this.pos.x, p.pos.z - this.pos.z);
+          const spread = enraged ? [-0.35, 0, 0.35] : [-0.22, 0.22];
+          for (const off of this.fired % 2 ? spread : [0]) this.thornLine(base + off);
+        }
+        if (this.t > 0.6 + waves * 0.9 + 0.8) this.endAttack(1.3);
+        break;
+      }
+      case 'hearts': {
+        this.vel.multiplyScalar(Math.exp(-8 * dt));
+        parts.scepter.rotation.x = -1.2;
+        if (this.t > 0.4 && !this.didHit) {
+          this.didHit = true;
+          const n = enraged ? 10 : 7;
+          for (let i = 0; i < n; i++) {
+            const a = rand() * TAU;
+            const r = i === 0 ? 0 : 2 + rand() * 7;
+            const x = p.pos.x + p.vel.x * 0.6 + Math.cos(a) * r;
+            const z = p.pos.z + p.vel.z * 0.6 + Math.sin(a) * r;
+            this.heartDrop(x, z, 1.0 + i * 0.12);
+          }
+        }
+        if (this.t > 2.6) this.endAttack(1.2);
+        break;
+      }
+      case 'cards': {
+        this.vel.multiplyScalar(Math.exp(-8 * dt));
+        this.faceToward(p.pos.x, p.pos.z, dt, 5);
+        if (this.t > 0.5 && this.fired < (enraged ? 5 : 3) && this.t > 0.5 + this.fired * 0.28) {
+          this.fired++;
+          const from = this.hitCenter(new THREE.Vector3());
+          from.y += 1;
+          const base = Math.atan2(p.pos.x - this.pos.x, p.pos.z - this.pos.z) + (this.fired % 2 ? 0.08 : -0.08);
+          for (let i = -3; i <= 3; i++) {
+            const a = base + i * 0.16;
+            const dir = new THREE.Vector3(Math.sin(a), (p.center.y - from.y) / Math.max(5, d), Math.cos(a)).normalize();
+            g.combat.spawnEnemyShot('heart', from, dir.multiplyScalar(26), 10 * this.dmgMult, { size: 1.3, life: 3 });
+          }
+          sfx('cards');
+        }
+        if (this.t > 2.2) this.endAttack(1.0);
+        break;
+      }
+      case 'summon':
+        this.vel.multiplyScalar(Math.exp(-8 * dt));
+        if (this.t > 0.8 && !this.didHit) {
+          this.didHit = true;
+          sfx('bell');
+          g.hud.banner('“Guards! Seize her!”', '', '#ff3048', '♠');
+          for (let i = 0; i < 4; i++) {
+            const a = (i / 4) * TAU;
+            g.director.spawn('guard', this.pos.x + Math.cos(a) * 5, this.pos.z + Math.sin(a) * 5, i === 0 && g.depth > 2 ? ELITES[0] : null);
+          }
+          this.summonT = 20;
+        }
+        if (this.t > 1.4) this.endAttack(0.8);
+        break;
+    }
+    // animation: the gown glides, scepter follows the attack
+    const hs = Math.hypot(this.vel.x, this.vel.z);
+    parts.gown.rotation.y = Math.sin(this.t * 2) * 0.05;
+    parts.body.position.y = Math.sin(this.t * 2.2) * 0.05 + Math.min(1, hs / 4) * 0.05;
+    const sweep = this.state === 'sweep' ? (this.t < 0.7 ? -2.4 * (this.t / 0.7) : -2.4 + (this.t - 0.7) * 9) : null;
+    parts.arms[1].sh.rotation.x = sweep !== null ? Math.min(0.8, sweep) : this.state === 'hearts' ? -2.6 : -0.4;
+    parts.arms[0].sh.rotation.x = this.state === 'decree' ? -2.2 : -0.2;
+    parts.arms[0].sh.rotation.z = this.state === 'decree' ? 0.5 : 0.15;
+    parts.head.rotation.z = Math.sin(this.t * 0.9) * 0.06;
+    parts.heartMat.emissiveIntensity = 1.5 + Math.sin(this.t * (enraged ? 12 : 4)) * 0.8;
+  }
+
+  thornLine(angle) {
+    const g = this.game;
+    const x0 = this.pos.x;
+    const z0 = this.pos.z;
+    const n = 18;
+    for (let i = 1; i <= n; i++) {
+      const x = x0 + Math.sin(angle) * i * 1.5;
+      const z = z0 + Math.cos(angle) * i * 1.5;
+      const delay = i * 0.06;
+      let t = -delay;
+      let warned = false;
+      let done = false;
+      g.addTicker((dt) => {
+        t += dt;
+        if (t < 0) return true;
+        if (!warned) {
+          warned = true;
+          g.fx.ring(x, z, { r0: 1.1, r1: 1.1, dur: 0.55, color: '#ff2040', pulse: true, fill: true, opacity: 0.4 });
+        }
+        if (t > 0.55 && !done) {
+          done = true;
+          const y = g.world.height(x, z);
+          g.fx.burst(new THREE.Vector3(x, y + 0.3, z), 10, '#1a3a1a', { matter: true, speed: 7, g: 12, size: 0.3, life: 0.7 });
+          g.fx.burst(new THREE.Vector3(x, y + 0.5, z), 6, '#ff2040', { speed: 6, g: 4, size: 0.35, life: 0.4 });
+          const p = g.player;
+          if (p.alive && Math.hypot(p.pos.x - x, p.pos.z - z) < 1.3 && p.pos.y - y < 1.5) p.hurt(16 * this.dmgMult);
+          return false;
+        }
+        return true;
+      });
+    }
+  }
+
+  heartDrop(x, z, fall) {
+    const g = this.game;
+    const ring = g.fx.ring(x, z, { r0: 2.2, r1: 2.2, dur: fall, color: '#ff2a50', pulse: true });
+    let t = 0;
+    const y0 = g.world.height(x, z);
+    const orb = new THREE.Mesh(g.combat.orbGeo, g.combat.enemyMats.heart);
+    orb.scale.setScalar(2.2);
+    g.scene.add(orb);
+    g.addTicker((dt) => {
+      t += dt;
+      const k = Math.min(1, t / fall);
+      orb.position.set(x, y0 + 30 * (1 - k * k), z);
+      g.fx.trail(orb.position, '#ff3050', 0.9, 0.3, 0.8);
+      if (k >= 1) {
+        g.scene.remove(orb);
+        ring.dead = true;
+        g.combat.explode(new THREE.Vector3(x, y0 + 0.4, z), 2.2, 0, { dmg: 18 * this.dmgMult, color: '#ff3050' });
+        g.splat(x, z, 1.2, '#6a0818');
+        return false;
+      }
+      return true;
+    });
+  }
+
+  endAttack(cd) {
+    this.state = 'chase';
+    this.didHit = false;
+    this.parts.scepter.rotation.x = 0;
+    this.cooldown = cd * (this.hp < this.maxHp * 0.5 ? 0.7 : 1);
+  }
+
+  onDeath() {
+    WhiteRabbit.prototype.onDeath.call(this);
+    this.game.hud.banner('The Queen Has Fallen', '“…I’ll have your head for this.”', '#ff5a5a', '👑');
+  }
+}
+
 // ───────────────────────── Director ─────────────────────────
 const CARDS = [
   { type: 'guard', cost: 12, weight: 5, min: 0 },
@@ -786,6 +995,7 @@ export class Director {
     else if (type === 'teacup') e = new Teacup(g, x, z, o);
     else if (type === 'wisp') e = new ClockWisp(g, x, z, o);
     else if (type === 'rabbit') e = new WhiteRabbit(g, x, z, o);
+    else if (type === 'queen') e = new QueenOfHearts(g, x, z, o);
     g.enemies.push(e);
     g.fx.ring(x, z, { r0: 0.2, r1: e.boss ? 6 : 2, dur: 0.8, color: e.elite ? e.elite.color : '#a040ff' });
     g.fx.burst(new THREE.Vector3(x, g.world.height(x, z) + 0.3, z), e.boss ? 60 : 14, '#8040ff', { speed: 4, g: -4, size: 0.4, life: 0.9 });

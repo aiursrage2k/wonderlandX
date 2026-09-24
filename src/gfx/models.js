@@ -515,3 +515,96 @@ export function buildLookingGlass() {
   glass.castShadow = false;
   return { root, parts: { frame, glassMat, heartMat } };
 }
+
+// ───────────────────────────── The Queen of Hearts ─────────────────────────────
+export function buildQueen() {
+  const root = new THREE.Group();
+  const S = 2.4;
+  const body = pivot(root, 0, 0, 0);
+  const red = mat('#8a0c18', { roughness: 0.45 });
+  const black = mat('#130810', { roughness: 0.5 });
+  const gold = GOLD();
+  const skin = mat('#f0e2e6', { roughness: 0.5 });
+  // towering gown in red and black panels
+  const prof = [[0.05, 0], [0.95, 0], [0.9, 0.12], [0.72, 0.5], [0.5, 0.9], [0.32, 1.15], [0.26, 1.25], [0, 1.25]].map(([r, y]) => new THREE.Vector2(r * S, y * S));
+  const gown = pivot(body, 0, 0, 0);
+  for (let i = 0; i < 8; i++) {
+    const m = mesh(geo(THREE.LatheGeometry, prof, 6, (i / 8) * Math.PI * 2, Math.PI / 4), i % 2 ? red : black, gown);
+    m.material = i % 2 ? red : black;
+  }
+  // heart hem trim
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    mesh(geo(THREE.SphereGeometry, 0.09 * S, 8, 6), gold, gown, Math.sin(a) * 0.93 * S, 0.06 * S, Math.cos(a) * 0.93 * S);
+  }
+  const torso = pivot(body, 0, 1.2 * S, 0);
+  mesh(geo(THREE.CylinderGeometry, 0.22 * S, 0.27 * S, 0.45 * S, 12), red, torso, 0, 0.2 * S, 0);
+  // enormous ruffled collar
+  const collar = mesh(geo(THREE.ConeGeometry, 0.62 * S, 0.5 * S, 18, 1, true), mat('#f2ece0', { side: THREE.DoubleSide, roughness: 0.8 }), torso, 0, 0.55 * S, -0.08 * S);
+  collar.rotation.x = Math.PI + 0.35;
+  const head = pivot(torso, 0, 0.62 * S, 0.02 * S);
+  const face = mesh(geo(THREE.SphereGeometry, 0.2 * S, 18, 14), skin, head, 0, 0.12 * S, 0);
+  face.scale.set(1.05, 1.1, 1);
+  mesh(geo(THREE.SphereGeometry, 0.215 * S, 16, 10, 0, Math.PI * 2, 0, 1.6), black, head, 0, 0.14 * S, -0.03 * S);
+  const eyeMat = new THREE.MeshBasicMaterial({ color: '#ff2030' });
+  for (const s of [-1, 1]) {
+    mesh(geo(THREE.SphereGeometry, 0.03 * S, 8, 6), eyeMat, head, s * 0.07 * S, 0.15 * S, 0.18 * S).castShadow = false;
+    mesh(geo(THREE.SphereGeometry, 0.045 * S, 8, 6), mat('#c0306a', { roughness: 0.6 }), head, s * 0.11 * S, 0.06 * S, 0.15 * S).scale.z = 0.4;
+  }
+  mesh(geo(THREE.BoxGeometry, 0.08 * S, 0.025 * S, 0.02 * S), mat('#5a0010'), head, 0, 0.0, 0.19 * S);
+  // crown
+  const crown = pivot(head, 0, 0.3 * S, 0);
+  mesh(geo(THREE.CylinderGeometry, 0.15 * S, 0.13 * S, 0.1 * S, 16, 1, true), gold, crown);
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    mesh(geo(THREE.ConeGeometry, 0.035 * S, 0.14 * S, 4), gold, crown, Math.sin(a) * 0.14 * S, 0.1 * S, Math.cos(a) * 0.14 * S);
+  }
+  mesh(geo(THREE.SphereGeometry, 0.035 * S, 8, 6), mat('#ff2040', { emissive: '#ff0020', emissiveIntensity: 2 }), crown, 0, 0.03 * S, 0.15 * S);
+  // arms; right one wields a heart-topped scepter
+  const arms = [];
+  for (const s of [-1, 1]) {
+    const sh = pivot(torso, s * 0.3 * S, 0.36 * S, 0);
+    mesh(geo(THREE.SphereGeometry, 0.12 * S, 10, 8), red, sh).scale.set(1, 1.2, 1);
+    mesh(geo(THREE.CylinderGeometry, 0.05 * S, 0.04 * S, 0.5 * S, 8), skin, sh, 0, -0.28 * S, 0);
+    const hand = pivot(sh, 0, -0.55 * S, 0);
+    mesh(geo(THREE.SphereGeometry, 0.05 * S, 8, 6), skin, hand);
+    arms.push({ sh, hand });
+  }
+  const scepter = pivot(arms[1].hand, 0, 0, 0);
+  mesh(geo(THREE.CylinderGeometry, 0.025 * S, 0.025 * S, 1.3 * S, 8), gold, scepter, 0, 0.35 * S, 0);
+  const heart = new THREE.Shape();
+  heart.moveTo(0, -0.35);
+  heart.bezierCurveTo(-0.6, 0.05, -0.35, 0.45, 0, 0.2);
+  heart.bezierCurveTo(0.35, 0.45, 0.6, 0.05, 0, -0.35);
+  const heartMat = mat('#d0102a', { emissive: '#ff1030', emissiveIntensity: 1.5, metalness: 0.3, roughness: 0.3 });
+  const h = mesh(geo(THREE.ExtrudeGeometry, heart, { depth: 0.12, bevelEnabled: true, bevelSize: 0.03, bevelThickness: 0.03 }), heartMat, scepter, 0, 1.1 * S, 0);
+  h.scale.setScalar(S * 0.6);
+  return { root, parts: { body, gown, torso, head, arms, scepter, eyeMat, heartMat } };
+}
+
+// The Mad Hatter's tea table — a chance shrine.
+export function buildTeaTable() {
+  const root = new THREE.Group();
+  const wood = mat('#2a1612', { roughness: 0.7 });
+  const cloth = mat('#e8e0d4', { roughness: 0.9 });
+  mesh(geo(THREE.BoxGeometry, 3.2, 0.12, 1.4), cloth, root, 0, 1.0, 0);
+  for (const x of [-1.4, 1.4]) for (const z of [-0.55, 0.55]) mesh(geo(THREE.CylinderGeometry, 0.06, 0.05, 1, 6), wood, root, x, 0.5, z);
+  const porc = mat('#f2ece2', { roughness: 0.3 });
+  for (let i = 0; i < 6; i++) {
+    const c = mesh(geo(THREE.CylinderGeometry, 0.12, 0.08, 0.16, 12), porc, root, -1.2 + i * 0.45, 1.14, (i % 2 ? 0.3 : -0.3));
+    c.rotation.z = i === 3 ? 1.4 : 0;
+  }
+  mesh(geo(THREE.SphereGeometry, 0.25, 12, 10), porc, root, 0.2, 1.3, 0).scale.set(1, 0.8, 1);
+  // the hat, 10/6 tag and all
+  const hat = pivot(root, -0.9, 1.06, 0.1);
+  mesh(geo(THREE.CylinderGeometry, 0.42, 0.42, 0.04, 20), mat('#3a2a4a'), hat, 0, 0, 0);
+  mesh(geo(THREE.CylinderGeometry, 0.3, 0.26, 0.6, 20), mat('#3a2a4a'), hat, 0, 0.32, 0);
+  mesh(geo(THREE.CylinderGeometry, 0.305, 0.285, 0.1, 20), mat('#b01830'), hat, 0, 0.1, 0);
+  const tag = mesh(geo(THREE.PlaneGeometry, 0.16, 0.1), mat('#f0e6c8', { side: THREE.DoubleSide }), hat, 0.2, 0.2, 0.2);
+  tag.rotation.y = 0.7;
+  const glow = new THREE.MeshBasicMaterial({ color: '#ffd070', transparent: true, opacity: 0.4 });
+  const g = mesh(geo(THREE.TorusGeometry, 0.5, 0.03, 6, 24), glow, hat, 0, 0.7, 0);
+  g.rotation.x = Math.PI / 2;
+  g.castShadow = false;
+  return { root, parts: { hat, glow } };
+}

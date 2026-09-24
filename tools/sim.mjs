@@ -99,6 +99,8 @@ export default async function (page, out) {
   }
   await page.waitForTimeout(1500);
   await run(10, 'next', { godMode: true, tpAt: 999 });
+  for (let i = 0; i < 6; i++) { const r = await run(20, 'queen' + i, { godMode: true, tpAt: 0 }); if (r.state === 'transition') break; }
+  await page.waitForTimeout(1500);
   await snap('next');
   await run(20, 'death', { godMode: false, tpAt: 999 });
   const st = await page.evaluate(() => window.game.state);
