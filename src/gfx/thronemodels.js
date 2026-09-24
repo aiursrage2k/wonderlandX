@@ -6,6 +6,8 @@ import * as THREE from 'three';
 import { mat } from './models.js';
 import { cardTexture } from './textures.js';
 
+const TAU = Math.PI * 2;
+
 function mesh(g, material, parent, x = 0, y = 0, z = 0) {
   const m = new THREE.Mesh(g, material);
   m.position.set(x, y, z);
@@ -123,6 +125,156 @@ export function buildHeartKnight(rank = 'K') {
 }
 
 // ───────────────────────── The Crimson Queen ─────────────────────────
+function canvasTex(w, h, draw, srgb = true) {
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c);
+  if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  return t;
+}
+
+// A painted face wrapped on a sphere: front of the sphere is u = 0.25.
+function queenFaceTextures() {
+  const W = 1024;
+  const H = 512;
+  const cx = W * 0.25;
+  const paint = (x, glow) => {
+    x.fillStyle = glow ? '#000' : '#ecdadc';
+    x.fillRect(0, 0, W, H);
+    if (!glow) {
+      // hollow cheeks and a sharp jaw
+      const g = x.createRadialGradient(cx, H * 0.62, 10, cx, H * 0.62, 150);
+      g.addColorStop(0, 'rgba(0,0,0,0)');
+      g.addColorStop(1, 'rgba(120,60,90,0.25)');
+      x.fillStyle = g;
+      x.fillRect(cx - 200, H * 0.3, 400, 260);
+    }
+    for (const s of [-1, 1]) {
+      const ex = cx + s * 62;
+      const ey = H * 0.44;
+      // smoky, winged eye make-up
+      if (!glow) {
+        x.fillStyle = 'rgba(30,0,20,0.85)';
+        x.beginPath();
+        x.moveTo(ex - s * 44, ey + 4);
+        x.quadraticCurveTo(ex, ey - 34, ex + s * 58, ey - 22);
+        x.quadraticCurveTo(ex + s * 20, ey + 22, ex - s * 44, ey + 4);
+        x.fill();
+        // furious brows
+        x.strokeStyle = '#1a0610';
+        x.lineWidth = 9;
+        x.beginPath();
+        x.moveTo(ex - s * 40, ey - 44);
+        x.lineTo(ex + s * 44, ey - 26);
+        x.stroke();
+      }
+      // the eyes: burning red slits
+      x.fillStyle = glow ? '#ff3040' : '#ff2a3a';
+      x.beginPath();
+      x.ellipse(ex, ey - 4, 26, 9, s * 0.25, 0, TAU);
+      x.fill();
+      x.fillStyle = glow ? '#ffe0a0' : '#ffd080';
+      x.beginPath();
+      x.ellipse(ex, ey - 4, 5, 8, 0, 0, TAU);
+      x.fill();
+      // glowing cracks running down from the eyes
+      x.strokeStyle = glow ? '#ff2040' : '#6a0818';
+      x.lineWidth = glow ? 3 : 4;
+      x.beginPath();
+      let px = ex;
+      let py = ey + 8;
+      x.moveTo(px, py);
+      for (let k = 0; k < 6; k++) {
+        px += (Math.sin(k * 3.1 + s) * 12);
+        py += 18;
+        x.lineTo(px, py);
+      }
+      x.stroke();
+    }
+    // a nose, a snarling dark mouth
+    if (!glow) {
+      x.strokeStyle = 'rgba(120,70,80,0.6)';
+      x.lineWidth = 4;
+      x.beginPath();
+      x.moveTo(cx - 8, H * 0.5);
+      x.quadraticCurveTo(cx - 14, H * 0.58, cx, H * 0.6);
+      x.stroke();
+    }
+    x.fillStyle = glow ? '#300008' : '#5a0010';
+    x.beginPath();
+    x.moveTo(cx - 52, H * 0.69);
+    x.quadraticCurveTo(cx, H * 0.64, cx + 52, H * 0.69);
+    x.quadraticCurveTo(cx, H * 0.8, cx - 52, H * 0.69);
+    x.fill();
+    if (!glow) {
+      x.fillStyle = '#f4ecdc';
+      for (let k = -3; k <= 3; k++) x.fillRect(cx + k * 12 - 4, H * 0.68, 8, 9);
+    }
+    // a heart on the brow
+    x.fillStyle = glow ? '#ff2040' : '#c01030';
+    x.beginPath();
+    const hy = H * 0.3;
+    x.moveTo(cx, hy + 14);
+    x.bezierCurveTo(cx - 18, hy, cx - 14, hy - 12, cx, hy - 4);
+    x.bezierCurveTo(cx + 14, hy - 12, cx + 18, hy, cx, hy + 14);
+    x.fill();
+  };
+  return { map: canvasTex(W, H, (x) => paint(x, false)), emissive: canvasTex(W, H, (x) => paint(x, true)) };
+}
+
+// Black lacquer with gold filigree and red veins that glow.
+let bodiceCache = null;
+function bodiceTextures() {
+  if (bodiceCache) return bodiceCache;
+  const W = 512;
+  const H = 512;
+  const draw = (x, glow) => {
+    x.fillStyle = glow ? '#000' : '#16080e';
+    x.fillRect(0, 0, W, H);
+    x.lineCap = 'round';
+    for (let i = 0; i < 12; i++) {
+      const cx = (i % 4) * 128 + 64;
+      const cy = Math.floor(i / 4) * 170 + 80;
+      x.strokeStyle = glow ? 'rgba(0,0,0,0)' : '#c9a04a';
+      x.lineWidth = 5;
+      x.beginPath();
+      x.moveTo(cx, cy + 50);
+      x.bezierCurveTo(cx - 60, cy + 10, cx - 30, cy - 50, cx, cy - 10);
+      x.bezierCurveTo(cx + 30, cy - 50, cx + 60, cy + 10, cx, cy + 50);
+      x.stroke();
+      x.beginPath();
+      x.arc(cx - 34, cy - 40, 14, 0, Math.PI * 1.5);
+      x.arc(cx + 34, cy - 40, 14, Math.PI * 1.5, Math.PI * 3);
+      x.stroke();
+    }
+    x.strokeStyle = glow ? '#ff1830' : '#5a0616';
+    x.lineWidth = 3;
+    for (let i = 0; i < 18; i++) {
+      let px = (i * 97) % W;
+      let py = (i * 57) % H;
+      x.beginPath();
+      x.moveTo(px, py);
+      for (let k = 0; k < 7; k++) {
+        px += Math.sin(i * 1.7 + k) * 26;
+        py += 22;
+        x.lineTo(px, py);
+      }
+      x.stroke();
+    }
+  };
+  const map = canvasTex(W, H, (x) => draw(x, false));
+  const emissive = canvasTex(W, H, (x) => draw(x, true));
+  for (const t of [map, emissive]) {
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.repeat.set(3, 2);
+  }
+  bodiceCache = { map, emissive };
+  return bodiceCache;
+}
+
 // A cathedral-sized upper body rising out of a whirl of cards: claws, a card
 // crown, card wings, and a crystal heart in her chest that is her weak point.
 export function buildCrimsonQueen() {
@@ -139,7 +291,7 @@ export function buildCrimsonQueen() {
 
   // a vortex of cards and shadow where her legs should be
   const vortex = pivot(body, 0, 0, 0);
-  const skirt = mesh(new THREE.ConeGeometry(9, 16, 24, 1, true), new THREE.MeshStandardMaterial({ color: '#2a0610', roughness: 0.5, side: THREE.DoubleSide, emissive: '#400010', emissiveIntensity: 0.6 }), vortex, 0, 8, 0);
+  const skirt = mesh(new THREE.ConeGeometry(9, 16, 32, 1, true), new THREE.MeshStandardMaterial({ map: bodiceTextures().map, emissiveMap: bodiceTextures().emissive, color: '#8a2030', roughness: 0.4, side: THREE.DoubleSide, emissive: '#ff2040', emissiveIntensity: 1.0 }), vortex, 0, 8, 0);
   skirt.rotation.x = Math.PI;
   const cards = [];
   const suits = ['♥', '♥', '♠', '♦'];
@@ -152,7 +304,9 @@ export function buildCrimsonQueen() {
   // torso: black-and-gold armoured corset around the crystal heart
   const torso = pivot(body, 0, 15, 0);
   const prof = [[0, 0], [4.2, 0], [4.6, 1.2], [3.6, 4.5], [3.9, 7], [5.2, 9], [4.6, 10.4], [0, 10.6]].map(([r, y]) => new THREE.Vector2(r, y));
-  const bodice = mesh(new THREE.LatheGeometry(prof, 20), black, torso);
+  const bt = bodiceTextures();
+  const lacquer = new THREE.MeshStandardMaterial({ map: bt.map, emissiveMap: bt.emissive, emissive: '#ff2040', emissiveIntensity: 1.2, metalness: 0.5, roughness: 0.3 });
+  const bodice = mesh(new THREE.LatheGeometry(prof, 32), lacquer, torso);
   bodice.scale.z = 0.72;
   // gold filigree ribs
   for (let i = 0; i < 7; i++) {
@@ -192,6 +346,8 @@ export function buildCrimsonQueen() {
     for (let i = 0; i < 9; i++) {
       const c = mesh(new THREE.PlaneGeometry(2.4, 6.6), cardFace(i % 3 ? '♥' : '♦', ['A', 'K', 'Q'][i % 3]), w);
       c.geometry.translate(0, 3.3, 0);
+      const edge = mesh(new THREE.PlaneGeometry(2.6, 6.8).translate(0, 3.3, -0.02), veinMat, c);
+      edge.castShadow = false;
       c.rotation.z = -s * (0.25 + i * 0.2);
       c.position.x = s * i * 0.35;
       c.position.z = -i * 0.12;
@@ -206,7 +362,9 @@ export function buildCrimsonQueen() {
   const neck = pivot(torso, 0, 10.4, 0.2);
   mesh(new THREE.CylinderGeometry(0.9, 1.2, 1.6, 12), skin, neck, 0, 0.6, 0);
   const head = pivot(neck, 0, 1.4, 0.3);
-  const face = mesh(new THREE.SphereGeometry(1.75, 24, 18), skin, head, 0, 1.4, 0);
+  const ft = queenFaceTextures();
+  const faceMat = new THREE.MeshStandardMaterial({ map: ft.map, emissiveMap: ft.emissive, emissive: '#ffffff', emissiveIntensity: 1.4, roughness: 0.45 });
+  const face = mesh(new THREE.SphereGeometry(1.75, 40, 28), faceMat, head, 0, 1.4, 0);
   face.scale.set(0.92, 1.12, 0.95);
   // a voluminous crown of dark curls
   for (let i = 0; i < 16; i++) {
@@ -215,15 +373,26 @@ export function buildCrimsonQueen() {
     const c = mesh(new THREE.SphereGeometry(0.75, 10, 8), hair, head, Math.sin(a) * r, 1.9 + Math.cos(a * 2) * 0.35, Math.cos(a) * r * 0.85 - 0.35);
     if (Math.cos(a) > 0.7) c.position.y += 0.9;
   }
-  for (const s of [-1, 1]) {
-    const eye = mesh(new THREE.SphereGeometry(0.22, 10, 8), eyeMat, head, 0.58 * s, 1.55, 1.5);
-    eye.scale.set(1.3, 0.7, 0.6);
-    eye.castShadow = false;
-    const brow = mesh(new THREE.BoxGeometry(0.7, 0.12, 0.2), hair, head, 0.58 * s, 1.95, 1.52);
-    brow.rotation.z = 0.35 * s;
+  // a small invisible handle so the AI can still work the jaw
+  const mouth = new THREE.Group();
+  mouth.position.set(0, 0.62, 1.4);
+  head.add(mouth);
+  // cheekbones and a nose give the painted face some shape
+  for (const sd of [-1, 1]) mesh(new THREE.SphereGeometry(0.45, 12, 8), faceMat, head, 0.85 * sd, 1.05, 1.1).scale.set(1, 0.6, 0.6);
+  const nose = mesh(new THREE.ConeGeometry(0.2, 0.6, 8), skin, head, 0, 1.25, 1.62);
+  nose.rotation.x = Math.PI / 2 + 0.3;
+  // long hair tendrils flowing back from the head, tipped in fire
+  const tipMat = new THREE.MeshStandardMaterial({ color: '#2a0810', emissive: '#ff2040', emissiveIntensity: 0.8, roughness: 0.5 });
+  for (let i = 0; i < 12; i++) {
+    const a = Math.PI + (i / 11 - 0.5) * 2.4;
+    const pts = [];
+    for (let k = 0; k < 6; k++) {
+      const r = 1.6 + k * 0.7;
+      pts.push(new THREE.Vector3(Math.sin(a) * r * 0.9, 2.2 - k * 1.4 + Math.sin(k + i) * 0.4, Math.cos(a) * r * 0.7 - 0.6));
+    }
+    const strand = mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 20, 0.32 - (i % 3) * 0.05, 6), i % 4 === 0 ? tipMat : hair, head);
+    strand.castShadow = false;
   }
-  const mouth = mesh(new THREE.SphereGeometry(0.42, 12, 8), mat('#3a0008', { roughness: 0.5 }), head, 0, 0.62, 1.4);
-  mouth.scale.set(1.1, 0.5, 0.5);
   // crown: gold band, heart spires, rubies
   const crown = pivot(head, 0, 3.0, -0.1);
   mesh(new THREE.CylinderGeometry(1.5, 1.35, 0.8, 18, 1, true), gold, crown).material = mat('#d2a64c', { metalness: 0.95, roughness: 0.25, side: THREE.DoubleSide });
@@ -243,6 +412,11 @@ export function buildCrimsonQueen() {
   for (const s of [-1, 1]) {
     const sh = pivot(torso, 4.6 * s, 9.2, 0);
     mesh(new THREE.SphereGeometry(1.6, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2), gold, sh, 0, 0.2, 0);
+    for (let k = 0; k < 4; k++) {
+      const spike = mesh(new THREE.ConeGeometry(0.28, 2.2 - k * 0.3, 6), gold, sh, s * (0.3 + k * 0.35), 1.4 - k * 0.2, -0.3 + k * 0.2);
+      spike.rotation.z = -s * (0.35 + k * 0.25);
+    }
+    mesh(new THREE.SphereGeometry(0.45, 12, 8), heartMat, sh, s * 0.2, 0.9, 1.1);
     const upper = mesh(new THREE.CylinderGeometry(0.9, 0.75, 7, 10), black, sh, 0, -3.5, 0);
     void upper;
     for (let k = 0; k < 3; k++) mesh(new THREE.TorusGeometry(0.85, 0.12, 6, 16), gold, sh, 0, -1.5 - k * 2, 0).rotation.x = Math.PI / 2;

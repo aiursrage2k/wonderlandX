@@ -1,6 +1,10 @@
 // Procedural WebAudio: sfx are synthesised, and a slow music-box motif plays
 // over a dark drone. Nothing to download.
 
+import { initMusic, setMusic } from './music.js';
+
+export { setMusic };
+
 let ctx = null;
 let master = null;
 let musicGain = null;
@@ -17,12 +21,20 @@ function ensure() {
   master.gain.value = 0.55;
   master.connect(ctx.destination);
   musicGain = ctx.createGain();
-  musicGain.gain.value = 0.22;
+  musicGain.gain.value = 0.7;
   musicGain.connect(master);
   noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
   const d = noiseBuf.getChannelData(0);
   for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
   return ctx;
+}
+
+// test hook: an analyser on the master bus
+export function debugAnalyser() {
+  const a = ctx.createAnalyser();
+  a.fftSize = 2048;
+  master.connect(a);
+  return a;
 }
 
 export function unlockAudio() {
@@ -163,46 +175,7 @@ export function sfx(name) {
   }
 }
 
-// Music: a detuned music box in a minor key over a low drone.
+// Music lives in music.js; it starts once the browser lets audio play.
 function startMusic() {
-  const drone = ctx.createOscillator();
-  const drone2 = ctx.createOscillator();
-  drone.type = 'sawtooth';
-  drone2.type = 'sawtooth';
-  drone.frequency.value = 55;
-  drone2.frequency.value = 55.4;
-  const lp = ctx.createBiquadFilter();
-  lp.type = 'lowpass';
-  lp.frequency.value = 220;
-  const dg = ctx.createGain();
-  dg.gain.value = 0.18;
-  drone.connect(lp);
-  drone2.connect(lp);
-  lp.connect(dg).connect(musicGain);
-  drone.start();
-  drone2.start();
-
-  // A minor waltz-ish motif
-  const notes = [69, 72, 76, 74, 72, 71, 72, 69, 64, 68, 71, 74, 72, 71, 69, 0,
-                 69, 72, 76, 79, 77, 76, 74, 72, 71, 72, 74, 71, 68, 64, 69, 0];
-  const beat = 0.42;
-  let step = 0;
-  let next = ctx.currentTime + 0.5;
-  const tick = () => {
-    while (next < ctx.currentTime + 0.6) {
-      const n = notes[step % notes.length];
-      if (n) {
-        const f = 440 * 2 ** ((n - 69) / 12) * (1 + (Math.random() - 0.5) * 0.004);
-        tone(next, f, 1.2, 'sine', 0.12, null, musicGain);
-        tone(next, f * 2.01, 0.5, 'sine', 0.035, null, musicGain);
-      }
-      if (step % 8 === 0) {
-        const root = (n || 69) - 24;
-        tone(next, 440 * 2 ** ((root - 69) / 12), 2.5, 'triangle', 0.06, null, musicGain);
-      }
-      step++;
-      next += beat;
-    }
-  };
-  setInterval(tick, 150);
+  initMusic(ctx, musicGain, noiseBuf);
 }

@@ -116,7 +116,7 @@ export class Transition {
 
   // Plays the fall. `mid` runs once the screen is fully covered (load the
   // next stage there); resolves when the card has faded away.
-  play({ depth, name, recap, hold = 2.6 }, mid) {
+  play({ depth, name, recap, hold = 2.6, reveal }, mid) {
     if (this.skip || new URLSearchParams(location.search).has('notransition')) {
       if (mid) mid();
       return Promise.resolve();
@@ -136,6 +136,7 @@ export class Transition {
       const card = el.querySelector('.tcard');
       card.style.opacity = 0;
       this.active = true;
+      this.revealed = false;
       // the timeline advances in capped steps, so a stalled frame (a heavy
       // stage load, a slow machine) pauses the animation rather than skipping it
       let t = 0;
@@ -185,6 +186,11 @@ export class Transition {
         // fades driven by the same timeline (CSS transitions can starve on slow machines)
         const fadeIn = Math.min(1, t / 0.5);
         const fadeOut = t > 0.7 + hold ? Math.max(0, 1 - (t - 0.7 - hold) / 0.9) : 1;
+        // hand control back the moment the card starts to lift
+        if (t > 0.7 + hold && reveal && !this.revealed) {
+          this.revealed = true;
+          reveal();
+        }
         el.style.opacity = Math.min(fadeIn, fadeOut);
         card.style.opacity = Math.max(0, Math.min(1, (t - 0.75) / 0.7));
         card.style.transform = `scale(${0.94 + 0.06 * Math.min(1, Math.max(0, (t - 0.75) / 1.2))})`;

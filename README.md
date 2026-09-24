@@ -32,7 +32,7 @@ cursor. Touch devices get a virtual stick and buttons.
 | LMB | **Razor Deck** — fling razor playing cards |
 | RMB | **Teapot Grenade** — lobbed burst for 600%, scalds the ground |
 | Shift | **Rabbit Hop** — invulnerable dash |
-| C / Ctrl | **Tumble** — quick dodge roll with i-frames (1.2 s cooldown) |
+| R | **Tumble** — quick dodge roll with i-frames (1.2 s cooldown) |
 | Q | **Madness** — spend 50+ Corruption to erupt and enter Madness (faster homing violet cards) |
 | E | Interact |
 | Tab | Perks |
@@ -55,6 +55,12 @@ cursor. Touch devices get a virtual stick and buttons.
 - **The Looking Glass** (the ♥ on the minimap) summons the stage's boss. Kill
   it and the Glass opens to the next depth. Standing near the Glass while you
   fight charges it; a full charge drops a bonus item.
+- **Multishops** (teal on the minimap): three glass terminals, each holding a
+  real item or a perk rank. Walk up, press **E** to buy one — and the other two
+  lock, Risk-of-Rain style. Two or three per level.
+- **Music** is synthesised live: a music-box intro on the title screen, the
+  garden waltz, a driving boss galop, a choir-and-timpani theme for the Crimson
+  Queen, and a victory fanfare.
 - **Boss fights stay focused:** at most 4 other enemies share the arena with a boss.
 - **Perks** show in the item bar like items, with an icon and rank number.
 - **Falling between depths** plays a rabbit-hole tunnel with the next stage's

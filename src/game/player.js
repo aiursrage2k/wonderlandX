@@ -217,6 +217,8 @@ export class Player {
           this.jumpsUsed++;
           g.fx.ring(this.pos.x, this.pos.z, { y: this.pos.y - 0.1, r0: 0.3, r1: 1.6, dur: 0.3, color: '#c8b0ff' });
           g.fx.burst(this.pos, 10, '#d8c8ff', { speed: 4, size: 0.25, life: 0.4 });
+          // a front flip on every air jump
+          this.flipT = this.flipMax = 0.5;
         }
         this.vel.y = 10.5;
         this.onGround = false;
@@ -280,7 +282,7 @@ export class Player {
       this.onDodge();
     }
     this.rollCd = Math.max(0, (this.rollCd || 0) - dt);
-    if ((input.hit('c') || input.hit('control') || input.hit('touch5')) && this.rollCd <= 0 && this.rollT <= 0 && this.dashT <= 0) {
+    if ((input.hit('r') || input.hit('touch5')) && this.rollCd <= 0 && this.rollT <= 0 && this.dashT <= 0) {
       this.rollCd = 1.2 * cdm;
       this.rollT = 0.42;
       this.rollMax = 0.42;
@@ -289,7 +291,7 @@ export class Player {
       sfx('dash');
       this.onDodge();
     }
-    if ((input.hit('q') || input.hit('r') || input.hit('touch4')) && this.corruption >= 50 && this.madness <= 0) {
+    if ((input.hit('q') || input.hit('touch4')) && this.corruption >= 50 && this.madness <= 0) {
       this.goMad();
     }
     if (this.madness > 0) {
@@ -429,11 +431,15 @@ export class Player {
       p.legs[i].rotation.x = lerp(p.legs[i].rotation.x, target, 1 - Math.exp(-20 * dt));
       // knee bends on the recovering leg, tucks in the air
       const phase = Math.sin(this.runPhase + (i ? Math.PI : 0) - 0.9);
-      const kneeT = this.rollT > 0 ? 1.9 : air ? (i ? 1.3 : 0.5) : Math.max(0, phase) * 1.2 * k + 0.05;
+      const kneeT = this.rollT > 0 || this.flipT > 0 ? 1.9 : air ? (i ? 1.3 : 0.5) : Math.max(0, phase) * 1.2 * k + 0.05;
       p.knees[i].rotation.x = lerp(p.knees[i].rotation.x, kneeT, 1 - Math.exp(-20 * dt));
     }
-    if (this.rollT > 0) {
-      const a = (1 - this.rollT / this.rollMax) * Math.PI * 2;
+    if (this.flipT > 0) this.flipT -= dt;
+    const flipping = this.flipT > 0 && this.rollT <= 0;
+    if (this.rollT > 0 || flipping) {
+      // somersault around the hips; the air flip eases out so she lands upright
+      const u = flipping ? 1 - this.flipT / this.flipMax : 1 - this.rollT / this.rollMax;
+      const a = (flipping ? 1 - (1 - u) ** 2 : u) * Math.PI * 2;
       const hc = 0.75;
       p.body.rotation.x = a;
       p.body.position.set(0, hc - hc * Math.cos(a), -hc * Math.sin(a));

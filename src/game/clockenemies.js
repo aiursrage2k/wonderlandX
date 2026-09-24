@@ -3,7 +3,8 @@
 
 import * as THREE from 'three';
 import { Enemy, REGISTRY, CARDS } from './enemies.js';
-import { buildScissorHatter, buildWatchSpider, buildTeapotCannon, buildMadHatter } from '../gfx/clockmodels.js';
+import { buildScissorHatter, buildWatchSpider, buildTeapotCannon } from '../gfx/clockmodels.js';
+import { buildMadHatter } from '../gfx/bossmodels.js';
 import { rearrange, CLOCK_R, CH_OUT } from '../world/clockworks.js';
 import { rollItem, ITEM_BY_ID } from './items.js';
 import { rand, clamp, lerp, angleDiff, TAU } from '../engine/util.js';

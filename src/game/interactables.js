@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { buildChest, buildLookingGlass, buildTeaTable, mat } from '../gfx/models.js';
 import { rollItem, RARITY, PERKS } from './items.js';
 import { rand, TAU } from '../engine/util.js';
-import { sfx } from '../engine/audio.js';
+import { sfx, setMusic } from '../engine/audio.js';
 import { ascend, QUEEN_POS } from '../world/throne.js';
 
 export class Chest {
@@ -432,6 +432,7 @@ export class LookingGlass {
       c.phase = 2;
       c.t = 0;
       ascend(g.world);
+      setMusic(null);
       g.hud.banner('The Heart Refuses to Die', 'The hall is tearing apart. Something vast is rising behind the throne…', '#ff2040', '💔');
       g.camShake(1.2);
       sfx('boss');
@@ -444,10 +445,12 @@ export class LookingGlass {
     if (c.phase === 2 && c.t > 2.2) {
       c.phase = 3;
       g.boss = g.director.spawn('crimson', QUEEN_POS.x, QUEEN_POS.z, null);
+      setMusic('final');
     }
     if (c.phase === 3 && g.boss && !g.boss.alive) {
       c.phase = 4;
       c.t = 0;
+      setMusic(null);
       this.state = 'won';
       if (this.zoneRing) this.zoneRing.dead = true;
     }
@@ -559,6 +562,7 @@ export class LookingGlass {
         }
       }
       g.boss = g.director.spawn(boss, bx, bz, null);
+      setMusic('boss');
       if (g.world.theme.final) this.startCourt();
       // boss fights stay readable: the extra crowd scatters back into the dark
       const others = g.enemies.filter((e) => e.alive && !e.boss).sort((a, b) => b.distToPlayer() - a.distToPlayer());
@@ -625,6 +629,7 @@ export class LookingGlass {
         this.state = 'ready';
         if (this.zoneRing) this.zoneRing.dead = true;
         g.hud.banner('The Way Is Open', 'Step through the Looking Glass… deeper still.', '#d0b0ff', '✨');
+        setMusic('stage');
         sfx('chest');
       }
     }

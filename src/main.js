@@ -8,7 +8,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 
 import { Input } from './engine/input.js';
-import { unlockAudio, toggleMute, sfx } from './engine/audio.js';
+import { unlockAudio, toggleMute, sfx, setMusic } from './engine/audio.js';
 import { makeRng, rand, TAU } from './engine/util.js';
 import { World, STAGES } from './world/world.js';
 import { FX } from './fx/fx.js';
@@ -20,6 +20,7 @@ import { Director } from './game/enemies.js';
 import './game/clockenemies.js'; // registers the Clockworks cast
 import './game/throneenemies.js'; // registers the Queen's court
 import { Chest, BiscuitTin, Pickup, LookingGlass, TeaTable, PerkChest } from './game/interactables.js';
+import { MultiShop } from './game/multishop.js';
 import { Shop } from './game/shop.js';
 import { RARITY } from './game/items.js';
 import { HUD } from './ui/hud.js';
@@ -129,6 +130,15 @@ class Game {
       this.input.requestLock();
     };
     document.getElementById('btn-start').onclick = start;
+    // the intro plays from the first click or key on the title screen
+    setMusic('title');
+    const wake = () => {
+      unlockAudio();
+      window.removeEventListener('pointerdown', wake);
+      window.removeEventListener('keydown', wake);
+    };
+    window.addEventListener('pointerdown', wake);
+    window.addEventListener('keydown', wake);
     // test any level directly
     const row = document.getElementById('ls-row');
     const bossNames = { rabbit: 'White Rabbit', madhatter: 'Mad Hatter', queen: 'Queen of Hearts' };
@@ -230,6 +240,7 @@ class Game {
 
   // ─── run / stage lifecycle ───
   startRun(depth = 1, opts = {}) {
+    setMusic('stage');
     this.runTime = 0;
     this.depth = depth;
     if (this.player) this.scene.remove(this.player.model);
@@ -256,17 +267,25 @@ class Game {
     this.state = 'transition';
     this.hud.show(true);
     this.stageKillBase = 0;
-    this.transition.play({ depth, name: this.world.theme.name, hold: 1.8 }).then(() => {
+    this.transition.play({ depth, name: this.world.theme.name, hold: 1.8, reveal: () => this.revealStage() }).then(() => {
       if (this.state === 'transition') this.state = 'play';
       this.last = performance.now();
     });
     if (this.transition.skip) this.state = 'play';
   }
 
+  revealStage() {
+    if (this.state !== 'transition') return;
+    this.state = 'play';
+    this.last = performance.now();
+  }
+
   clearStage() {
     for (const e of this.enemies) e.remove();
     for (const i of this.interactables) this.scene.remove(i.model);
     for (const p of this.pickups) p.remove();
+    for (const m of this.multishops || []) m.remove();
+    this.multishops = [];
     this.enemies = [];
     this.interactables = [];
     this.pickups = [];
@@ -319,6 +338,16 @@ class Game {
       const s = w.freeSpot(2, avoid);
       avoid.push({ ...s, r: 3 });
       this.interactables.push(new PerkChest(this, s.x, s.z));
+    }
+    // Risk-of-Rain multishops: three terminals, buy one and the rest lock
+    const nShops = w.theme.kind === 'garden' ? 3 : 2;
+    for (let i = 0; i < nShops; i++) {
+      const s = w.freeSpot(5, avoid);
+      avoid.push({ ...s, r: 9 });
+      const facing = Math.atan2(w.spawn.x - s.x, w.spawn.z - s.z);
+      const shop = new MultiShop(this, s.x, s.z, facing);
+      this.multishops.push(shop);
+      this.interactables.push(...shop.terminals);
     }
     // the curio cart sits on the edge of the starting plaza, facing its centre
     {
@@ -398,6 +427,7 @@ class Game {
 
   nextStage() {
     this.state = 'transition';
+    setMusic('stage');
     sfx('door');
     const p = this.player;
     const t = this.stageTime || 0;
@@ -406,14 +436,12 @@ class Game {
     const recap = `Cleared in <b>${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}</b> · Slain <b>${kills}</b> · Level <b>${p.level}</b> · Items <b>${items}</b>`;
     const next = this.depth + 1;
     const name = STAGES[(next - 1) % STAGES.length].name;
-    this.transition.play({ depth: next, name, recap, hold: 2.8 }, () => {
+    this.transition.play({ depth: next, name, recap, hold: 2.8, reveal: () => this.revealStage() }, () => {
       this.loadStage(next);
       p.heal(p.stats.maxHp * 0.25);
       this.stageKillBase = p.kills;
-    }).then(() => {
-      this.state = 'play';
-      this.last = performance.now();
-    });    if (this.transition.skip) this.state = 'play';
+    }).then(() => this.revealStage());
+    if (this.transition.skip) this.state = 'play';
   }
 
   fadeOut(cb) {
@@ -430,6 +458,8 @@ class Game {
 
   onPlayerDeath() {
     this.state = 'dying';
+    setMusic(null);
+    setTimeout(() => setMusic('title'), 2400);
     sfx('boss');
     setTimeout(() => {
       this.state = 'dead';
@@ -451,7 +481,7 @@ class Game {
     if (this.state !== 'play') return;
     this.state = 'won';
     document.exitPointerLock?.();
-    sfx('chest');
+    setMusic('victory');
     const p = this.player;
     const t = this.runTime;
     document.getElementById('win-stats').innerHTML = `
@@ -581,7 +611,12 @@ class Game {
     }
 
     // keep the camera on Alice while a transition card fades over the world
-    if (this.state === 'transition' && this.player) this.player.updateCamera(dt || 1 / 60);
+    if (this.state === 'transition' && this.player) {
+      // keep Alice standing at the new spawn while the card fades, not left behind at the old one
+      this.player.onGround = true;
+      this.player.animate(dt || 1 / 60, false, 0);
+      this.player.updateCamera(dt || 1 / 60);
+    }
     if (this.state === 'title') this.titleCam();
     else this.world.update(this.time, dt, this.player.pos);
     this.fx.update(dt);

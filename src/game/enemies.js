@@ -1,7 +1,8 @@
 // Enemies, their AI, and the credit-based spawn Director.
 
 import * as THREE from 'three';
-import { buildCardGuard, buildTeacup, buildClockWisp, buildWhiteRabbit, buildQueen } from '../gfx/models.js';
+import { buildCardGuard, buildTeacup, buildClockWisp, buildWhiteRabbit } from '../gfx/models.js';
+import { buildQueen } from '../gfx/bossmodels.js';
 import { rand, clamp, lerp, angleDiff, TAU } from '../engine/util.js';
 import { sfx } from '../engine/audio.js';
 import { rollItem } from './items.js';
