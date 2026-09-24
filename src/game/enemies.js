@@ -445,38 +445,6 @@ export class DiamondGuard extends Enemy {
       const shots = 3 + 2 * this.tier;
       if (this.t > 0.7 && this.fired < shots && this.t > 0.7 + this.fired * 0.14) {
         this.fired++;
-        const from = new THREE.Vector3();
-        this.crystal.getWorldPosition(from);
-        const lead = p.center.clone().addScaledVector(p.vel, 0.25);
-        const dir = lead.sub(from).normalize();
-        dir.applyAxisAngle(new THREE.Vector3(0, 1, 0), (rand() - 0.5) * 0.08);
-        g.combat.spawnEnemyShot('diamond', from, dir.multiplyScalar(30), 8 * this.dmgMult, { size: 1.3, life: 2.5 });
-        g.fx.flash(from, '#ff4a8a', 1.2, 0.08);
-        sfx('tick');
-      }
-      if (this.t > 0.7 + shots * 0.14 + 0.3) {
-        this.state = 'chase';
-        this.cooldown = 2.2 + rand() * 1.2;
-        this.crystalMat.emissiveIntensity = 1.2;
-      }
-    } else {
-      const want = d > 18 ? 1 : d < 9 ? -1 : 0;
-      tmp2.set(p.pos.x - this.pos.x, 0, p.pos.z - this.pos.z).normalize();
-      this.steer(this.pos.x + tmp2.x * want * 4 - tmp2.z * this.strafe * 3, this.pos.z + tmp2.z * want * 4 + tmp2.x * this.strafe * 3, this.speed, dt);
-      if (rand() < 0.006) this.strafe *= -1;
-      parts.arms[1].sh.rotation.x = lerp(parts.arms[1].sh.rotation.x, -0.6, 1 - Math.exp(-8 * dt));
-      if (this.cooldown <= 0 && d < 30 && p.alive) {
-        this.state = 'aim';
-        this.t = 0;
-        this.fired = 0;
-        const from = new THREE.Vector3();
-        this.crystal.getWorldPosition(from);
-        const tb = g.fx.beam(from, p.center.clone(), { color: '#ff4a8a', width: 0.03, dur: 0.7, opacity: 0.6 });
-        tb.update = (b) => {
-          this.crystal.getWorldPosition(b.from);
-          b.to.copy(p.center);
-        };
-        sfx('telegraph');
       }
     }
     const hs = Math.hypot(this.vel.x, this.vel.z);
@@ -639,12 +607,6 @@ export class ClockWisp extends Enemy {
     if (this.state === 'chase' && this.cooldown <= 0 && p.alive) {
       this.state = 'charge';
       this.t = 0;
-      this.teleBeam = g.fx.beam(this.pos, p.center, { color: '#a060ff', width: 0.025, dur: 0.9, opacity: 0.6 });
-      this.teleBeam.update = (b) => {
-        b.from.copy(this.pos);
-        b.to.copy(p.center);
-      };
-      sfx('tick');
     }
     if (charging) {
       this.parts.coreMat.color.setHSL(0.75, 1, 0.5 + this.t * 0.4);
@@ -1213,9 +1175,11 @@ export class Director {
       g.hud.banner(`The creatures evolve: ${tn.name}s`, e.tier === 1 ? 'Bigger, faster, and they have learned new tricks.' : 'Nightmares walk the garden now. Run, or grow stronger.', tn.color, e.tier === 1 ? '⚔️' : '💀');
       sfx('boss');
     }
-    g.fx.portal(x, z, e.boss ? 5 : 1.6 * e.scale, e.elite ? e.elite.color : e.tier === 2 ? '#b040ff' : e.tier === 1 ? '#ffb040' : '#a040ff', e.boss ? 1.8 : 1.1);
+    // minor spawns get a quiet floor portal; only bosses and elites announce themselves
+    const loud = e.boss || e.elite;
+    g.fx.portal(x, z, e.boss ? (e.radius > 1.5 ? 5 : 2.4) : 1.6 * e.scale, e.elite ? e.elite.color : e.tier === 2 ? '#b040ff' : e.tier === 1 ? '#ffb040' : '#a040ff', e.boss ? 1.8 : 1.1, loud);
     g.fx.burst(new THREE.Vector3(x, g.world.height(x, z) + 0.3, z), e.boss ? 60 : 14, '#8040ff', { speed: 4, g: -4, size: 0.4, life: 0.9 });
-    sfx('spawn');
+    if (loud) sfx('spawn');
     return e;
   }
 

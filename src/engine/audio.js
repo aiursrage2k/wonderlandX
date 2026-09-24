@@ -143,6 +143,10 @@ export function sfx(name) {
     case 'boss':
       [65, 69, 98].forEach((f) => tone(t, f, 2.5, 'sawtooth', 0.12, f * 0.98));
       break;
+    case 'slam':
+      noise(t, 0.6, 180, 0.8, 0.5, 'lowpass', 60);
+      tone(t, 70, 0.7, 'sine', 0.3, 32);
+      break;
     case 'spawn':
       noise(t, 0.5, 200, 1.5, 0.18, 'bandpass', 1400);
       tone(t, 90, 0.5, 'sine', 0.06, 180);
@@ -154,7 +158,7 @@ export function sfx(name) {
       tone(t, 1800 + Math.random() * 400, 0.08, 'triangle', 0.05, 2600);
       break;
     case 'tick':
-      tone(t, 2400, 0.03, 'square', 0.05);
+      tone(t, 1500, 0.05, 'sine', 0.03);
       break;
   }
 }

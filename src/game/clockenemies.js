@@ -150,7 +150,6 @@ export class WatchSpider extends Enemy {
           this.t = 0;
           this.target = p.pos.clone().addScaledVector(p.vel, 0.35);
           g.fx.ring(this.target.x, this.target.z, { r0: 1.2, r1: 1.2, dur: 0.4, color: '#ff3040', pulse: true, fill: true, opacity: 0.3 });
-          sfx('tick');
         }
         break;
       }

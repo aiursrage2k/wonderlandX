@@ -5,6 +5,7 @@ import { buildChest, buildLookingGlass, buildTeaTable, mat } from '../gfx/models
 import { rollItem, RARITY, PERKS } from './items.js';
 import { rand, TAU } from '../engine/util.js';
 import { sfx } from '../engine/audio.js';
+import { ascend, QUEEN_POS } from '../world/throne.js';
 
 export class Chest {
   constructor(game, x, z, big) {
@@ -315,6 +316,47 @@ export class Pickup {
 }
 
 // The Looking Glass: activate → survive while it charges → beat the boss → go through.
+// A clockwork seal: a gold ring around a burning Roman-numeral sigil.
+let sealTex = null;
+function sealTexture() {
+  if (sealTex) return sealTex;
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const x = c.getContext('2d');
+  x.translate(128, 128);
+  const glow = x.createRadialGradient(0, 0, 10, 0, 0, 128);
+  glow.addColorStop(0, 'rgba(255,200,120,0.9)');
+  glow.addColorStop(0.5, 'rgba(255,120,40,0.35)');
+  glow.addColorStop(1, 'rgba(255,80,20,0)');
+  x.fillStyle = glow;
+  x.fillRect(-128, -128, 256, 256);
+  x.strokeStyle = 'rgba(255,230,180,0.95)';
+  x.fillStyle = 'rgba(255,230,180,0.95)';
+  x.lineWidth = 5;
+  x.beginPath();
+  x.arc(0, 0, 96, 0, TAU);
+  x.stroke();
+  x.font = 'bold 26px serif';
+  x.textAlign = 'center';
+  x.textBaseline = 'middle';
+  const nums = ['XII', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI'];
+  nums.forEach((n, i) => {
+    const a = (i / 12) * TAU - Math.PI / 2;
+    x.fillText(n, Math.cos(a) * 76, Math.sin(a) * 76);
+  });
+  // a keyhole at the heart of the seal
+  x.beginPath();
+  x.arc(0, -10, 16, 0, TAU);
+  x.moveTo(-9, 0);
+  x.lineTo(9, 0);
+  x.lineTo(14, 36);
+  x.lineTo(-14, 36);
+  x.fill();
+  sealTex = new THREE.CanvasTexture(c);
+  sealTex.colorSpace = THREE.SRGBColorSpace;
+  return sealTex;
+}
+
 export class LookingGlass {
   constructor(game, x, z) {
     this.game = game;
@@ -339,9 +381,145 @@ export class LookingGlass {
     const base = y;
     game.world.platforms = [5.2, 4.3, 3.4, 2.5].map((r, i) => ({ x, z, r, h: base + 0.35 * (i + 1) }));
     game.world.addCollider({ x, z, r: 1.4, top: y + 8 });
+    // some stages chain the Glass behind seals that only slaughter can break
+    this.sealCount = game.world.theme.seals || 0;
+    this.killsPerSeal = 7;
+    this.broken = 0;
+    this.seals = [];
+    if (this.sealCount) {
+      this.state = 'sealed';
+      this.buildSeals();
+    }
+  }
+
+  buildSeals() {
+    const tex = sealTexture();
+    const ringGeo = new THREE.TorusGeometry(1.1, 0.09, 8, 40);
+    const discGeo = new THREE.CircleGeometry(1.0, 32);
+    const chainGeo = new THREE.CylinderGeometry(0.035, 0.035, 1, 5).translate(0, 0.5, 0).rotateX(Math.PI / 2);
+    for (let i = 0; i < this.sealCount; i++) {
+      const root = new THREE.Group();
+      const ringMat = new THREE.MeshStandardMaterial({ color: '#c9a04a', metalness: 0.9, roughness: 0.3, emissive: '#ff9a30', emissiveIntensity: 0.8 });
+      const discMat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending, color: '#ffb070' });
+      root.add(new THREE.Mesh(ringGeo, ringMat));
+      root.add(new THREE.Mesh(discGeo, discMat));
+      const chain = new THREE.Mesh(chainGeo, new THREE.MeshBasicMaterial({ color: '#ff9a40', transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false }));
+      this.game.scene.add(chain);
+      this.game.scene.add(root);
+      this.seals.push({ root, ringMat, discMat, chain, a: (i / this.sealCount) * TAU, alive: true, pop: 0 });
+    }
+  }
+
+  // The final battle: the Queen and two knights, then the Crimson Queen.
+  startCourt() {
+    const g = this.game;
+    const q = g.boss;
+    q.maxHp = q.hp = q.maxHp * 0.65;
+    q.pos.set(0, 0, -30);
+    const knights = [
+      g.director.spawn('knight', -9, -26, null),
+      g.director.spawn('knight', 9, -26, null),
+    ];
+    knights[1].name = 'The Knave of Hearts';
+    this.court = { phase: 1, members: [q, ...knights], t: 0 };
+  }
+
+  updateCourt(dt) {
+    const g = this.game;
+    const c = this.court;
+    c.t += dt;
+    if (c.phase === 1 && c.members.every((e) => !e.alive)) {
+      c.phase = 2;
+      c.t = 0;
+      ascend(g.world);
+      g.hud.banner('The Heart Refuses to Die', 'The hall is tearing apart. Something vast is rising behind the throne…', '#ff2040', '💔');
+      g.camShake(1.2);
+      sfx('boss');
+      // clear the floor for the finale
+      for (const e of g.enemies) if (e.alive && !e.boss) {
+        e.alive = false;
+        e.deadT = 0.6;
+      }
+    }
+    if (c.phase === 2 && c.t > 2.2) {
+      c.phase = 3;
+      g.boss = g.director.spawn('crimson', QUEEN_POS.x, QUEEN_POS.z, null);
+    }
+    if (c.phase === 3 && g.boss && !g.boss.alive) {
+      c.phase = 4;
+      c.t = 0;
+      this.state = 'won';
+      if (this.zoneRing) this.zoneRing.dead = true;
+    }
+    if (c.phase === 4 && c.t > 5 && !c.done) {
+      c.done = true;
+      g.victory();
+    }
+  }
+
+  get sealKills() {
+    const p = this.game.player;
+    if (this.killBase === undefined) this.killBase = p.kills;
+    return p.kills - this.killBase;
+  }
+
+  updateSeals(dt) {
+    const g = this.game;
+    const centre = this.pos.clone().setY(this.pos.y + 4.2);
+    const want = Math.min(this.sealCount, Math.floor(this.sealKills / this.killsPerSeal));
+    while (this.broken < want) {
+      const s = this.seals.find((q) => q.alive);
+      s.alive = false;
+      this.broken++;
+      const at = s.root.position.clone();
+      g.fx.burst(at, 50, '#ffb040', { speed: 9, g: -6, size: 0.5, life: 1.1 });
+      g.fx.flash(at, '#ffb040', 14, 0.35);
+      g.camShake(0.35);
+      sfx('bell');
+      const left = this.sealCount - this.broken;
+      if (left > 0) g.hud.banner(`Seal Broken — ${this.broken} / ${this.sealCount}`, `${left} seal${left > 1 ? 's' : ''} still bind the Looking Glass. Keep killing.`, '#ffb040', '🔓');
+      else {
+        this.state = 'idle';
+        this.discovered = true;
+        g.hud.banner('The Glass Is Unsealed', 'The last chain snaps. Touch the Looking Glass to face the Hatter.', '#ff8aa0', '🪞');
+        sfx('chest');
+      }
+    }
+    for (const s of this.seals) {
+      if (!s.alive) {
+        // shattered seals spin away and fade
+        s.pop += dt;
+        s.root.position.y += dt * 6;
+        s.root.rotation.z += dt * 8;
+        s.root.scale.setScalar(Math.max(0.001, 1.5 * (1 - s.pop * 1.4)));
+        s.chain.visible = false;
+        if (s.pop > 0.8 && s.root.parent) {
+          s.root.removeFromParent();
+          s.chain.removeFromParent();
+        }
+        continue;
+      }
+      s.a += dt * 0.35;
+      const r = 6;
+      s.root.scale.setScalar(1.5);
+      s.root.position.set(this.pos.x + Math.cos(s.a) * r, this.pos.y + 5 + Math.sin(g.time * 1.3 + s.a * 3) * 0.5, this.pos.z + Math.sin(s.a) * r);
+      s.root.lookAt(centre.x, s.root.position.y, centre.z);
+      s.root.rotateZ(g.time * 0.8);
+      const pulse = 0.8 + Math.sin(g.time * 3 + s.a) * 0.3;
+      s.ringMat.emissiveIntensity = pulse;
+      s.discMat.opacity = 0.6 + pulse * 0.3;
+      s.chain.position.copy(s.root.position);
+      s.chain.lookAt(centre);
+      s.chain.scale.set(1, 1, s.root.position.distanceTo(centre));
+    }
   }
 
   label() {
+    if (this.state === 'sealed') {
+      const left = this.killsPerSeal - (this.sealKills % this.killsPerSeal);
+      return `<span style="color:#ffb040">🔒 Sealed — ${this.sealCount - this.broken} seals remain · slay ${left} more to break the next</span>`;
+    }
+    if (this.state === 'idle' && this.game.world.theme.final) return '<kbd>E</kbd> Touch the Queen’s Mirror <span style="color:#ff8aa0">(begin the final battle)</span>';
     if (this.state === 'idle') return '<kbd>E</kbd> Touch the Looking Glass <span style="color:#ff8aa0">(the hour begins)</span>';
     if (this.state === 'ready') return '<kbd>E</kbd> Step through the Looking Glass';
     return null;
@@ -363,6 +541,7 @@ export class LookingGlass {
         queen: ['The Queen of Hearts', '“Who has been painting my roses red?”', '👑'],
         madhatter: ['The Mad Hatter', '“No room! No room! …Oh, there’s always room for YOU.”', '🎩'],
       }[boss];
+      if (g.world.theme.final) intro.splice(0, 3, 'The Queen’s Court', '“Knights! Let us have a trial — and then the execution.”', '👑');
       g.hud.banner(intro[0], intro[1], '#ff3a50', intro[2]);
       g.camShake(0.6);
       // find standing room near the glass (the Clockworks has tea to avoid)
@@ -380,6 +559,7 @@ export class LookingGlass {
         }
       }
       g.boss = g.director.spawn(boss, bx, bz, null);
+      if (g.world.theme.final) this.startCourt();
       // boss fights stay readable: the extra crowd scatters back into the dark
       const others = g.enemies.filter((e) => e.alive && !e.boss).sort((a, b) => b.distToPlayer() - a.distToPlayer());
       for (const e of others.slice(0, Math.max(0, others.length - 4))) {
@@ -396,6 +576,7 @@ export class LookingGlass {
 
   update(dt) {
     const g = this.game;
+    if (this.seals.length) this.updateSeals(dt);
     // discovery: close enough to see it, or the Cheshire Cat takes pity
     if (!this.discovered) {
       const d = Math.hypot(g.player.pos.x - this.pos.x, g.player.pos.z - this.pos.z);
@@ -410,7 +591,7 @@ export class LookingGlass {
         this.revealBeam.hold = true;
       }
     }
-    if (this.revealBeam && this.state !== 'idle') {
+    if (this.revealBeam && this.state !== 'idle' && this.state !== 'sealed') {
       this.revealBeam.dead = true;
       this.revealBeam = null;
     }
@@ -437,7 +618,8 @@ export class LookingGlass {
         sfx('bell');
       }
     }
-    if (this.state === 'charged' || this.state === 'charging') {
+    if (this.court) this.updateCourt(dt);
+    else if (this.state === 'charged' || this.state === 'charging') {
       // the boss falling is what opens the way; charging is a bonus timer
       if (g.boss && !g.boss.alive) {
         this.state = 'ready';

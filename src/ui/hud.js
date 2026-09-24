@@ -511,20 +511,40 @@ export class HUD {
       }
     }
 
-    // boss bar
-    const boss = g.enemies.find((e) => e.boss && e.alive);
+    // boss bar: the main boss up top, any other bosses (the court) beneath
+    const bosses = g.enemies.filter((e) => e.boss && e.alive);
+    const boss = g.boss && g.boss.alive ? g.boss : bosses[0];
     $('bossbar').classList.toggle('hidden', !boss);
     if (boss) {
       this.setText('boss-name', boss.name);
       this.setText('boss-sub', boss.subtitle);
       $('boss-fill').style.transform = `scaleX(${Math.max(0, boss.hp / boss.maxHp)})`;
     }
+    const others = bosses.filter((e) => e !== boss);
+    const ex = $('boss-extra');
+    const key = others.map((e) => e.name).join('|');
+    if (ex.dataset.key !== key) {
+      ex.dataset.key = key;
+      ex.innerHTML = others.map((e) => `<div class="mini-boss"><span>${e.name}</span><div class="bar"><div class="fill"></div></div></div>`).join('');
+    }
+    ex.querySelectorAll('.fill').forEach((f, i) => {
+      const e = others[i];
+      if (e) f.style.transform = `scaleX(${Math.max(0, e.hp / e.maxHp)})`;
+    });
 
     // objective + charge
     const tp = g.teleporter;
     let obj = tp.discovered ? 'Touch the Looking Glass (♥ on the map)' : 'Find the Looking Glass — explore the garden';
+    if (tp.state === 'sealed') obj = `Break the seals — ${tp.broken} / ${tp.sealCount} · slay ${tp.killsPerSeal - (tp.sealKills % tp.killsPerSeal)} more`;
     if (tp.state === 'charging' || tp.state === 'charged') obj = `Defeat ${g.boss ? g.boss.name : 'the boss'}`;
     if (tp.state === 'ready') obj = 'Step through the Looking Glass';
+    if (g.world.theme.final) {
+      const c = tp.court;
+      if (tp.state === 'idle') obj = tp.discovered ? 'Touch the Queen’s Mirror before the throne — the final battle' : 'Approach the throne';
+      else if (c && c.phase === 1) obj = `Defeat the Queen’s Court — ${c.members.filter((e) => e.alive).length} remain`;
+      else if (c && c.phase < 4) obj = 'Shatter the Crimson Queen’s heart';
+      else if (c) obj = 'Wonderland falls silent…';
+    }
     this.setText('objective', obj);
     const charging = tp.state === 'charging';
     $('charge').classList.toggle('hidden', !charging);

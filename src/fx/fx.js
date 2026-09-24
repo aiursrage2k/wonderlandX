@@ -211,7 +211,7 @@ export class FX {
   }
 
   // A swirling rabbit-hole on the ground plus a column of light: spawn-in.
-  portal(x, z, radius, color, dur = 1.1) {
+  portal(x, z, radius, color, dur = 1.1, pillar = true) {
     this.portalMat ||= (c) => new THREE.ShaderMaterial({
       uniforms: { t: { value: 0 }, k: { value: 0 }, col: { value: new THREE.Color(c) } },
       transparent: true,
@@ -236,8 +236,7 @@ export class FX {
     m.renderOrder = 3;
     this.scene.add(m);
     const base = new THREE.Vector3(x, m.position.y, z);
-    const col = this.beam(base, base.clone().setY(base.y + 7 + radius * 2), { color, width: radius * 0.45, dur, opacity: 0.5 });
-    void col;
+    if (pillar) this.beam(base, base.clone().setY(base.y + 7 + radius * 2), { color, width: radius * 0.45, dur, opacity: 0.5 });
     const h = { m, t: 0, dur, radius };
     (this.portals ||= []).push(h);
     return h;

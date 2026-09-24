@@ -6,6 +6,7 @@ import { TAU } from '../engine/util.js';
 const QUOTES = {
   'The Hollow Tea Garden': '“Begin at the beginning,” the King said, gravely.',
   'The Mad Hatter’s Clockworks': '“If you knew Time as well as I do, you wouldn’t talk about wasting it.”',
+  'The Crimson Throne': '“Sentence first — verdict afterwards.”',
   'The Weeping Rosewood': '“Who has been painting my roses red?”',
   "The Queen's Croquet Grounds": '“Off with their heads!” — and the game went on.',
   'The Pool of Tears': '“I wish I hadn’t cried so much!”',

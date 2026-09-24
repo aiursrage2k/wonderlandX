@@ -72,11 +72,20 @@ cursor. Touch devices get a virtual stick and buttons.
   Glass stays off your map until you find it (or the Cheshire Cat takes pity
   after four minutes).
 - **Stages:** 01 The Hollow Tea Garden · 02 The Mad Hatter's Clockworks · 03 The
-  Weeping Rosewood · 04 The Queen's Croquet Grounds · 05 The Pool of Tears.
+  Crimson Throne (final). Beat the Crimson Queen and the run is won.
 - **The Clockworks** is a giant clock face: two enormous hands sweep the floor
   and shove you toward the boiling-tea channel (jump them, or stand on a raised
   hour). Tea scalds and slows. Its cast: Scissor-Handed Hatters, Pocket-Watch
-  Spiders, and Walking Teapot Cannons.
+  Spiders, and Walking Teapot Cannons. Five clockwork seals chain the Looking
+  Glass: every 7 kills breaks one.
+- **The Crimson Throne** is a multi-boss finale in a round throne hall of
+  polished marble under an eclipse. Touch the Queen's Mirror to face her court:
+  the Queen of Hearts and two Knights of Hearts (shield charges, halberd
+  cleaves, a raised shield that turns aside frontal hits). When all three fall,
+  the hall cracks open and **the Crimson Queen** rises from the abyss: Talon
+  Rake furrows, talons torn through the air with jumpable shockwaves, a Royal
+  Decree of falling cards, the Heart Lance, and Rings of Thorns to jump. Below
+  half health the heart breaks and everything comes faster. Aim for the heart.
 - **Levels:** kills drop green XP orbs you have to walk over (they pull in
   when you're close); every level adds max health, damage and regen.
 - **Perks:** press **Tab** (or use the shop) to spend gold on ranked upgrades.

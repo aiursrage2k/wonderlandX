@@ -391,3 +391,18 @@ button.big:hover { transform: scale(1.04); box-shadow: 0 0 0 3px #0c0710, 0 0 0 
 #t-quote { font-family: var(--fell); font-style: italic; font-size: 19px; color: #e0d0f0; max-width: 640px; text-shadow: 0 2px 6px #000; }
 #t-recap { margin-top: 14px; padding: 8px 18px; font-size: 14px; letter-spacing: 0.08em; color: #e8dcc8; border-top: 1px solid rgba(201, 164, 90, 0.5); border-bottom: 1px solid rgba(201, 164, 90, 0.5); background: rgba(10, 4, 14, 0.5); }
 #t-recap b { color: var(--gold-hi); font-weight: 600; }
+
+/* court: smaller bars for the other bosses in a multi-boss fight */
+#boss-extra { display: flex; gap: 18px; justify-content: center; margin-top: 6px; }
+#boss-extra:empty { display: none; }
+.mini-boss { width: 180px; font-size: 12px; letter-spacing: 0.08em; color: #f0c8d0; text-align: center; }
+.mini-boss .bar { height: 7px; margin-top: 3px; }
+.mini-boss .fill { background: linear-gradient(90deg, #7a0a18, #ff3050); transform-origin: left; height: 100%; }
+
+/* victory */
+#screen-win { background: radial-gradient(ellipse at center, rgba(90, 10, 30, 0.82), rgba(8, 2, 8, 0.95)); text-align: center; }
+#screen-win .subtle { max-width: 560px; }
+#screen-win h2.gold { color: #ffd070; text-shadow: 0 0 24px rgba(255, 180, 60, 0.6); }
+.win-crown { font-size: 64px; color: #ffd070; text-shadow: 0 0 30px rgba(255, 60, 80, 0.8); animation: crown-bob 3s ease-in-out infinite; }
+@keyframes crown-bob { 50% { transform: translateY(-8px); } }
+#win-stats { line-height: 1.8; margin: 14px 0 6px; }

@@ -18,6 +18,7 @@ import { Player } from './game/player.js';
 import { Combat } from './game/combat.js';
 import { Director } from './game/enemies.js';
 import './game/clockenemies.js'; // registers the Clockworks cast
+import './game/throneenemies.js'; // registers the Queen's court
 import { Chest, BiscuitTin, Pickup, LookingGlass, TeaTable, PerkChest } from './game/interactables.js';
 import { Shop } from './game/shop.js';
 import { RARITY } from './game/items.js';
@@ -131,10 +132,11 @@ class Game {
     // test any level directly
     const row = document.getElementById('ls-row');
     const bossNames = { rabbit: 'White Rabbit', madhatter: 'Mad Hatter', queen: 'Queen of Hearts' };
+    const bossLabel = (st) => (st.final ? 'the Queen’s Court → Crimson Queen (final)' : bossNames[st.boss] || st.boss);
     STAGES.forEach((st, i) => {
       const b = document.createElement('button');
       b.className = 'ls-btn';
-      b.innerHTML = `<b>${String(i + 1).padStart(2, '0')}</b>${st.name}<small>boss: ${bossNames[st.boss] || st.boss}</small>`;
+      b.innerHTML = `<b>${String(i + 1).padStart(2, '0')}</b>${st.name}<small>boss: ${bossLabel(st)}</small>`;
       b.onclick = () => {
         unlockAudio();
         document.getElementById('screen-title').classList.add('hidden');
@@ -159,6 +161,11 @@ class Game {
     };
     document.getElementById('btn-restart').onclick = () => {
       document.getElementById('screen-dead').classList.add('hidden');
+      this.startRun();
+      this.input.requestLock();
+    };
+    document.getElementById('btn-again').onclick = () => {
+      document.getElementById('screen-win').classList.add('hidden');
       this.startRun();
       this.input.requestLock();
     };
@@ -288,7 +295,7 @@ class Game {
     this.interactables.push(this.teleporter);
     const rng = makeRng(seed ^ 0x5bd1e995);
     const avoid = [{ ...w.glassPos, r: 8 }];
-    const areaK = Math.max(1, (w.A || 1) * 0.6);
+    const areaK = Math.max(1, (w.A || 1) * 0.6) * (w.theme.loot ?? 1);
     const nChest = Math.round((11 + Math.min(6, depth)) * areaK);
     for (let i = 0; i < nChest + 3; i++) {
       // bias toward plazas so loot lives in the "rooms"
@@ -439,6 +446,21 @@ class Game {
     }, 2200);
   }
 
+  // The Crimson Queen is dead: the run is won.
+  victory() {
+    if (this.state !== 'play') return;
+    this.state = 'won';
+    document.exitPointerLock?.();
+    sfx('chest');
+    const p = this.player;
+    const t = this.runTime;
+    document.getElementById('win-stats').innerHTML = `
+      Wonderland conquered in <b>${Math.floor(t / 60)}m ${Math.floor(t % 60)}s</b><br>
+      Level <b>${p.level}</b> · Slain <b>${p.kills}</b> · Damage <b>${Math.round(p.damageDealt).toLocaleString()}</b><br>
+      Items collected <b>${[...p.inv.stacks.values()].reduce((a, b) => a + b, 0)}</b> · Corruption <b>${Math.round(p.corruption)}%</b>`;
+    document.getElementById('screen-win').classList.remove('hidden');
+  }
+
   // ─── helpers used by entities ───
   difficulty() {
     return (1 + 0.0506 * 4.4 * (this.runTime / 60)) * 1.25 ** (this.depth - 1);
@@ -523,7 +545,7 @@ class Game {
     else if (this.state === 'play' && input.hit('tab')) this.openPerks();
 
     const playing = this.state === 'play' || this.state === 'dying';
-    if (this.state === 'pause' || this.state === 'dead' || this.state === 'shop' || this.state === 'perks') dt = 0;
+    if (this.state === 'pause' || this.state === 'dead' || this.state === 'won' || this.state === 'shop' || this.state === 'perks') dt = 0;
     this.time += dt;
     this.dt = dt;
 
@@ -538,11 +560,15 @@ class Game {
       if (this.autopilot) this.autopilot(dt);
       this.player.update(dt, input);
       this.director.update(dt);
-      this.enemies = this.enemies.filter((e) => {
-        const keep = e.update(dt);
-        if (!keep) e.remove();
-        return keep;
-      });
+      // enemies spawned mid-loop (boss summons) land past n0 and are kept
+      const n0 = this.enemies.length;
+      const kept = [];
+      for (let i = 0; i < n0; i++) {
+        const e = this.enemies[i];
+        if (e.update(dt)) kept.push(e);
+        else e.remove();
+      }
+      this.enemies = kept.concat(this.enemies.slice(n0));
       this.combat.update(dt);
       for (const i of this.interactables) i.update(dt);
       this.pickups = this.pickups.filter((p) => {
