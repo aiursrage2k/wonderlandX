@@ -36,6 +36,7 @@ export class Combat {
     this.puddles = [];
     this.teapots = [];
     this.coins = [];
+    this.orbs = [];
     const cardGeo = new THREE.PlaneGeometry(0.2, 0.3);
     this.cardGeo = cardGeo;
     this.bladeGeo = new THREE.TorusGeometry(0.45, 0.06, 4, 16, Math.PI);
@@ -55,13 +56,17 @@ export class Combat {
       bolt: new THREE.MeshBasicMaterial({ color: '#c890ff' }),
       clock: new THREE.MeshBasicMaterial({ color: '#ffd060' }),
       heart: new THREE.MeshBasicMaterial({ color: '#ff3050' }),
+      diamond: new THREE.MeshBasicMaterial({ color: '#ff4a8a' }),
     };
+    this.diamondGeo = new THREE.OctahedronGeometry(0.22, 0).scale(0.8, 1.5, 0.35);
   }
 
   clear() {
     for (const s of [...this.shots, ...this.enemyShots, ...this.teapots]) this.game.scene.remove(s.mesh);
     for (const p of this.puddles) this.game.fx.scene.remove(p.ring?.mesh);
     for (const c of this.coins) this.game.scene.remove(c.mesh);
+    for (const o of this.orbs) this.game.scene.remove(o.mesh);
+    this.orbs = [];
     this.shots = [];
     this.enemyShots = [];
     this.puddles = [];
@@ -105,7 +110,7 @@ export class Combat {
 
   // ─── enemy projectiles ───
   spawnEnemyShot(kind, pos, vel, dmg, o = {}) {
-    const mesh = new THREE.Mesh(this.orbGeo, this.enemyMats[kind]);
+    const mesh = new THREE.Mesh(kind === 'diamond' ? this.diamondGeo : this.orbGeo, this.enemyMats[kind]);
     mesh.position.copy(pos);
     mesh.scale.setScalar(o.size || 1);
     this.game.scene.add(mesh);
@@ -177,7 +182,7 @@ export class Combat {
     const g = this.game;
     const p = g.player;
     p.kills++;
-    p.gainXp((e.xpValue || 10) * (1 + 0.25 * (e.level - 1)) * (e.elite ? 3 : 1));
+    this.dropXp(e.hitCenter(new THREE.Vector3()), (e.xpValue || 10) * (1 + 0.25 * (e.level - 1)) * (e.elite ? 3 : 1));
     g.hitStop(e.boss ? 0.35 : e.elite ? 0.08 : 0.045);
     g.camShake(e.boss ? 1.2 : 0.12);
     p.corruption = Math.min(100, p.corruption + (e.elite ? 10 : e.boss ? 40 : 4));
@@ -213,6 +218,67 @@ export class Combat {
       const sp = 2 + rand() * 4;
       this.coins.push({ mesh, value: v, vel: new THREE.Vector3(Math.cos(a) * sp, 6 + rand() * 5, Math.sin(a) * sp), t: 0, spin: 6 + rand() * 8 });
     }
+  }
+
+  // Experience drops as orbs you have to go and collect.
+  dropXp(pos, xp) {
+    const g = this.game;
+    this.xpGeo ||= new THREE.IcosahedronGeometry(0.16, 1);
+    this.xpMat ||= new THREE.MeshBasicMaterial({ color: '#70ffc8' });
+    this.xpHalo ||= new THREE.SpriteMaterial({ map: g.glowTex, color: '#40ffb0', blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, opacity: 0.8 });
+    const n = Math.max(1, Math.min(10, Math.ceil(xp / 7)));
+    for (let i = 0; i < n; i++) {
+      const m = new THREE.Mesh(this.xpGeo, this.xpMat);
+      const halo = new THREE.Sprite(this.xpHalo);
+      halo.scale.set(1.1, 1.1, 1);
+      m.add(halo);
+      m.position.copy(pos);
+      g.scene.add(m);
+      const a = rand() * TAU;
+      const sp = 2 + rand() * 3.5;
+      this.orbs.push({ mesh: m, value: xp / n, vel: new THREE.Vector3(Math.cos(a) * sp, 5 + rand() * 4, Math.sin(a) * sp), t: 0, ph: rand() * TAU });
+    }
+  }
+
+  updateOrbs(dt) {
+    const g = this.game;
+    const p = g.player;
+    const pc = p.center;
+    for (const o of this.orbs) {
+      o.t += dt;
+      const m = o.mesh;
+      const d = m.position.distanceTo(pc);
+      if (p.alive && d < 6.5 && o.t > 0.4) {
+        tmpA.subVectors(pc, m.position).normalize().multiplyScalar(Math.min(40, 10 + (6.5 - d) * 6 + o.t));
+        o.vel.lerp(tmpA, 1 - Math.exp(-8 * dt));
+        m.position.addScaledVector(o.vel, dt);
+      } else if (!o.rest) {
+        o.vel.y -= 18 * dt;
+        m.position.addScaledVector(o.vel, dt);
+        const gy = g.world.height(m.position.x, m.position.z) + 0.5;
+        if (m.position.y < gy) {
+          m.position.y = gy;
+          o.rest = true;
+          o.baseY = gy;
+        }
+      } else {
+        o.vel.set(0, 0, 0);
+        m.position.y = o.baseY + Math.sin(o.t * 3 + o.ph) * 0.15;
+      }
+      // fade out, blinking, near the end of its life
+      m.visible = o.t < 40 || Math.floor(o.t * 8) % 2 === 0;
+      if (p.alive && d < 1.1) {
+        o.got = true;
+        p.gainXp(o.value);
+        sfx('xp');
+        g.fx.flash(m.position, '#70ffc8', 0.8, 0.12);
+      }
+      if (o.t > 45) o.got = true;
+    }
+    this.orbs = this.orbs.filter((o) => {
+      if (o.got) g.scene.remove(o.mesh);
+      return !o.got;
+    });
   }
 
   updateCoins(dt) {
@@ -283,6 +349,7 @@ export class Combat {
     const g = this.game;
     const w = g.world;
     this.updateCoins(dt);
+    this.updateOrbs(dt);
 
     // player shots
     for (const s of this.shots) {
@@ -390,7 +457,11 @@ export class Combat {
       s.prev.copy(s.pos);
       s.pos.addScaledVector(s.vel, dt);
       s.mesh.position.copy(s.pos);
-      const col = s.kind === 'tea' ? '#ff7a20' : s.kind === 'clock' ? '#ffc040' : s.kind === 'heart' ? '#ff3050' : '#a060ff';
+      const col = s.kind === 'tea' ? '#ff7a20' : s.kind === 'clock' ? '#ffc040' : s.kind === 'heart' ? '#ff3050' : s.kind === 'diamond' ? '#ff4a8a' : '#a060ff';
+      if (s.kind === 'diamond') {
+        s.mesh.rotation.y += dt * 14;
+        s.mesh.rotation.z += dt * 5;
+      }
       g.fx.trail(s.pos, col, 0.6 * s.size, 0.25, 0.8);
       if (pl.alive && segHitsSphere(s.prev, s.pos, pl.center, 0.55 + s.size * 0.15)) {
         if (s.splash) this.explode(s.pos.clone(), s.splash, 0, { dmg: s.dmg, color: col });

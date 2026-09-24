@@ -492,7 +492,7 @@ export class HUD {
 
     // objective + charge
     const tp = g.teleporter;
-    let obj = 'Find the Looking Glass';
+    let obj = tp.discovered ? 'Touch the Looking Glass (♥ on the map)' : 'Find the Looking Glass — explore the garden';
     if (tp.state === 'charging' || tp.state === 'charged') obj = `Defeat ${g.boss ? g.boss.name : 'the boss'}`;
     if (tp.state === 'ready') obj = 'Step through the Looking Glass';
     this.setText('objective', obj);
@@ -559,7 +559,7 @@ export class HUD {
         continue;
       }
       const [cx, cz] = m(it.pos.x, it.pos.z);
-      x.fillStyle = it.kind === 'tin' ? '#a08040' : it.kind === 'shrine' ? '#60e0ff' : it.big ? '#ff5060' : '#ffd060';
+      x.fillStyle = it.kind === 'tin' ? '#a08040' : it.kind === 'shrine' ? '#60e0ff' : it.kind === 'perkchest' ? '#c070ff' : it.big ? '#ff5060' : '#ffd060';
       x.fillRect(cx - 3, cz - 3, 6, 6);
     }
     for (const it of g.pickups) {
@@ -570,7 +570,7 @@ export class HUD {
       x.fill();
     }
     const gp = g.world.glassPos;
-    glyph(gp.x, gp.z, '♥', 20, g.teleporter.state === 'ready' ? '#ffffff' : '#ff2a4a', '#ff2a4a');
+    if (g.teleporter.discovered) glyph(gp.x, gp.z, '♥', 20, g.teleporter.state === 'ready' ? '#ffffff' : '#ff2a4a', '#ff2a4a');
     for (const e of g.enemies) {
       if (!e.alive) continue;
       if (e.boss) {

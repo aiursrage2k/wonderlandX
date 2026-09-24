@@ -14,8 +14,8 @@ const tmp2 = new THREE.Vector3();
 // Evolution: as enemy level climbs they grow, glow, and learn new tricks.
 export const TIERS = [
   { name: '', color: null },
-  { name: 'Veteran', color: '#ffb040', min: 4 },
-  { name: 'Nightmare', color: '#b040ff', min: 8 },
+  { name: 'Veteran', color: '#ffb040', min: 3 },
+  { name: 'Nightmare', color: '#b040ff', min: 6 },
 ];
 export const tierFor = (level) => (level >= TIERS[2].min ? 2 : level >= TIERS[1].min ? 1 : 0);
 
@@ -250,9 +250,16 @@ export class Enemy {
     if (this.state === 'spawn') {
       this.spawnT -= dt;
       const k = 1 - Math.max(0, this.spawnT) / 0.9;
-      this.model.scale.setScalar(this.scale * (0.2 + 0.8 * k));
+      const e = 1 - (1 - k) ** 3;
+      this.model.scale.setScalar(this.scale * (0.5 + 0.5 * e));
       if (this.spawnT <= 0) this.state = 'chase';
       this.model.position.copy(this.pos);
+      // climb up out of the rabbit hole
+      if (!this.flying) this.model.position.y -= (1 - e) * this.height * this.scale * 1.1;
+      if (Math.random() < 0.6) {
+        const a = Math.random() * TAU;
+        this.game.fx.spark(this.pos.x + Math.cos(a) * 0.8, this.pos.y + 0.1, this.pos.z + Math.sin(a) * 0.8, Math.random() < 0.5 ? '#b060ff' : '#ff60c0', { speed: 1.2, g: -9, size: 0.3, life: 0.6, drag: 0.5 });
+      }
       this.model.rotation.y = this.yaw;
       if (!this.flying) this.integrate(dt);
       return true;
@@ -394,6 +401,96 @@ export class CardGuard extends Enemy {
     g.gore.explode(c, this.lastHitDir, { gibs: ['flesh', 'card', 'card', 'chunk'], count: 10, scale: this.scale });
     g.fx.burst(c, 16, '#efe4d0', { matter: true, speed: 9, size: 0.3, life: 1.4, g: 10 });
     sfx('cards');
+  }
+}
+
+
+// ───────────────────────── Diamond Guard (ranged) ─────────────────────────
+export class DiamondGuard extends Enemy {
+  constructor(game, x, z, o) {
+    super(game, buildCardGuard('♦', RANKS[Math.floor(rand() * RANKS.length)], '#6a0c30'), x, z, { ...o, hp: 42, gold: 16, xp: 12 });
+    this.name = 'Diamond Guard';
+    this.radius = 0.55;
+    this.height = 2.5;
+    this.hitR = 0.85;
+    this.hitOffset = 1.35;
+    this.speed = 4.4;
+    this.strafe = rand() < 0.5 ? 1 : -1;
+    this.cooldown = 1.2 + rand() * 1.5;
+    // a floating crystal over the spear hand: the "gun"
+    this.crystalMat = new THREE.MeshStandardMaterial({ color: '#ff4a8a', emissive: '#ff1a60', emissiveIntensity: 1.2, metalness: 0.3, roughness: 0.15 });
+    DiamondGuard.geo ||= new THREE.OctahedronGeometry(0.2, 0);
+    const cry = new THREE.Mesh(DiamondGuard.geo, this.crystalMat);
+    cry.scale.set(0.8, 1.4, 0.8);
+    cry.position.set(0, 0.25, 0.25);
+    this.parts.arms[1].hand.add(cry);
+    this.crystal = cry;
+    this.parts.spear.visible = false;
+  }
+
+  think(dt) {
+    const g = this.game;
+    const p = g.player;
+    const d = this.distToPlayer();
+    const parts = this.parts;
+    this.cooldown -= dt;
+    this.faceToward(p.pos.x, p.pos.z, dt, 8);
+    this.crystal.rotation.y += dt * 3;
+    if (this.state === 'aim') {
+      this.vel.multiplyScalar(Math.exp(-10 * dt));
+      this.crystalMat.emissiveIntensity = 1.2 + this.t * 5;
+      parts.arms[1].sh.rotation.x = lerp(parts.arms[1].sh.rotation.x, -1.5, 1 - Math.exp(-12 * dt));
+      const shots = 3 + 2 * this.tier;
+      if (this.t > 0.7 && this.fired < shots && this.t > 0.7 + this.fired * 0.14) {
+        this.fired++;
+        const from = new THREE.Vector3();
+        this.crystal.getWorldPosition(from);
+        const lead = p.center.clone().addScaledVector(p.vel, 0.25);
+        const dir = lead.sub(from).normalize();
+        dir.applyAxisAngle(new THREE.Vector3(0, 1, 0), (rand() - 0.5) * 0.08);
+        g.combat.spawnEnemyShot('diamond', from, dir.multiplyScalar(30), 8 * this.dmgMult, { size: 1.3, life: 2.5 });
+        g.fx.flash(from, '#ff4a8a', 1.2, 0.08);
+        sfx('tick');
+      }
+      if (this.t > 0.7 + shots * 0.14 + 0.3) {
+        this.state = 'chase';
+        this.cooldown = 2.2 + rand() * 1.2;
+        this.crystalMat.emissiveIntensity = 1.2;
+      }
+    } else {
+      const want = d > 18 ? 1 : d < 9 ? -1 : 0;
+      tmp2.set(p.pos.x - this.pos.x, 0, p.pos.z - this.pos.z).normalize();
+      this.steer(this.pos.x + tmp2.x * want * 4 - tmp2.z * this.strafe * 3, this.pos.z + tmp2.z * want * 4 + tmp2.x * this.strafe * 3, this.speed, dt);
+      if (rand() < 0.006) this.strafe *= -1;
+      parts.arms[1].sh.rotation.x = lerp(parts.arms[1].sh.rotation.x, -0.6, 1 - Math.exp(-8 * dt));
+      if (this.cooldown <= 0 && d < 30 && p.alive) {
+        this.state = 'aim';
+        this.t = 0;
+        this.fired = 0;
+        const from = new THREE.Vector3();
+        this.crystal.getWorldPosition(from);
+        const tb = g.fx.beam(from, p.center.clone(), { color: '#ff4a8a', width: 0.03, dur: 0.7, opacity: 0.6 });
+        tb.update = (b) => {
+          this.crystal.getWorldPosition(b.from);
+          b.to.copy(p.center);
+        };
+        sfx('telegraph');
+      }
+    }
+    const hs = Math.hypot(this.vel.x, this.vel.z);
+    const ph = this.t * 9 + this.phase;
+    const k = clamp(hs / 5, 0, 1.2);
+    parts.legs[0].rotation.x = Math.sin(ph) * 0.7 * k;
+    parts.legs[1].rotation.x = -Math.sin(ph) * 0.7 * k;
+    parts.arms[0].sh.rotation.x = -Math.sin(ph) * 0.5 * k;
+  }
+
+  onDeath() {
+    const g = this.game;
+    const c = this.hitCenter(new THREE.Vector3());
+    g.gore.explode(c, this.lastHitDir, { gibs: ['flesh', 'card', 'card', 'shard'], count: 10, scale: this.scale });
+    g.fx.burst(c, 20, '#ff4a8a', { speed: 9, size: 0.3, life: 0.5 });
+    sfx('shatter');
   }
 }
 
@@ -1086,6 +1183,7 @@ export const CARDS = {
   guard: { cost: 12, weight: 5, min: 0 },
   teacup: { cost: 15, weight: 3, min: 0 },
   wisp: { cost: 11, weight: 3, min: 0.6 },
+  diamond: { cost: 13, weight: 3, min: 0 },
 };
 
 export class Director {
@@ -1095,8 +1193,8 @@ export class Director {
   }
 
   reset() {
-    this.credits = 40;
-    this.timer = 2;
+    this.credits = 75;
+    this.timer = 0.8;
   }
 
   spawn(type, x, z, elite) {
@@ -1112,8 +1210,9 @@ export class Director {
       g.hud.banner(`The creatures evolve: ${tn.name}s`, e.tier === 1 ? 'Bigger, faster, and they have learned new tricks.' : 'Nightmares walk the garden now. Run, or grow stronger.', tn.color, e.tier === 1 ? '⚔️' : '💀');
       sfx('boss');
     }
-    g.fx.ring(x, z, { r0: 0.2, r1: e.boss ? 6 : 2, dur: 0.8, color: e.elite ? e.elite.color : '#a040ff' });
+    g.fx.portal(x, z, e.boss ? 5 : 1.6 * e.scale, e.elite ? e.elite.color : e.tier === 2 ? '#b040ff' : e.tier === 1 ? '#ffb040' : '#a040ff', e.boss ? 1.8 : 1.1);
     g.fx.burst(new THREE.Vector3(x, g.world.height(x, z) + 0.3, z), e.boss ? 60 : 14, '#8040ff', { speed: 4, g: -4, size: 0.4, life: 0.9 });
+    sfx('spawn');
     return e;
   }
 
@@ -1121,14 +1220,14 @@ export class Director {
     const g = this.game;
     const coeff = g.difficulty();
     const event = g.teleporter && g.teleporter.state === 'charging';
-    this.credits += dt * (1.2 + 0.9 * coeff) * (event ? 1.9 : 1);
+    this.credits += dt * (1.9 + 1.1 * coeff) * (event ? 1.8 : 1);
     this.timer -= dt;
     if (this.timer > 0) return;
-    this.timer = 2.2 + rand() * 2.6;
+    this.timer = 1.6 + rand() * 2.2;
     const alive = g.enemies.filter((e) => e.alive && !e.boss).length;
     const minutes = g.runTime / 60;
     // the crowd cap starts small and grows with time and depth
-    if (alive >= Math.min(30, 8 + Math.floor(minutes * 2) + (g.depth - 1) * 3)) return;
+    if (alive >= Math.min(32, 12 + Math.floor(minutes * 2.5) + (g.depth - 1) * 3)) return;
     const roster = g.world.theme.enemies || ['guard', 'teacup', 'wisp'];
     const opts = roster.map((type) => ({ type, ...CARDS[type] })).filter((c) => g.runTime / 60 >= c.min || g.depth > 1);
     let tot = opts.reduce((s, c) => s + c.weight, 0);
@@ -1170,4 +1269,4 @@ export class Director {
   }
 }
 
-Object.assign(REGISTRY, { guard: CardGuard, teacup: Teacup, wisp: ClockWisp, rabbit: WhiteRabbit, queen: QueenOfHearts });
+Object.assign(REGISTRY, { guard: CardGuard, diamond: DiamondGuard, teacup: Teacup, wisp: ClockWisp, rabbit: WhiteRabbit, queen: QueenOfHearts });

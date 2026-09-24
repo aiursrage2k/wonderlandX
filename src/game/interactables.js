@@ -2,7 +2,7 @@
 
 import * as THREE from 'three';
 import { buildChest, buildLookingGlass, buildTeaTable, mat } from '../gfx/models.js';
-import { rollItem, RARITY } from './items.js';
+import { rollItem, RARITY, PERKS } from './items.js';
 import { rand, TAU } from '../engine/util.js';
 import { sfx } from '../engine/audio.js';
 
@@ -128,6 +128,79 @@ export class TeaTable {
     this.parts.hat.position.y = 1.06 + (this.wait > 0 ? Math.sin(this.wait * 30) * 0.1 : 0);
     this.parts.hat.rotation.y = t * 0.6;
     this.parts.glow.opacity = this.used ? 0 : 0.3 + Math.sin(t * 3) * 0.2;
+  }
+}
+
+// A violet reliquary: pay gold, gain a free rank in a random perk.
+export class PerkChest {
+  constructor(game, x, z) {
+    this.game = game;
+    this.kind = 'perkchest';
+    const b = buildChest(false);
+    this.model = b.root;
+    this.parts = b.parts;
+    this.model.traverse((o) => {
+      if (o.isMesh && o.material.color && o.material.color.getHexString() === '3b2418') o.material = PerkChest.wood ||= mat('#3a1450', { roughness: 0.5 });
+    });
+    this.parts.glow.color.set('#c070ff');
+    const star = new THREE.Sprite(new THREE.SpriteMaterial({ map: game.glowTex, color: '#c070ff', blending: THREE.AdditiveBlending, transparent: true, depthWrite: false }));
+    star.scale.set(2.4, 2.4, 1);
+    star.position.y = 1.4;
+    this.model.add(star);
+    this.star = star;
+    const y = game.world.height(x, z);
+    this.pos = new THREE.Vector3(x, y, z);
+    this.model.position.copy(this.pos);
+    this.model.rotation.y = rand() * TAU;
+    game.scene.add(this.model);
+    this.used = false;
+    this.openT = 0;
+  }
+
+  get cost() {
+    return Math.round(35 * this.game.difficulty() ** 1.25);
+  }
+
+  label() {
+    return `<kbd>E</kbd> Open Perk Reliquary <span style="color:#ffd24a">◈ ${this.cost}</span> <span style="color:#c9a0ff">(a random perk rank)</span>`;
+  }
+
+  interact() {
+    const g = this.game;
+    const p = g.player;
+    if (p.gold < this.cost) {
+      g.hud.banner('Not enough gold', `The reliquary wants ◈ ${this.cost}.`, '#a08080', '🔒');
+      return;
+    }
+    const open = PERKS.filter((k) => (p.perks[k.id] || 0) < k.max);
+    if (!open.length) {
+      g.hud.banner('Nothing left to learn', 'Every perk is already mastered.', '#c9a0ff', '✦');
+      return;
+    }
+    p.gold -= this.cost;
+    this.used = true;
+    const perk = open[Math.floor(rand() * open.length)];
+    p.perks[perk.id] = (p.perks[perk.id] || 0) + 1;
+    const before = p.stats.maxHp;
+    p.recompute();
+    if (p.stats.maxHp > before) p.hp += p.stats.maxHp - before;
+    g.hud.banner(`${perk.name} ${p.perks[perk.id]}/${perk.max}`, `Perk Reliquary: ${perk.per}.`, '#c9a0ff', perk.icon);
+    g.fx.burst(this.pos.clone().setY(this.pos.y + 1), 40, '#c070ff', { speed: 7, size: 0.35, life: 0.8 });
+    g.fx.beam(this.pos.clone(), this.pos.clone().setY(this.pos.y + 10), { color: '#c070ff', width: 0.6, dur: 0.7, opacity: 0.6 });
+    sfx('chest');
+  }
+
+  update(dt) {
+    if (this.used && this.openT < 1) {
+      this.openT = Math.min(1, this.openT + dt * 3);
+      this.parts.lid.rotation.x = -this.openT * 1.9;
+      this.parts.glow.opacity = (1 - this.openT) * 0.9;
+      this.star.material.opacity = 1 - this.openT;
+    } else if (!this.used) {
+      const t = this.game.time;
+      this.parts.glow.opacity = 0.35 + Math.sin(t * 3) * 0.2;
+      this.star.material.opacity = 0.5 + Math.sin(t * 2) * 0.3;
+    }
   }
 }
 
@@ -315,6 +388,24 @@ export class LookingGlass {
 
   update(dt) {
     const g = this.game;
+    // discovery: close enough to see it, or the Cheshire Cat takes pity
+    if (!this.discovered) {
+      const d = Math.hypot(g.player.pos.x - this.pos.x, g.player.pos.z - this.pos.z);
+      const small = (g.world.S || 1) <= 1;
+      if (small || d < 60) {
+        this.discovered = true;
+        if (!small) g.hud.banner('The Looking Glass', 'There it is — marked on your map.', '#ff8aa0', '🪞');
+      } else if (g.stageTime > 240) {
+        this.discovered = true;
+        g.hud.banner('The Cheshire Cat whispers…', '“Lost, are we? It’s where the light is.” The Glass is on your map.', '#c080ff', '😸');
+        this.revealBeam = g.fx.beam(this.pos.clone(), this.pos.clone().setY(this.pos.y + 80), { color: '#ff5a8a', width: 1.6, dur: 1e9, opacity: 0.35 });
+        this.revealBeam.hold = true;
+      }
+    }
+    if (this.revealBeam && this.state !== 'idle') {
+      this.revealBeam.dead = true;
+      this.revealBeam = null;
+    }
     const u = this.parts.glassMat.uniforms;
     u.t.value = g.time;
     u.charge.value = this.charge;

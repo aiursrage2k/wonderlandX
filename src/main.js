@@ -10,7 +10,7 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { Input } from './engine/input.js';
 import { unlockAudio, toggleMute, sfx } from './engine/audio.js';
 import { makeRng, rand, TAU } from './engine/util.js';
-import { World } from './world/world.js';
+import { World, STAGES } from './world/world.js';
 import { FX } from './fx/fx.js';
 import { Gore } from './fx/gore.js';
 import { glowTexture } from './gfx/textures.js';
@@ -18,7 +18,7 @@ import { Player } from './game/player.js';
 import { Combat } from './game/combat.js';
 import { Director } from './game/enemies.js';
 import './game/clockenemies.js'; // registers the Clockworks cast
-import { Chest, BiscuitTin, Pickup, LookingGlass, TeaTable } from './game/interactables.js';
+import { Chest, BiscuitTin, Pickup, LookingGlass, TeaTable, PerkChest } from './game/interactables.js';
 import { Shop } from './game/shop.js';
 import { RARITY } from './game/items.js';
 import { HUD } from './ui/hud.js';
@@ -126,6 +126,24 @@ class Game {
       this.input.requestLock();
     };
     document.getElementById('btn-start').onclick = start;
+    // test any level directly
+    const row = document.getElementById('ls-row');
+    const bossNames = { rabbit: 'White Rabbit', madhatter: 'Mad Hatter', queen: 'Queen of Hearts' };
+    STAGES.forEach((st, i) => {
+      const b = document.createElement('button');
+      b.className = 'ls-btn';
+      b.innerHTML = `<b>${String(i + 1).padStart(2, '0')}</b>${st.name}<small>boss: ${bossNames[st.boss] || st.boss}</small>`;
+      b.onclick = () => {
+        unlockAudio();
+        document.getElementById('screen-title').classList.add('hidden');
+        this.startRun(i + 1, {
+          reveal: document.getElementById('ls-reveal').checked,
+          atGlass: document.getElementById('ls-glass').checked,
+        });
+        this.input.requestLock();
+      };
+      row.appendChild(b);
+    });
     document.getElementById('btn-resume').onclick = () => {
       unlockAudio();
       this.input.requestLock();
@@ -202,13 +220,30 @@ class Game {
   }
 
   // ─── run / stage lifecycle ───
-  startRun() {
+  startRun(depth = 1, opts = {}) {
     this.runTime = 0;
-    this.depth = 1;
+    this.depth = depth;
     if (this.player) this.scene.remove(this.player.model);
     this.player = new Player(this);
     this.hud.updateItems(this.player.inv);
-    this.loadStage(1);
+    this.loadStage(depth);
+    if (depth > 1) {
+      // a fair loadout for dropping in deep: levels and a purse
+      const p = this.player;
+      p.level = 1 + (depth - 1) * 3;
+      p.recompute();
+      p.hp = p.stats.maxHp;
+      p.gold = 150 * depth;
+      this.runTime = 120 * (depth - 1);
+    }
+    if (opts.reveal || opts.atGlass) this.teleporter.discovered = true;
+    if (opts.atGlass) {
+      const gp = this.world.glassPos;
+      const sp = this.world.spawn;
+      const d = Math.hypot(sp.x - gp.x, sp.z - gp.z) || 1;
+      this.player.placeAt(gp.x + ((sp.x - gp.x) / d) * 11, gp.z + ((sp.z - gp.z) / d) * 11);
+      this.player.camYaw = Math.atan2(gp.x - this.player.pos.x, gp.z - this.player.pos.z);
+    }
     this.state = 'play';
     this.hud.show(true);
     this.fadeIn();
@@ -246,7 +281,8 @@ class Game {
     this.interactables.push(this.teleporter);
     const rng = makeRng(seed ^ 0x5bd1e995);
     const avoid = [{ ...w.glassPos, r: 8 }];
-    const nChest = 11 + Math.min(6, depth);
+    const areaK = Math.max(1, (w.A || 1) * 0.6);
+    const nChest = Math.round((11 + Math.min(6, depth)) * areaK);
     for (let i = 0; i < nChest + 3; i++) {
       // bias toward plazas so loot lives in the "rooms"
       let s;
@@ -260,10 +296,15 @@ class Game {
       avoid.push({ ...s, r: 3 });
       this.interactables.push(new Chest(this, s.x, s.z, i >= nChest));
     }
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < Math.round(8 * areaK); i++) {
       const s = w.freeSpot(2, avoid);
       avoid.push({ ...s, r: 3 });
       this.interactables.push(new BiscuitTin(this, s.x, s.z));
+    }
+    for (let i = 0; i < Math.round(4 * areaK); i++) {
+      const s = w.freeSpot(2, avoid);
+      avoid.push({ ...s, r: 3 });
+      this.interactables.push(new PerkChest(this, s.x, s.z));
     }
     // the curio cart sits on the edge of the starting plaza, facing its centre
     {
@@ -290,6 +331,7 @@ class Game {
       this.interactables.push(new TeaTable(this, s.x, s.z));
     }
     this.director.reset();
+    this.stageTime = 0;
     if (this.player) {
       this.player.placeAt(w.spawn.x, w.spawn.z);
       this.player.camYaw = Math.atan2(w.glassPos.x - w.spawn.x, w.glassPos.z - w.spawn.z);
@@ -388,7 +430,7 @@ class Game {
   }
 
   enemyLevel() {
-    return 1 + Math.floor((this.difficulty() - 1) / 0.33);
+    return 1 + Math.floor((this.difficulty() - 1) / 0.22);
   }
 
   camShake(m) {
@@ -471,7 +513,10 @@ class Game {
     this.dt = dt;
 
     if (playing) {
-      if (this.state === 'play') this.runTime += dt;
+      if (this.state === 'play') {
+        this.runTime += dt;
+        this.stageTime += dt;
+      }
       input.fallbackLook(dt);
       const look = input.consumeLook();
       if (this.state === 'play') this.player.look(look.dx, look.dy);

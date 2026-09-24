@@ -143,6 +143,13 @@ export function sfx(name) {
     case 'boss':
       [65, 69, 98].forEach((f) => tone(t, f, 2.5, 'sawtooth', 0.12, f * 0.98));
       break;
+    case 'spawn':
+      noise(t, 0.5, 200, 1.5, 0.18, 'bandpass', 1400);
+      tone(t, 90, 0.5, 'sine', 0.06, 180);
+      break;
+    case 'xp':
+      tone(t, 1300 + Math.random() * 500, 0.1, 'sine', 0.05, 2200);
+      break;
     case 'coin':
       tone(t, 1800 + Math.random() * 400, 0.08, 'triangle', 0.05, 2600);
       break;

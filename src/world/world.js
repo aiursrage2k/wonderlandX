@@ -10,10 +10,10 @@ import { mat } from '../gfx/models.js';
 import { RIM } from '../gfx/rim.js';
 import { buildClockworks } from './clockworks.js';
 
-const GARDEN_FOES = ['guard', 'teacup', 'wisp'];
+const GARDEN_FOES = ['guard', 'diamond', 'teacup', 'wisp'];
 const CLOCK_FOES = ['hatter', 'spider', 'cannon'];
 export const STAGES = [
-  { name: 'The Hollow Tea Garden', kind: 'garden', boss: 'rabbit', enemies: GARDEN_FOES, summon: 'guard', fog: '#35204a', skyTop: '#0c0620', skyHor: '#7a3a96', glow: '#3ff5dc', glow2: '#ff3fbf', moon: '#d8c8ff' },
+  { name: 'The Hollow Tea Garden', kind: 'garden', size: 2, boss: 'rabbit', enemies: GARDEN_FOES, summon: 'guard', fog: '#35204a', skyTop: '#0c0620', skyHor: '#7a3a96', glow: '#3ff5dc', glow2: '#ff3fbf', moon: '#d8c8ff' },
   { name: 'The Mad Hatter’s Clockworks', kind: 'clockworks', boss: 'madhatter', enemies: CLOCK_FOES, summon: 'spider', fog: '#2a1a12', skyTop: '#070a1c', skyHor: '#40305e', glow: '#ff9a30', glow2: '#b060ff', moon: '#dcd0ff' },
   { name: 'The Weeping Rosewood', kind: 'garden', boss: 'queen', enemies: GARDEN_FOES, summon: 'guard', fog: '#3a1422', skyTop: '#12040a', skyHor: '#962a40', glow: '#ff5a7a', glow2: '#ffb347', moon: '#ffd0d0' },
   { name: "The Queen's Croquet Grounds", kind: 'garden', boss: 'rabbit', enemies: GARDEN_FOES, summon: 'guard', fog: '#182a34', skyTop: '#040c12', skyHor: '#2a7080', glow: '#7dff9a', glow2: '#ff4040', moon: '#c8fff0' },
@@ -21,6 +21,43 @@ export const STAGES = [
 ];
 
 const HALF = 115; // playable half-extent
+
+// Concatenate indexed geometries sharing position/normal/uv into one.
+function mergeGeometries(list) {
+  let vCount = 0;
+  let iCount = 0;
+  for (const g of list) {
+    vCount += g.attributes.position.count;
+    iCount += g.index ? g.index.count : g.attributes.position.count;
+  }
+  const pos = new Float32Array(vCount * 3);
+  const nor = new Float32Array(vCount * 3);
+  const uv = new Float32Array(vCount * 2);
+  const idx = new Uint32Array(iCount);
+  let vo = 0;
+  let io = 0;
+  for (const g of list) {
+    const n = g.attributes.position.count;
+    pos.set(g.attributes.position.array, vo * 3);
+    nor.set(g.attributes.normal.array, vo * 3);
+    if (g.attributes.uv) uv.set(g.attributes.uv.array, vo * 2);
+    if (g.index) {
+      const src = g.index.array;
+      for (let k = 0; k < src.length; k++) idx[io + k] = src[k] + vo;
+      io += src.length;
+    } else {
+      for (let k = 0; k < n; k++) idx[io + k] = vo + k;
+      io += n;
+    }
+    vo += n;
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  out.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  out.setIndex(new THREE.BufferAttribute(idx, 1));
+  return out;
+}
 let shared = null;
 function sharedAssets() {
   if (shared) return shared;
@@ -59,6 +96,8 @@ export class World {
     this.anim = []; // per-frame animated things
     this.assets = sharedAssets();
     this.phase = this.rng() * 100;
+    this.S = this.theme.size || 1; // linear scale of the garden
+    this.A = this.S * this.S; // area factor for prop counts
 
     if (this.theme.kind === 'clockworks') {
       this.buildSky();
@@ -97,16 +136,20 @@ export class World {
   // ─── layout ───
   planLayout() {
     const r = this.rng;
-    this.spawn = { x: r.range(-20, 20), z: r.range(55, 75) };
+    const S = this.S;
+    this.spawn = { x: r.range(-20, 20) * S, z: r.range(55, 75) * S };
     // Looking glass placed far from spawn
     const a = r.range(0, TAU);
-    this.glassPos = { x: Math.cos(a) * 25 + r.range(-10, 10), z: -60 + Math.sin(a) * 15 };
+    // the Looking Glass hides deep on the far side of the garden
+    this.glassPos = S > 1
+      ? { x: r.range(-0.55, 0.55) * 88 * S, z: -r.range(0.55, 0.78) * 88 * S }
+      : { x: Math.cos(a) * 25 + r.range(-10, 10), z: -60 + Math.sin(a) * 15 };
     this.plazas.push({ x: this.spawn.x, z: this.spawn.z, r: 14 });
     this.plazas.push({ x: this.glassPos.x, z: this.glassPos.z, r: 20 });
     let tries = 0;
-    while (this.plazas.length < 9 && tries++ < 300) {
-      const p = { x: r.range(-90, 90), z: r.range(-90, 90), r: r.range(9, 18) };
-      if (Math.hypot(p.x, p.z) > 92) continue;
+    while (this.plazas.length < Math.round(9 * this.A * 0.65) && tries++ < 600) {
+      const p = { x: r.range(-90, 90) * S, z: r.range(-90, 90) * S, r: r.range(9, 18) };
+      if (Math.hypot(p.x, p.z) > 92 * S) continue;
       if (this.plazas.some((q) => Math.hypot(q.x - p.x, q.z - p.z) < q.r + p.r + 8)) continue;
       this.plazas.push(p);
     }
@@ -119,7 +162,8 @@ export class World {
       + 1.3 * Math.sin(x * 0.09 + z * 0.07 + s * 1.3)
       + 0.6 * Math.sin(x * 0.21 - z * 0.17 + s * 2.1);
     const d = Math.hypot(x, z);
-    if (d > 96) h += Math.min(14, (d - 96) ** 2 * 0.06) + Math.max(0, d - 120) * 0.2;
+    const edge = 96 * this.S;
+    if (d > edge) h += Math.min(14, (d - edge) ** 2 * 0.06) + Math.max(0, d - edge - 24) * 0.2;
     return h;
   }
 
@@ -227,7 +271,7 @@ export class World {
       }
     });
     const d = Math.hypot(pos.x, pos.z);
-    const lim = this.bound ?? HALF - 12;
+    const lim = this.bound ?? HALF * this.S - 12;
     if (d > lim) {
       pos.x *= lim / d;
       pos.z *= lim / d;
@@ -255,14 +299,14 @@ export class World {
   // Can an enemy be spawned standing here?
   canSpawn(x, z) {
     if (this.spawnOk) return this.spawnOk(x, z);
-    return Math.hypot(x, z) < 95 && !this.solidAt(x, this.height(x, z) + 0.5, z);
+    return Math.hypot(x, z) < 95 * this.S && !this.solidAt(x, this.height(x, z) + 0.5, z);
   }
 
   freeSpot(minClear = 3, avoid = [], tries = 80) {
     for (let i = 0; i < tries; i++) {
-      const s = this.sampleSpot ? this.sampleSpot() : { x: this.rng.range(-88, 88), z: this.rng.range(-88, 88) };
+      const s = this.sampleSpot ? this.sampleSpot() : { x: this.rng.range(-88, 88) * this.S, z: this.rng.range(-88, 88) * this.S };
       const { x, z } = s;
-      if (!this.sampleSpot && Math.hypot(x, z) > 90) continue;
+      if (!this.sampleSpot && Math.hypot(x, z) > 90 * this.S) continue;
       if (this.colliders.some((c) => Math.hypot(c.x - x, c.z - z) < c.r + minClear)) continue;
       if (avoid.some((a) => Math.hypot(a.x - x, a.z - z) < (a.r || 6))) continue;
       return { x, z };
@@ -434,8 +478,8 @@ export class World {
 
   // ─── terrain ───
   buildTerrain() {
-    const size = HALF * 2 + 60;
-    const seg = 170;
+    const size = HALF * 2 * this.S + 60;
+    const seg = Math.round(170 * Math.min(this.S, 1.4));
     const geo = new THREE.PlaneGeometry(size, size, seg, seg);
     geo.rotateX(-Math.PI / 2);
     const pos = geo.attributes.position;
@@ -567,7 +611,7 @@ export class World {
       return gillsTexture((c.r * 255) | 0, (c.g * 255) | 0, (c.b * 255) | 0);
     });
     const stemMat = new THREE.MeshStandardMaterial({ color: '#cfc2d8', roughness: 0.8, emissive: '#1a0f24' });
-    const count = 22;
+    const count = Math.round(22 * Math.max(1, this.A * 0.6));
     for (let i = 0; i < count; i++) {
       const spot = this.freeSpot(6, [...this.plazas.map((p) => ({ x: p.x, z: p.z, r: p.r * 0.7 })), { ...this.glassPos, r: 14 }]);
       const vi = this.rng() < 0.65 ? 0 : 1;
@@ -643,16 +687,16 @@ export class World {
     const smallGeo = new THREE.SphereGeometry(0.3, 8, 6, 0, TAU, 0, Math.PI / 2);
     const smallMat = new THREE.MeshStandardMaterial({ color: '#221830', emissive: new THREE.Color(t.glow), emissiveIntensity: 0.75 });
     const stemGeo = new THREE.CylinderGeometry(0.05, 0.07, 0.4, 5);
-    const n = 260;
+    const n = Math.round(260 * Math.max(1, this.A * 0.6));
     const caps = new THREE.InstancedMesh(smallGeo, smallMat, n);
     const stems = new THREE.InstancedMesh(stemGeo, stemMat, n);
     const d = new THREE.Object3D();
     for (let i = 0; i < n; i++) {
-      let cx = this.rng.range(-95, 95);
-      let cz = this.rng.range(-95, 95);
+      let cx = this.rng.range(-95, 95) * this.S;
+      let cz = this.rng.range(-95, 95) * this.S;
       if (this.onPlaza(cx, cz)) {
-        cx = this.rng.range(-95, 95);
-        cz = this.rng.range(-95, 95);
+        cx = this.rng.range(-95, 95) * this.S;
+        cz = this.rng.range(-95, 95) * this.S;
       }
       const s = this.onPlaza(cx, cz) ? 0.001 : this.rng.range(0.4, 1.6);
       const y = this.height(cx, cz);
@@ -713,14 +757,18 @@ export class World {
         }
       }
     };
-    for (let i = 0; i < 16; i++) {
+    for (let i = 0; i < Math.round(16 * Math.max(1, this.A * 0.45)); i++) {
       const s = this.freeSpot(4, this.plazas.map((p) => ({ x: p.x, z: p.z, r: p.r })));
       const g = new THREE.Group();
       const y = this.height(s.x, s.z);
-      g.position.set(s.x, y - 0.5, s.z);
       const h = this.rng.range(7, 14);
       branch(g, new THREE.Vector3(), new THREE.Vector3(0, 1, 0), h, this.rng.range(0.45, 0.8), 2);
-      this.add(g);
+      // one draw call per tree: fold every branch into a single mesh
+      const tree = new THREE.Mesh(mergeGeometries(g.children.map((c) => c.geometry)), barkMat);
+      g.children.forEach((c) => c.geometry.dispose());
+      tree.position.set(s.x, y - 0.5, s.z);
+      tree.castShadow = true;
+      this.add(tree);
       this.colliders.push({ x: s.x, z: s.z, r: 0.7, top: y + h });
     }
   }
@@ -738,7 +786,7 @@ export class World {
     if (this.assets.rockGeos) return this.assets.rockGeos;
     const geos = [];
     for (let v = 0; v < 4; v++) {
-      const g = new THREE.IcosahedronGeometry(1, v < 2 ? 3 : 2);
+      const g = new THREE.IcosahedronGeometry(1, v < 2 && this.S <= 1 ? 3 : 2);
       const q = g.attributes.position;
       const ph = v * 12.7;
       const vec = new THREE.Vector3();
@@ -778,7 +826,7 @@ export class World {
     };
     const avoid = [...this.plazas.map((p) => ({ x: p.x, z: p.z, r: p.r + 1 })), { ...this.glassPos, r: 24 }];
     // boulder clusters
-    for (let i = 0; i < 18; i++) {
+    for (let i = 0; i < Math.round(18 * Math.max(1, this.A * 0.7)); i++) {
       const s = this.freeSpot(5, avoid);
       const n = 2 + Math.floor(this.rng() * 4);
       for (let k = 0; k < n; k++) {
@@ -792,7 +840,7 @@ export class World {
       }
     }
     // loose stones, some on plaza edges
-    for (let i = 0; i < 140; i++) {
+    for (let i = 0; i < Math.round(140 * Math.max(1, this.A * 0.6)); i++) {
       let x;
       let z;
       if (i < 50) {
@@ -802,8 +850,8 @@ export class World {
         x = p.x + Math.cos(a) * r;
         z = p.z + Math.sin(a) * r;
       } else {
-        x = this.rng.range(-92, 92);
-        z = this.rng.range(-92, 92);
+        x = this.rng.range(-92, 92) * this.S;
+        z = this.rng.range(-92, 92) * this.S;
         if (this.onPlaza(x, z)) continue;
       }
       if (Math.hypot(x - this.glassPos.x, z - this.glassPos.z) < 7 || Math.hypot(x - this.spawn.x, z - this.spawn.z) < 5) continue;
@@ -828,7 +876,7 @@ export class World {
 
   // ─── rose hedges ───
   buildHedges() {
-    const bushGeo = new THREE.IcosahedronGeometry(1, 2);
+    const bushGeo = new THREE.IcosahedronGeometry(1, this.S > 1 ? 1 : 2);
     const bp = bushGeo.attributes.position;
     for (let i = 0; i < bp.count; i++) {
       const k = 0.88 + Math.sin(bp.getX(i) * 7 + bp.getY(i) * 5) * 0.08 + Math.sin(bp.getZ(i) * 11) * 0.05;
@@ -840,7 +888,7 @@ export class World {
     const bushMat = new THREE.MeshStandardMaterial({ map: leaf, bumpMap: leaf, bumpScale: 3, color: '#b8d0c0', roughness: 0.55 });
     const roseGeo = new THREE.IcosahedronGeometry(0.16, 0);
     const roseMat = new THREE.MeshStandardMaterial({ color: '#9a0a1a', roughness: 0.45, emissive: '#3a0008' });
-    const N = 340;
+    const N = Math.round(340 * Math.max(1, this.A * 0.6));
     const bushes = new THREE.InstancedMesh(bushGeo, bushMat, N);
     const roses = new THREE.InstancedMesh(roseGeo, roseMat, N * 6);
     const d = new THREE.Object3D();
@@ -881,7 +929,7 @@ export class World {
     }
     while (bn < N) {
       const a = this.rng() * TAU;
-      const rr = this.rng.range(20, 100);
+      const rr = this.rng.range(20, 100 * this.S);
       const before = bn;
       place(Math.cos(a) * rr, Math.sin(a) * rr, this.rng.range(0.7, 1.6));
       if (bn === before) bn++; // skip slot to guarantee termination
@@ -905,7 +953,7 @@ export class World {
       prof.push(new THREE.Vector2(0.45 + Math.sin(u * Math.PI * 0.5) * 0.55 + u * u * 0.08, u * 1.0));
     }
     const cupGeo = new THREE.LatheGeometry([new THREE.Vector2(0, 0), ...prof], 32);
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < Math.round(8 * Math.max(1, this.A * 0.5)); i++) {
       const s = this.freeSpot(7, this.plazas.map((p) => ({ x: p.x, z: p.z, r: p.r + 7 })));
       const scale = this.rng.range(2.5, 5.5);
       const y = this.height(s.x, s.z);
@@ -953,7 +1001,7 @@ export class World {
   buildClocks() {
     const face = new THREE.MeshStandardMaterial({ map: this.assets.clock, roughness: 0.5, emissive: '#ffcf8a', emissiveMap: this.assets.clock, emissiveIntensity: 0.15 });
     const gold = mat('#9a7a3a', { metalness: 0.8, roughness: 0.35 });
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < Math.round(5 * Math.max(1, this.A * 0.5)); i++) {
       const s = this.freeSpot(6, this.plazas.map((p) => ({ x: p.x, z: p.z, r: p.r + 5 })));
       const R = this.rng.range(2, 4.5);
       const y = this.height(s.x, s.z);
@@ -1033,14 +1081,14 @@ export class World {
   }
 
   buildFloatingCards() {
-    const n = 90;
+    const n = Math.round(90 * this.S);
     const geo = new THREE.PlaneGeometry(0.7, 1.0);
     const m1 = new THREE.MeshStandardMaterial({ map: this.assets.card, side: THREE.DoubleSide, roughness: 0.7, emissive: '#221018' });
     const inst = new THREE.InstancedMesh(geo, m1, n);
     const data = [];
     for (let i = 0; i < n; i++) {
       data.push({
-        x: this.rng.range(-90, 90), z: this.rng.range(-90, 90), y: this.rng.range(3, 22),
+        x: this.rng.range(-90, 90) * this.S, z: this.rng.range(-90, 90) * this.S, y: this.rng.range(3, 22),
         rx: this.rng() * TAU, ry: this.rng() * TAU, sp: this.rng.range(0.2, 0.9), ph: this.rng() * TAU,
       });
     }
@@ -1050,7 +1098,7 @@ export class World {
         const c = data[i];
         c.x += Math.sin(t * 0.1 + c.ph) * dt * 0.8;
         c.z += dt * 0.6 * c.sp;
-        if (c.z > 95) c.z = -95;
+        if (c.z > 95 * this.S) c.z = -95 * this.S;
         d.position.set(c.x, c.y + Math.sin(t * c.sp + c.ph) * 1.2, c.z);
         d.rotation.set(c.rx + t * c.sp, c.ry + t * c.sp * 0.7, 0);
         d.updateMatrix();

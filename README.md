@@ -18,7 +18,9 @@ No build step. Serve the folder and open `index.html`:
 npx http-server -c-1 .     # or: python3 -m http.server
 ```
 
-Click **Fall Down the Rabbit Hole**. The game takes pointer lock for mouse
+Click **Fall Down the Rabbit Hole**, or use **Test a level** on the title
+screen to start any stage directly (optionally with the Looking Glass revealed,
+or standing beside it to go straight to the boss). The game takes pointer lock for mouse
 aiming; if the browser refuses it, aiming falls back to edge-panning toward the
 cursor. Touch devices get a virtual stick and buttons.
 
@@ -61,19 +63,26 @@ cursor. Touch devices get a virtual stick and buttons.
     boiling tea) or gold (rising), then the floor rearranges.
   - The Queen of Hearts: racing thorn lines, a rain of hearts, card volleys,
     scepter sweep, guard summons.
+- **The Hollow Tea Garden** is twice the size of the other gardens: the Looking
+  Glass stays off your map until you find it (or the Cheshire Cat takes pity
+  after four minutes).
 - **Stages:** 01 The Hollow Tea Garden · 02 The Mad Hatter's Clockworks · 03 The
   Weeping Rosewood · 04 The Queen's Croquet Grounds · 05 The Pool of Tears.
 - **The Clockworks** is a giant clock face: two enormous hands sweep the floor
   and shove you toward the boiling-tea channel (jump them, or stand on a raised
   hour). Tea scalds and slows. Its cast: Scissor-Handed Hatters, Pocket-Watch
   Spiders, and Walking Teapot Cannons.
-- **Levels:** kills give XP; every level adds max health, damage and regen.
+- **Levels:** kills drop green XP orbs you have to walk over (they pull in
+  when you're close); every level adds max health, damage and regen.
 - **Perks:** press **Tab** (or use the shop) to spend gold on ranked upgrades.
-- **Evolution:** enemies level with the run and evolve into Veterans (Lv 4+)
-  and Nightmares (Lv 8+): bigger, faster, with extra attacks.
+  Violet **Perk Reliquaries** around each level sell a random perk rank.
+- **Evolution:** enemies level with the run and evolve into Veterans (Lv 3+)
+  and Nightmares (Lv 6+): bigger, faster, with extra attacks. They climb out of
+  rabbit-hole portals when they spawn.
 - **Cursed items** (purple) carry a cost: the Hatter's *Broken Pocket Watch*
   slows time around you when you dodge, but each dodge raises Corruption.
-- **Enemies:** Card Guards (telegraphed spear lunges), Teacup Mimics (hopping
+- **Enemies:** Card Guards (telegraphed spear lunges), Diamond Guards (ranged
+  bursts of spinning diamonds), Teacup Mimics (hopping
   artillery that spits boiling tea), Clockwork Wisps (flying, charged bolt
   volleys).
 - **18 stacking items** across three rarities, from *Drink Me Potion* (attack

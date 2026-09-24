@@ -210,6 +210,39 @@ export class FX {
     return h;
   }
 
+  // A swirling rabbit-hole on the ground plus a column of light: spawn-in.
+  portal(x, z, radius, color, dur = 1.1) {
+    this.portalMat ||= (c) => new THREE.ShaderMaterial({
+      uniforms: { t: { value: 0 }, k: { value: 0 }, col: { value: new THREE.Color(c) } },
+      transparent: true,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+      fragmentShader: `
+        varying vec2 vUv; uniform float t; uniform float k; uniform vec3 col;
+        void main(){
+          vec2 p = vUv*2.0-1.0; float r = length(p); if (r > 1.0) discard;
+          float a = atan(p.y, p.x);
+          float sw = sin(a*4.0 + r*10.0 - t*9.0)*0.5+0.5;
+          float rim = smoothstep(0.75, 0.95, r) * (1.0 - smoothstep(0.95, 1.0, r));
+          vec3 c = mix(vec3(0.02,0.0,0.04), col*0.6, sw*(1.0-r)*0.8) + col*rim*2.0;
+          float alpha = (0.92 - r*0.2) * k;
+          gl_FragColor = vec4(c, alpha);
+        }`,
+    });
+    this.portalGeo ||= new THREE.CircleGeometry(1, 40).rotateX(-Math.PI / 2);
+    const m = new THREE.Mesh(this.portalGeo, this.portalMat(color));
+    m.position.set(x, this.world.height(x, z) + 0.1, z);
+    m.renderOrder = 3;
+    this.scene.add(m);
+    const base = new THREE.Vector3(x, m.position.y, z);
+    const col = this.beam(base, base.clone().setY(base.y + 7 + radius * 2), { color, width: radius * 0.45, dur, opacity: 0.5 });
+    void col;
+    const h = { m, t: 0, dur, radius };
+    (this.portals ||= []).push(h);
+    return h;
+  }
+
   beam(from, to, o = {}) {
     const m = new THREE.Mesh(
       this.beamGeo,
@@ -256,6 +289,20 @@ export class FX {
       }
       return !r.dead;
     });
+    for (const h of this.portals || []) {
+      h.t += dt;
+      const k = h.t / h.dur;
+      const open = k < 0.25 ? k / 0.25 : k > 0.75 ? Math.max(0, (1 - k) / 0.25) : 1;
+      h.m.scale.setScalar(Math.max(0.01, h.radius * (0.4 + 0.6 * Math.min(1, k * 4))));
+      h.m.material.uniforms.t.value = h.t;
+      h.m.material.uniforms.k.value = open;
+      if (k >= 1) {
+        h.dead = true;
+        this.scene.remove(h.m);
+        h.m.material.dispose();
+      }
+    }
+    if (this.portals) this.portals = this.portals.filter((h) => !h.dead);
     for (const h of this.sectors || []) {
       h.t += dt;
       const k = Math.min(1, h.t / h.dur);
@@ -306,6 +353,11 @@ export class FX {
   }
 
   clear() {
+    for (const h of this.portals || []) {
+      this.scene.remove(h.m);
+      h.m.material.dispose();
+    }
+    this.portals = [];
     for (const h of this.sectors || []) h.dead = true;
     for (const r of this.rings) r.dead = true;
     for (const b of this.beams) b.dead = true;
