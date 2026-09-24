@@ -82,8 +82,12 @@ cursor. Touch devices get a virtual stick and buttons.
 - **The Clockworks** is a giant clock face: two enormous hands sweep the floor
   and shove you toward the boiling-tea channel (jump them, or stand on a raised
   hour). Tea scalds and slows. Its cast: Scissor-Handed Hatters, Pocket-Watch
-  Spiders, and Walking Teapot Cannons. Five clockwork seals chain the Looking
-  Glass: every 7 kills breaks one.
+  Spiders, and Walking Teapot Cannons. Two seals chain the Looking Glass, one
+  for each of the Hatter's guests: **Tweedledum** and **Tweedledee** wait at
+  their own tea tables hidden in the wastes (☕ on the map once found; a beam
+  marks them after a while). Deliver the Hatter's invitation to summon each
+  miniboss — Dum swings a giant rattle and belly-flops (jump the shockwave),
+  Dee rolls at you and spins an umbrella storm of tea. Kill both to unseal.
 - **The Crimson Throne** is a multi-boss finale in a round throne hall of
   polished marble under an eclipse. The hall is empty until you touch the
   Queen's Mirror to summon her court:

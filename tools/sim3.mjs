@@ -21,6 +21,10 @@ export default async function (page, out) {
       let goal = null;
       if (g.teleporter.state === 'idle' && g.runTime > g.tpAt) goal = g.teleporter.pos;
       if (g.teleporter.state === 'ready') goal = g.teleporter.pos;
+      if (g.teleporter.state === 'sealed') {
+        const inv = g.interactables.find((i) => i.kind === 'invite' && !i.used);
+        if (inv && !g.enemies.some((e) => e.alive && e.boss)) goal = inv.interactPos;
+      }
       if (!goal && (!tgt || bd > 25)) {
         const ch = g.interactables.filter((i) => !i.used && i.kind !== 'glass' && (i.kind === 'tin' || p.gold >= i.cost))
           .sort((a, b) => a.pos.distanceTo(p.pos) - b.pos.distanceTo(p.pos))[0];

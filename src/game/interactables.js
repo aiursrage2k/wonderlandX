@@ -469,7 +469,8 @@ export class LookingGlass {
   updateSeals(dt) {
     const g = this.game;
     const centre = this.pos.clone().setY(this.pos.y + 4.2);
-    const want = Math.min(this.sealCount, Math.floor(this.sealKills / this.killsPerSeal));
+    const twins = g.world.theme.sealBy === 'twins';
+    const want = Math.min(this.sealCount, twins ? g.twinsDown || 0 : Math.floor(this.sealKills / this.killsPerSeal));
     while (this.broken < want) {
       const s = this.seals.find((q) => q.alive);
       s.alive = false;
@@ -480,8 +481,10 @@ export class LookingGlass {
       g.camShake(0.35);
       sfx('bell');
       const left = this.sealCount - this.broken;
-      if (left > 0) g.hud.banner(`Seal Broken — ${this.broken} / ${this.sealCount}`, `${left} seal${left > 1 ? 's' : ''} still bind the Looking Glass. Keep killing.`, '#ffb040', '🔓');
-      else {
+      if (left > 0) {
+        // the twins announce their own seal; kill-count seals get a banner here
+        if (!twins) g.hud.banner(`Seal Broken — ${this.broken} / ${this.sealCount}`, `${left} seal${left > 1 ? 's' : ''} still bind the Looking Glass. Keep killing.`, '#ffb040', '🔓');
+      } else {
         this.state = 'idle';
         this.discovered = true;
         g.hud.banner('The Glass Is Unsealed', 'The last chain snaps. Touch the Looking Glass to face the Hatter.', '#ff8aa0', '🪞');
@@ -518,6 +521,9 @@ export class LookingGlass {
   }
 
   label() {
+    if (this.state === 'sealed' && this.game.world.theme.sealBy === 'twins') {
+      return `<span style="color:#ffb040">🔒 Sealed — defeat Tweedledum and Tweedledee (${this.broken} / ${this.sealCount})</span>`;
+    }
     if (this.state === 'sealed') {
       const left = this.killsPerSeal - (this.sealKills % this.killsPerSeal);
       return `<span style="color:#ffb040">🔒 Sealed — ${this.sealCount - this.broken} seals remain · slay ${left} more to break the next</span>`;

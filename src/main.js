@@ -22,6 +22,7 @@ import { Director } from './game/enemies.js';
 import './game/clockenemies.js'; // registers the Clockworks cast
 import './game/throneenemies.js'; // registers the Queen's court
 import './game/rook.js'; // registers the Rook Sentinel
+import { TwinTable } from './game/tweedles.js';
 import { Chest, BiscuitTin, Pickup, LookingGlass, TeaTable, PerkChest } from './game/interactables.js';
 import { MultiShop } from './game/multishop.js';
 import { RARITY } from './game/items.js';
@@ -332,6 +333,26 @@ class Game {
       const s = w.freeSpot(2, avoid);
       avoid.push({ ...s, r: 3 });
       this.interactables.push(new PerkChest(this, s.x, s.z));
+    }
+    // the Tweedles' tea tables: far from the start, far from the arena and each other
+    this.twinsDown = 0;
+    if (w.theme.sealBy === 'twins') {
+      const spots = [];
+      for (const type of ['tweedledum', 'tweedledee']) {
+        let best = null;
+        for (let k = 0; k < 60; k++) {
+          const s = w.freeSpot(9, avoid);
+          if (w.inArena(s.x, s.z, 14)) continue;
+          const ds = Math.hypot(s.x - w.spawn.x, s.z - w.spawn.z);
+          const dother = spots.length ? Math.hypot(s.x - spots[0].x, s.z - spots[0].z) : 999;
+          const score = Math.min(ds, dother * 0.8);
+          if (!best || score > best.score) best = { ...s, score };
+          if (ds > 110 && dother > 120) break;
+        }
+        spots.push(best);
+        avoid.push({ x: best.x, z: best.z, r: 12 });
+        this.interactables.push(new TwinTable(this, best.x, best.z, type));
+      }
     }
     // Risk-of-Rain multishops: three terminals, buy one and the rest lock
     const nShops = (w.S || 1) > 1 ? 4 : 2;

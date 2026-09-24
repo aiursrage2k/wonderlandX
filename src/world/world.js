@@ -16,7 +16,7 @@ const GARDEN_FOES = ['guard', 'diamond', 'teacup', 'wisp', 'rook'];
 const CLOCK_FOES = ['hatter', 'spider', 'cannon'];
 export const STAGES = [
   { name: 'The Hollow Tea Garden', kind: 'garden', size: 2, boss: 'rabbit', enemies: GARDEN_FOES, summon: 'guard', fog: '#35204a', skyTop: '#0c0620', skyHor: '#7a3a96', glow: '#3ff5dc', glow2: '#ff3fbf', moon: '#d8c8ff' },
-  { name: 'The Mad Hatter’s Clockworks', kind: 'clockworks', open: true, size: 2, seals: 5, boss: 'madhatter', enemies: CLOCK_FOES, summon: 'spider', fog: '#2a1a12', skyTop: '#070a1c', skyHor: '#40305e', glow: '#ff9a30', glow2: '#b060ff', moon: '#dcd0ff' },
+  { name: 'The Mad Hatter’s Clockworks', kind: 'clockworks', open: true, size: 2, seals: 2, sealBy: 'twins', boss: 'madhatter', enemies: CLOCK_FOES, summon: 'spider', fog: '#2a1a12', skyTop: '#070a1c', skyHor: '#40305e', glow: '#ff9a30', glow2: '#b060ff', moon: '#dcd0ff' },
   { name: 'The Crimson Throne', kind: 'throne', final: true, look: { bloom: 0.45, threshold: 0.86, exposure: 0.95 }, loot: 0.45, boss: 'queen', enemies: ['guard', 'diamond'], summon: 'guard', fog: '#2a0c1a', skyTop: '#0a0214', skyHor: '#6a1a4a', glow: '#ff3050', glow2: '#b040ff', moon: '#e0c0ff' },
 ];
 
@@ -350,7 +350,12 @@ export class World {
       if (this.arena && Math.hypot(this.arena.x - x, this.arena.z - z) < this.arena.r + minClear + 2) continue;
       return { x, z };
     }
-    return this.sampleSpot ? this.sampleSpot() : { x: this.rng.range(-50, 50), z: this.rng.range(-50, 50) };
+    // fallback: anything outside the arena
+    for (let i = 0; i < 40; i++) {
+      const s = this.sampleSpot ? this.sampleSpot() : { x: this.rng.range(-50, 50), z: this.rng.range(-50, 50) };
+      if (!this.inArena(s.x, s.z, minClear)) return s;
+    }
+    return { x: this.spawn.x, z: this.spawn.z };
   }
 
   add(obj) {

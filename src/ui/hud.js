@@ -548,7 +548,11 @@ export class HUD {
     // objective + charge
     const tp = g.teleporter;
     let obj = tp.discovered ? 'Touch the Looking Glass (♥ on the map)' : 'Find the Looking Glass — explore the garden';
-    if (tp.state === 'sealed') obj = `Break the seals — ${tp.broken} / ${tp.sealCount} · slay ${tp.killsPerSeal - (tp.sealKills % tp.killsPerSeal)} more`;
+    if (tp.state === 'sealed' && g.world.theme.sealBy === 'twins') {
+      const tables = g.interactables.filter((i) => i.kind === 'invite');
+      const found = tables.filter((i) => i.found || i.used).length;
+      obj = `Defeat the Tweedles — seals ${tp.broken} / 2${found < 2 ? ` · tea tables found ${found} / 2` : ''}`;
+    } else if (tp.state === 'sealed') obj = `Break the seals — ${tp.broken} / ${tp.sealCount} · slay ${tp.killsPerSeal - (tp.sealKills % tp.killsPerSeal)} more`;
     if (tp.state === 'charging' || tp.state === 'charged') obj = `Defeat ${g.boss ? g.boss.name : 'the boss'}`;
     if (tp.state === 'ready') obj = 'Step through the Looking Glass';
     if (g.world.theme.final) {
@@ -640,6 +644,10 @@ export class HUD {
     }
     for (const it of g.interactables) {
       if (it.used) continue;
+      if (it.kind === 'invite') {
+        if (it.found || it.beam) glyph(it.pos.x, it.pos.z, '☕', 16, it.type === 'tweedledum' ? '#ff6070' : '#70a0ff', '#000');
+        continue;
+      }
       if (it.kind === 'shop') {
         glyph(it.pos.x, it.pos.z, '⚖', 17, '#ffd24a', '#ffb000');
         continue;
