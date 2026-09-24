@@ -99,53 +99,133 @@ function strokePath(x, pts, style, w) {
 
 // 8x8 checker marble, tileable. Emissive map carries the red crack glow.
 export function marbleChecker(seed = 7) {
-  const S = 1024;
+  const S = 2048;
+  const k = S / 1024;
   const n = 8;
   const size = S / n;
   const c = makeCanvas(S, S);
   const x = c.getContext('2d');
   const rng = makeRng(seed);
   for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) marbleTile(x, rng, i * size, j * size, size, (i + j) % 2 === 1);
-  // cracks + chips
+
+  // bump (white = high): recessed grout, cracks and chips
+  const hb = makeCanvas(S, S);
+  const hx = hb.getContext('2d');
+  hx.fillStyle = '#fff';
+  hx.fillRect(0, 0, S, S);
+  hx.strokeStyle = '#000';
+  hx.lineWidth = 5 * k;
+  for (let i = 0; i <= n; i++) {
+    hx.beginPath();
+    hx.moveTo(i * size, 0);
+    hx.lineTo(i * size, S);
+    hx.moveTo(0, i * size);
+    hx.lineTo(S, i * size);
+    hx.stroke();
+  }
+  // soft bevel toward each tile's edge
+  hx.globalAlpha = 0.25;
+  hx.lineWidth = 14 * k;
+  for (let i = 0; i <= n; i++) {
+    hx.beginPath();
+    hx.moveTo(i * size, 0);
+    hx.lineTo(i * size, S);
+    hx.moveTo(0, i * size);
+    hx.lineTo(S, i * size);
+    hx.stroke();
+  }
+  hx.globalAlpha = 1;
+
+  // roughness (white = rough): polished stone with wet, glossy pools
+  const rb = makeCanvas(S, S);
+  const rx = rb.getContext('2d');
+  rx.fillStyle = 'rgb(95,95,95)';
+  rx.fillRect(0, 0, S, S);
+  for (let i = 0; i < 26; i++) {
+    const cx = rng() * S;
+    const cy = rng() * S;
+    const r = (30 + rng() * 110) * k;
+    const g = rx.createRadialGradient(cx, cy, 0, cx, cy, r);
+    g.addColorStop(0, 'rgba(8,8,8,1)');
+    g.addColorStop(0.7, 'rgba(8,8,8,0.8)');
+    g.addColorStop(1, 'rgba(8,8,8,0)');
+    rx.fillStyle = g;
+    rx.beginPath();
+    rx.ellipse(cx, cy, r, r * (0.5 + rng() * 0.5), rng() * 3, 0, TAU);
+    rx.fill();
+  }
+  rx.strokeStyle = 'rgb(200,200,200)';
+  rx.lineWidth = 5 * k;
+  for (let i = 0; i <= n; i++) {
+    rx.beginPath();
+    rx.moveTo(i * size, 0);
+    rx.lineTo(i * size, S);
+    rx.moveTo(0, i * size);
+    rx.lineTo(S, i * size);
+    rx.stroke();
+  }
+
+  // cracks: dark in colour, recessed in bump, glowing in emissive
   const e = makeCanvas(S, S);
   const ex = e.getContext('2d');
   ex.fillStyle = '#000';
   ex.fillRect(0, 0, S, S);
-  for (let i = 0; i < 7; i++) {
+  for (let i = 0; i < 9; i++) {
     const pts = crackPath(rng, rng() * S, rng() * S, 20 + rng() * 60, S);
-    strokePath(x, pts, 'rgba(140,10,20,0.35)', 8);
-    strokePath(x, pts, 'rgba(5,0,3,0.95)', 3);
-    strokePath(x, pts, 'rgba(240,50,60,0.85)', 1);
-    strokePath(ex, pts, 'rgb(255,40,50)', 2);
+    strokePath(x, pts, 'rgba(140,10,20,0.35)', 8 * k);
+    strokePath(x, pts, 'rgba(5,0,3,0.95)', 3 * k);
+    strokePath(x, pts, 'rgba(240,50,60,0.85)', 1 * k);
+    strokePath(ex, pts, 'rgb(255,40,50)', 2 * k);
+    strokePath(hx, pts, 'rgba(0,0,0,0.9)', 4 * k);
+    strokePath(rx, pts, 'rgb(220,220,220)', 4 * k);
   }
-  // blood + petals
-  for (let i = 0; i < 18; i++) {
+  // chipped corners
+  for (let i = 0; i < 30; i++) {
+    const cx = Math.round(rng() * n) * size + (rng() - 0.5) * 20 * k;
+    const cy = Math.round(rng() * n) * size + (rng() - 0.5) * 20 * k;
+    const r = (6 + rng() * 16) * k;
+    for (const ctx of [hx, x]) {
+      ctx.fillStyle = ctx === hx ? 'rgba(0,0,0,0.8)' : 'rgba(20,12,18,0.85)';
+      ctx.beginPath();
+      for (let q = 0; q < 7; q++) {
+        const a = (q / 7) * TAU;
+        const rr = r * (0.5 + rng() * 0.6);
+        ctx.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+      }
+      ctx.fill();
+    }
+  }
+  // blood: dark in colour, glossy in roughness
+  for (let i = 0; i < 22; i++) {
     const cx = rng() * S;
     const cy = rng() * S;
-    const r = 6 + rng() * 26;
-    x.fillStyle = `rgba(${90 + rng() * 50},5,12,${0.45 + rng() * 0.35})`;
-    x.beginPath();
-    x.ellipse(cx, cy, r, r * 0.7, rng() * 3, 0, TAU);
-    x.fill();
-    for (let k = 0; k < 8; k++) {
+    const r = (6 + rng() * 26) * k;
+    x.fillStyle = `rgba(${90 + rng() * 50},5,12,${0.5 + rng() * 0.35})`;
+    rx.fillStyle = 'rgb(20,20,20)';
+    for (const ctx of [x, rx]) {
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, r, r * 0.7, rng() * 3, 0, TAU);
+      ctx.fill();
+    }
+    for (let q = 0; q < 8; q++) {
       const a = rng() * TAU;
       const d = r * (1 + rng());
       x.beginPath();
-      x.arc(cx + Math.cos(a) * d, cy + Math.sin(a) * d, 1 + rng() * 3, 0, TAU);
+      x.arc(cx + Math.cos(a) * d, cy + Math.sin(a) * d, (1 + rng() * 3) * k, 0, TAU);
       x.fill();
     }
   }
-  for (let i = 0; i < 60; i++) {
+  for (let i = 0; i < 70; i++) {
     x.fillStyle = `rgba(${130 + rng() * 80},8,20,0.9)`;
     x.beginPath();
-    x.ellipse(rng() * S, rng() * S, 5, 3, rng() * 3, 0, TAU);
+    x.ellipse(rng() * S, rng() * S, 5 * k, 3 * k, rng() * 3, 0, TAU);
     x.fill();
   }
-  return { map: tex(c, true), emissive: tex(e, true) };
+  return { map: tex(c, true), emissive: tex(e, true), bump: tex(hb, true, false), rough: tex(rb, true, false) };
 }
 
 export function groundTexture(seed = 3) {
-  const S = 512;
+  const S = 1024;
   const c = makeCanvas(S, S);
   const x = c.getContext('2d');
   const rng = makeRng(seed);

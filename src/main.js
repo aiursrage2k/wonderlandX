@@ -190,6 +190,7 @@ class Game {
       this.resize();
     }
     this.fx.world = this.world;
+    this.makeEnvironment();
     this.hud.setStage(this.world.theme.name, depth);
     const w = this.world;
     this.teleporter = new LookingGlass(this, w.glassPos.x, w.glassPos.z);
@@ -228,6 +229,47 @@ class Game {
       this.player.yaw = this.player.camYaw;
       this.player.model.rotation.set(0, 0, 0);
     }
+  }
+
+  // Image-based lighting for the stage: a tiny sky with the moon, glow
+  // hotspots and lantern warmth, prefiltered so every PBR surface can
+  // reflect something that matches the world around it.
+  makeEnvironment() {
+    const t = this.world.theme;
+    const env = new THREE.Scene();
+    const mat = new THREE.ShaderMaterial({
+      side: THREE.BackSide,
+      uniforms: {
+        top: { value: new THREE.Color(t.skyTop) },
+        hor: { value: new THREE.Color(t.skyHor) },
+        fog: { value: new THREE.Color(t.fog) },
+        glow: { value: new THREE.Color(t.glow) },
+        glow2: { value: new THREE.Color(t.glow2) },
+        moon: { value: new THREE.Color(t.moon) },
+      },
+      vertexShader: `varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+      fragmentShader: `
+        varying vec3 vDir; uniform vec3 top, hor, fog, glow, glow2, moon;
+        void main(){
+          vec3 d = normalize(vDir);
+          float h = d.y;
+          vec3 c = h > 0.0 ? mix(hor, top, smoothstep(0.0, 0.7, h)) * 1.1 : mix(fog * 0.6, fog * 0.15, smoothstep(0.0, -0.4, h));
+          c += moon * 6.0 * pow(max(dot(d, normalize(vec3(0.4, 0.45, -0.8))), 0.0), 60.0);
+          float az = atan(d.z, d.x);
+          float band = exp(-abs(h - 0.05) * 14.0);
+          c += glow * 1.4 * band * pow(0.5 + 0.5 * sin(az * 3.0), 6.0);
+          c += glow2 * 1.1 * band * pow(0.5 + 0.5 * sin(az * 2.0 + 1.7), 8.0);
+          c += vec3(1.0, 0.55, 0.2) * 1.2 * exp(-abs(h - 0.12) * 20.0) * pow(0.5 + 0.5 * sin(az * 5.0 + 0.4), 12.0);
+          gl_FragColor = vec4(c, 1.0);
+        }`,
+    });
+    env.add(new THREE.Mesh(new THREE.SphereGeometry(10, 48, 24), mat));
+    this.pmrem ||= new THREE.PMREMGenerator(this.renderer);
+    if (this.envRT) this.envRT.dispose();
+    this.envRT = this.pmrem.fromScene(env, 0.015);
+    this.scene.environment = this.envRT.texture;
+    this.scene.environmentIntensity = 0.32;
+    mat.dispose();
   }
 
   nextStage() {

@@ -7,6 +7,7 @@ import {
   clockFaceTexture, cardTexture, moonTexture, cheshireTexture, skylineTexture, glowTexture,
 } from '../gfx/textures.js';
 import { mat } from '../gfx/models.js';
+import { RIM } from '../gfx/rim.js';
 
 export const STAGES = [
   { name: 'The Hollow Tea Garden', fog: '#35204a', skyTop: '#0c0620', skyHor: '#7a3a96', glow: '#3ff5dc', glow2: '#ff3fbf', moon: '#d8c8ff' },
@@ -73,9 +74,10 @@ export class World {
     this.group.traverse((o) => {
       if (o.geometry) o.geometry.dispose();
     });
-    if (this.sun) {
-      this.scene.remove(this.sun);
-      this.scene.remove(this.sun.target);
+    for (const l of [this.sun]) {
+      if (!l) continue;
+      this.scene.remove(l);
+      this.scene.remove(l.target);
     }
   }
 
@@ -292,7 +294,7 @@ export class World {
     geo.computeVertexNormals();
     const tex = this.assets.ground;
     tex.repeat.set(size / 7, size / 7);
-    const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: tex, vertexColors: true, roughness: 0.95 }));
+    const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: tex, bumpMap: tex, bumpScale: 4, vertexColors: true, roughness: 0.92 }));
     m.receiveShadow = true;
     this.add(m);
     this.terrain = m;
@@ -306,8 +308,11 @@ export class World {
       emissiveMap: marble.emissive,
       emissive: new THREE.Color('#ff2030'),
       emissiveIntensity: 1.4,
-      roughness: 0.22,
-      metalness: 0.1,
+      bumpMap: marble.bump,
+      bumpScale: 3,
+      roughnessMap: marble.rough,
+      roughness: 1,
+      metalness: 0.05,
       polygonOffset: true,
       polygonOffsetFactor: -1,
       polygonOffsetUnits: -2,
@@ -779,9 +784,9 @@ export class World {
 
   buildLights() {
     const t = this.theme;
-    const hemi = new THREE.HemisphereLight(new THREE.Color(t.skyHor).lerp(new THREE.Color('#9a88d0'), 0.5), '#150a14', 1.1);
+    const hemi = new THREE.HemisphereLight(new THREE.Color(t.skyHor).lerp(new THREE.Color('#9a88d0'), 0.5), '#150a14', 0.7);
     this.add(hemi);
-    const amb = new THREE.AmbientLight('#3a2850', 0.6);
+    const amb = new THREE.AmbientLight('#3a2850', 0.25);
     this.add(amb);
     const sun = new THREE.DirectionalLight(t.moon, 1.9);
     sun.castShadow = true;
@@ -798,6 +803,7 @@ export class World {
     this.scene.add(sun);
     this.scene.add(sun.target);
     this.sun = sun;
+    RIM.rimColor.value.set(t.glow2).lerp(new THREE.Color('#c0a0ff'), 0.55);
   }
 
   update(t, dt, focus) {

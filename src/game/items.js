@@ -70,7 +70,7 @@ export class Inventory {
       speed: 7.2 * (1 + 0.14 * c('pocket_watch')),
       attackSpeed: 1 + 0.15 * c('drink_me'),
       crit: 0.01 + 0.1 * c('whetstone'),
-      damage: 12 * (1 + 0.12 * c('sugar') + 0.6 * c('jabberwock')),
+      damage: 16 * (1 + 0.12 * c('sugar') + 0.6 * c('jabberwock')),
       armor: 15 * c('turtle'),
       jumps: 1 + c('top_hat'),
       cdMult: 0.85 ** c('decree'),

@@ -1,7 +1,8 @@
 // Alice: third-person controller, camera, skills, and procedural animation.
 
 import * as THREE from 'three';
-import { buildAlice } from '../gfx/models.js';
+import { buildAlice } from '../gfx/alice.js';
+import { rimModel } from '../gfx/rim.js';
 import { Inventory } from './items.js';
 import { clamp, lerp, angleDiff, rand } from '../engine/util.js';
 import { sfx } from '../engine/audio.js';
@@ -23,6 +24,7 @@ export class Player {
     const { root, parts } = buildAlice();
     this.model = root;
     this.parts = parts;
+    rimModel(root);
     game.scene.add(root);
     this.pos = new THREE.Vector3();
     this.vel = new THREE.Vector3();
@@ -340,6 +342,10 @@ export class Player {
       const sgn = i ? 1 : -1;
       const target = air ? (i ? -0.9 : 0.3) : s * 0.9 * k * sgn;
       p.legs[i].rotation.x = lerp(p.legs[i].rotation.x, target, 1 - Math.exp(-20 * dt));
+      // knee bends on the recovering leg, tucks in the air
+      const phase = Math.sin(this.runPhase + (i ? Math.PI : 0) - 0.9);
+      const kneeT = air ? (i ? 1.3 : 0.5) : Math.max(0, phase) * 1.2 * k + 0.05;
+      p.knees[i].rotation.x = lerp(p.knees[i].rotation.x, kneeT, 1 - Math.exp(-20 * dt));
     }
     p.body.position.y = air ? 0.05 : Math.abs(c) * 0.06 * k;
     p.body.rotation.x = lerp(p.body.rotation.x, this.dashT > 0 ? 0.5 : k * 0.12, 1 - Math.exp(-10 * dt));

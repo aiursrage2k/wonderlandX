@@ -5,6 +5,7 @@ import { buildCardGuard, buildTeacup, buildClockWisp, buildWhiteRabbit, buildQue
 import { rand, clamp, lerp, angleDiff, TAU } from '../engine/util.js';
 import { sfx } from '../engine/audio.js';
 import { rollItem } from './items.js';
+import { rimModel } from '../gfx/rim.js';
 
 const tmp = new THREE.Vector3();
 const FLASH_MAT = new THREE.MeshBasicMaterial({ color: '#fff4f0' });
@@ -21,12 +22,13 @@ class Enemy {
     this.game = game;
     this.model = built.root;
     this.parts = built.parts;
+    rimModel(this.model);
     game.scene.add(this.model);
     this.pos = new THREE.Vector3(x, game.world.height(x, z), z);
     this.vel = new THREE.Vector3();
     this.yaw = rand() * TAU;
     this.level = o.level;
-    const hpMult = (1 + 0.3 * (o.level - 1)) * (o.elite ? 3.5 : 1);
+    const hpMult = (1 + 0.25 * (o.level - 1)) * (o.elite ? 3 : 1);
     this.maxHp = this.hp = o.hp * hpMult;
     this.dmgMult = (1 + 0.2 * (o.level - 1)) * (o.elite ? 1.8 : 1);
     this.goldValue = o.gold * (1 + 0.25 * (o.level - 1)) * (o.elite ? 3 : 1);
@@ -248,7 +250,7 @@ export class CardGuard extends Enemy {
   constructor(game, x, z, o) {
     const suit = SUITS[Math.floor(rand() * SUITS.length)];
     const red = suit === '♥' || suit === '♦';
-    super(game, buildCardGuard(suit, RANKS[Math.floor(rand() * RANKS.length)], red ? '#5c0d14' : '#1c1a26'), x, z, { ...o, hp: 110, gold: 9 });
+    super(game, buildCardGuard(suit, RANKS[Math.floor(rand() * RANKS.length)], red ? '#5c0d14' : '#1c1a26'), x, z, { ...o, hp: 48, gold: 15 });
     this.name = 'Card Guard';
     this.radius = 0.55;
     this.height = 2.5;
@@ -350,7 +352,7 @@ export class CardGuard extends Enemy {
 // ───────────────────────── Teacup Mimic ─────────────────────────
 export class Teacup extends Enemy {
   constructor(game, x, z, o) {
-    super(game, buildTeacup(1.1), x, z, { ...o, hp: 85, gold: 11 });
+    super(game, buildTeacup(1.1), x, z, { ...o, hp: 40, gold: 17 });
     this.name = 'Teacup Mimic';
     this.radius = 0.7;
     this.height = 1.3;
@@ -452,7 +454,7 @@ export class Teacup extends Enemy {
 // ───────────────────────── Clockwork Wisp ─────────────────────────
 export class ClockWisp extends Enemy {
   constructor(game, x, z, o) {
-    super(game, buildClockWisp(), x, z, { ...o, hp: 60, gold: 8 });
+    super(game, buildClockWisp(), x, z, { ...o, hp: 30, gold: 13 });
     this.name = 'Clockwork Wisp';
     this.flying = true;
     this.radius = 0.6;
@@ -540,7 +542,7 @@ export class ClockWisp extends Enemy {
 // ───────────────────────── The White Rabbit ─────────────────────────
 export class WhiteRabbit extends Enemy {
   constructor(game, x, z, o) {
-    super(game, buildWhiteRabbit(), x, z, { ...o, hp: 2600, gold: 140, elite: null });
+    super(game, buildWhiteRabbit(), x, z, { ...o, hp: 1900, gold: 140, elite: null });
     this.name = 'The White Rabbit';
     this.subtitle = 'Herald of the Hour';
     this.boss = true;
@@ -690,12 +692,12 @@ export class WhiteRabbit extends Enemy {
     const k = clamp(hs / 6, 0, 1.3);
     parts.legs[0].rotation.x = Math.sin(ph) * 0.6 * k;
     parts.legs[1].rotation.x = -Math.sin(ph) * 0.6 * k;
-    parts.torso.rotation.x = this.state === 'charge' && this.t > 0.9 ? 0.5 : k * 0.1;
+    parts.torso.rotation.x = 0.22 + (this.state === 'charge' && this.t > 0.9 ? 0.4 : k * 0.1);
     const clawUp = this.state === 'claw' ? (this.t < 0.6 ? -2.6 * (this.t / 0.6) : -2.6 + (this.t - 0.6) * 8) : null;
     parts.arms[1].sh.rotation.x = clawUp !== null ? Math.min(0.6, clawUp) : Math.sin(ph) * 0.4 * k;
     parts.arms[0].sh.rotation.x = this.state === 'barrage' ? -1.4 : -Math.sin(ph) * 0.4 * k;
-    parts.arms[1].sh.rotation.z = -0.25;
-    parts.arms[0].sh.rotation.z = 0.25;
+    parts.arms[1].sh.rotation.z = -0.42;
+    parts.arms[0].sh.rotation.z = 0.42;
     parts.ears[0].rotation.x = Math.sin(this.t * 3) * 0.12 - 0.1;
     parts.ears[1].rotation.x = Math.sin(this.t * 3 + 1) * 0.12 - 0.1;
     parts.watch.rotation.x = Math.sin(this.t * 3) * 0.5;
@@ -763,7 +765,7 @@ export class WhiteRabbit extends Enemy {
 // ───────────────────────── The Queen of Hearts ─────────────────────────
 export class QueenOfHearts extends Enemy {
   constructor(game, x, z, o) {
-    super(game, buildQueen(), x, z, { ...o, hp: 2700, gold: 160, elite: null });
+    super(game, buildQueen(), x, z, { ...o, hp: 2100, gold: 160, elite: null });
     this.name = 'The Queen of Hearts';
     this.subtitle = 'Sovereign of Severance';
     this.boss = true;
@@ -982,8 +984,8 @@ export class Director {
   }
 
   reset() {
-    this.credits = 80;
-    this.timer = 1.5;
+    this.credits = 24;
+    this.timer = 3;
   }
 
   spawn(type, x, z, elite) {
@@ -1006,12 +1008,14 @@ export class Director {
     const g = this.game;
     const coeff = g.difficulty();
     const event = g.teleporter && g.teleporter.state === 'charging';
-    this.credits += dt * (1.5 + 1.0 * coeff) * (event ? 2 : 1);
+    this.credits += dt * (0.8 + 0.7 * coeff) * (event ? 1.8 : 1);
     this.timer -= dt;
     if (this.timer > 0) return;
-    this.timer = 2 + rand() * 3;
+    this.timer = 3 + rand() * 3;
     const alive = g.enemies.filter((e) => e.alive && !e.boss).length;
-    if (alive >= 22 + Math.floor(coeff * 2)) return;
+    const minutes = g.runTime / 60;
+    // the crowd cap starts small and grows with time and depth
+    if (alive >= Math.min(26, 5 + Math.floor(minutes * 1.5) + (g.depth - 1) * 3)) return;
     const opts = CARDS.filter((c) => (g.runTime / 60) >= c.min);
     let tot = opts.reduce((s, c) => s + c.weight, 0);
     let r = rand() * tot;
@@ -1027,7 +1031,7 @@ export class Director {
     const elite = rand() < eliteChance;
     const cost = card.cost * (elite ? 4 : 1);
     if (this.credits < cost) return;
-    const n = clamp(Math.floor(this.credits / cost), 1, elite ? 2 : 6);
+    const n = clamp(Math.floor(this.credits / cost), 1, elite ? 1 : Math.min(5, 2 + Math.floor(minutes / 3) + (g.depth - 1)));
     this.credits -= n * cost;
     // spawn cluster somewhere around the player, not on top of them
     const p = g.player.pos;
