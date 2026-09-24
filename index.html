@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Wonderland X</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;800&family=IM+Fell+English:ital@0;1&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }
+  </script>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="hud" class="hidden">
+    <div id="vignette-hurt"></div>
+    <div id="vignette-mad"></div>
+
+    <!-- top-left: portrait + bars -->
+    <div id="status" class="panel">
+      <canvas id="portrait" width="128" height="128"></canvas>
+      <div class="bars">
+        <div class="bar hp"><div class="fill" id="hp-fill"></div><div class="ghost" id="hp-ghost"></div><span id="hp-text">110 / 110</span></div>
+        <div class="bar-label">Corruption</div>
+        <div class="bar corr"><div class="fill" id="corr-fill"></div><div class="mark"></div></div>
+        <div id="gold"><span class="coin">◈</span> <span id="gold-text">0</span></div>
+      </div>
+    </div>
+
+    <!-- top-center: stage title + objective -->
+    <div id="title">
+      <div class="flourish">⟡ ━━━━━ <span id="stage-name">The Hollow Tea Garden</span> ━━━━━ ⟡</div>
+      <div id="depth">Depth 01</div>
+      <div id="objective">Find the Looking Glass</div>
+      <div id="bossbar" class="hidden">
+        <div class="boss-name"><span id="boss-name">The White Rabbit</span> <em id="boss-sub">Herald of the Hour</em></div>
+        <div class="bar boss"><div class="fill" id="boss-fill"></div></div>
+      </div>
+      <div id="charge" class="hidden"><div class="fill" id="charge-fill"></div><span id="charge-text">0%</span></div>
+    </div>
+
+    <!-- top-right: minimap + run timer -->
+    <div id="mapwrap">
+      <div class="panel map"><canvas id="minimap" width="220" height="220"></canvas></div>
+      <div id="runinfo" class="panel">
+        <div id="timer">00:00</div>
+        <div id="diff-bar"><div id="diff-fill"></div></div>
+        <div id="diff-name">Curious</div>
+      </div>
+    </div>
+
+    <!-- bottom-left: items -->
+    <div id="items"></div>
+
+    <!-- bottom-center: skills -->
+    <div id="skills">
+      <div class="skill" data-i="0"><canvas width="96" height="96"></canvas><div class="cd"></div><div class="charges"></div><label>LMB</label></div>
+      <div class="skill" data-i="1"><canvas width="96" height="96"></canvas><div class="cd"></div><div class="charges"></div><label>RMB</label></div>
+      <div class="skill" data-i="2"><canvas width="96" height="96"></canvas><div class="cd"></div><div class="charges"></div><label>SHIFT</label></div>
+      <div class="skill" data-i="3"><canvas width="96" height="96"></canvas><div class="cd"></div><div class="charges"></div><label>Q</label></div>
+    </div>
+
+    <div id="crosshair"><i></i><i></i><i></i><i></i><b></b></div>
+    <div id="prompt" class="hidden"></div>
+    <div id="banner" class="hidden"><div class="icon"></div><div><div class="name"></div><div class="desc"></div></div></div>
+    <div id="numbers"></div>
+    <div id="bars"></div>
+    <div id="goldpops"></div>
+  </div>
+
+  <!-- touch controls -->
+  <div id="touch" class="hidden">
+    <div id="stick"><div id="nub"></div></div>
+    <button class="tbtn" id="t-fire">✦</button>
+    <button class="tbtn" id="t-2">RMB</button>
+    <button class="tbtn" id="t-3">⇧</button>
+    <button class="tbtn" id="t-4">Q</button>
+    <button class="tbtn" id="t-jump">⤒</button>
+    <button class="tbtn" id="t-use">E</button>
+  </div>
+
+  <!-- screens -->
+  <div id="screen-title" class="screen">
+    <div class="logo">
+      <div class="logo-sub">~ a descent ~</div>
+      <h1>WONDERLAND<span>X</span></h1>
+      <div class="logo-tag">Curiouser and curiouser — and then it bites.</div>
+    </div>
+    <button id="btn-start" class="big">Fall Down the Rabbit Hole</button>
+    <div class="controls">
+      <div><b>WASD</b> move · <b>Mouse</b> aim · <b>Space</b> jump</div>
+      <div><b>LMB</b> Razor Deck · <b>RMB</b> Teapot Grenade · <b>Shift</b> Rabbit Hop · <b>Q</b> Madness</div>
+      <div><b>E</b> interact · <b>Esc</b> pause · <b>M</b> mute</div>
+      <div class="hint">Loot tea chests, stack items, find the Looking Glass, and survive the hour. It only gets madder.</div>
+    </div>
+  </div>
+
+  <div id="screen-pause" class="screen hidden">
+    <h2>Paused</h2>
+    <div class="subtle">A moment's tea break.</div>
+    <div id="pause-items"></div>
+    <button id="btn-resume" class="big">Resume</button>
+  </div>
+
+  <div id="screen-dead" class="screen hidden">
+    <h2 class="red">You Woke Up</h2>
+    <div class="subtle" id="dead-quote">“Off with her head!”</div>
+    <div id="dead-stats"></div>
+    <button id="btn-restart" class="big">Descend Again</button>
+  </div>
+
+  <div id="fade"></div>
+  <div id="loading">Brewing tea…</div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

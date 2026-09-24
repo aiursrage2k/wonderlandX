@@ -1,0 +1,25 @@
+{
+  "name": "wonderland-x",
+  "version": "1.0.0",
+  "description": "Wonderland X — a dark-Wonderland third-person roguelite shooter",
+  "scripts": {
+    "shot": "node tools/shot.mjs",
+    "serve": "npx http-server -c-1 ."
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aiursrage2k/wonderlandX.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/aiursrage2k/wonderlandX/issues"
+  },
+  "homepage": "https://github.com/aiursrage2k/wonderlandX#readme",
+  "devDependencies": {
+    "playwright": "^1.56.1",
+    "three": "^0.180.0"
+  },
+  "type": "module"
+}
