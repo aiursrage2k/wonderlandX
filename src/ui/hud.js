@@ -1,9 +1,10 @@
 // DOM HUD: bars, minimap, skills, items, floating numbers, banners.
 
 import * as THREE from 'three';
-import { ITEM_BY_ID, RARITY } from '../game/items.js';
+import { ITEM_BY_ID, RARITY, xpToNext } from '../game/items.js';
 import { SKILLS } from '../game/player.js';
 import { TAU } from '../engine/util.js';
+import { TIERS } from '../game/enemies.js';
 
 const $ = (id) => document.getElementById(id);
 const proj = new THREE.Vector3();
@@ -250,6 +251,13 @@ export class HUD {
     this.hurtV = Math.min(1, this.hurtV + 0.4 + k);
   }
 
+  levelFlash() {
+    const b = $('lvl');
+    b.classList.remove('flash');
+    void b.offsetWidth;
+    b.classList.add('flash');
+  }
+
   hitMarker(crit) {
     this.hitT = 0.12;
     const c = $('crosshair');
@@ -288,6 +296,14 @@ export class HUD {
     void b.offsetWidth;
     b.style.animation = '';
     this.bannerT = 3.5;
+  }
+
+  // Big centred warning naming an incoming boss attack.
+  warn(title, hint, t = 1.2) {
+    const w = $('warn');
+    w.innerHTML = `⚠ ${title}${hint ? `<small>${hint}</small>` : ''}`;
+    w.classList.remove('hidden');
+    this.warnT = t;
   }
 
   prompt(html) {
@@ -359,6 +375,8 @@ export class HUD {
     $('corr-fill').style.transform = `scaleX(${p.corruption / 100})`;
     $('corr-fill').parentElement.classList.toggle('ready', p.corruption >= 50);
     this.setText('gold-text', String(p.gold));
+    $('xp-fill').style.transform = `scaleX(${Math.min(1, p.xp / xpToNext(p.level))})`;
+    this.setText('lvl', String(p.level));
 
     // timer & difficulty
     const t = g.runTime;
@@ -404,6 +422,11 @@ export class HUD {
       if (this.hitT <= 0) $('crosshair').classList.remove('hit', 'crit');
     }
 
+    if (this.warnT > 0) {
+      this.warnT -= dt;
+      if (this.warnT <= 0) $('warn').classList.add('hidden');
+    }
+
     // banner
     if (this.bannerT > 0) {
       this.bannerT -= dt;
@@ -441,7 +464,9 @@ export class HUD {
       if (!b) {
         const el = document.createElement('div');
         el.className = 'ebar';
-        el.innerHTML = `<div class="f"></div>${e.elite ? `<div class="nm" style="color:${e.elite.color}">${e.elite.name} ${e.name}</div>` : ''}`;
+        const tn = TIERS[e.tier || 0];
+        const label = `<span class="lv">Lv ${e.level}</span> ${e.elite ? `<span style="color:${e.elite.color}">${e.elite.name}</span> ` : ''}${tn.name ? `<span style="color:${tn.color}">${tn.name}</span> ` : ''}${e.elite || e.tier ? e.name : ''}`;
+        el.innerHTML = `<div class="f"></div><div class="nm">${label}</div>`;
         $('bars').appendChild(el);
         b = { el, f: el.firstChild };
         this.barEls.set(e, b);
@@ -468,15 +493,14 @@ export class HUD {
     // objective + charge
     const tp = g.teleporter;
     let obj = 'Find the Looking Glass';
-    if (tp.state === 'charging') obj = tp.inZone ? 'Hold the ground before the Looking Glass' : 'Return to the Looking Glass!';
-    if (tp.state === 'charged') obj = `Slay ${g.boss ? g.boss.name : 'the boss'}`;
+    if (tp.state === 'charging' || tp.state === 'charged') obj = `Defeat ${g.boss ? g.boss.name : 'the boss'}`;
     if (tp.state === 'ready') obj = 'Step through the Looking Glass';
     this.setText('objective', obj);
     const charging = tp.state === 'charging';
     $('charge').classList.toggle('hidden', !charging);
     if (charging) {
       $('charge-fill').style.transform = `scaleX(${tp.charge})`;
-      this.setText('charge-text', `${Math.floor(tp.charge * 100)}%`);
+      this.setText('charge-text', tp.inZone ? `Glass resonance ${Math.floor(tp.charge * 100)}% — full charge grants a gift` : 'Stand by the Glass to charge a bonus gift');
     }
 
     this.drawMap();

@@ -186,6 +186,30 @@ export class FX {
     return r;
   }
 
+  // Telegraph: a flat cone/sector on the ground that fills from the centre
+  // over `dur`, then flashes. yaw = facing (0 = +Z), arc in radians.
+  sector(x, z, yaw, arc, radius, dur, o = {}) {
+    const color = o.color || '#ff2030';
+    const geo = new THREE.CircleGeometry(1, 40, -arc / 2, arc);
+    geo.rotateX(-Math.PI / 2);
+    const mk = (opacity) => new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    const outline = mk(0.18);
+    const fill = mk(0.45);
+    const y = (o.y ?? this.world.height(x, z)) + 0.14;
+    for (const m of [outline, fill]) {
+      m.position.set(x, y, z);
+      // CircleGeometry's 0 angle is +X; rotate so the cone faces `yaw`
+      m.rotation.y = yaw - Math.PI / 2;
+      m.renderOrder = 3;
+      this.scene.add(m);
+    }
+    outline.scale.setScalar(radius);
+    fill.scale.setScalar(0.01);
+    const h = { outline, fill, t: 0, dur, radius, dead: false, follow: o.follow, yawFn: o.yawFn };
+    (this.sectors ||= []).push(h);
+    return h;
+  }
+
   beam(from, to, o = {}) {
     const m = new THREE.Mesh(
       this.beamGeo,
@@ -232,6 +256,38 @@ export class FX {
       }
       return !r.dead;
     });
+    for (const h of this.sectors || []) {
+      h.t += dt;
+      const k = Math.min(1, h.t / h.dur);
+      if (h.follow) {
+        for (const m of [h.outline, h.fill]) {
+          m.position.x = h.follow.x;
+          m.position.z = h.follow.z;
+        }
+      }
+      if (h.yawFn) {
+        const y = h.yawFn() - Math.PI / 2;
+        h.outline.rotation.y = h.fill.rotation.y = y;
+      }
+      h.fill.scale.setScalar(Math.max(0.01, h.radius * k));
+      h.outline.material.opacity = 0.14 + 0.12 * Math.sin(h.t * 20);
+      if (k >= 1) {
+        h.fill.material.opacity = Math.max(0, 0.9 - (h.t - h.dur) * 6);
+        if (h.t > h.dur + 0.15) h.dead = true;
+      }
+    }
+    if (this.sectors) {
+      this.sectors = this.sectors.filter((h) => {
+        if (h.dead) {
+          for (const m of [h.outline, h.fill]) {
+            this.scene.remove(m);
+            m.material.dispose();
+          }
+          h.outline.geometry.dispose();
+        }
+        return !h.dead;
+      });
+    }
     for (const b of this.beams) {
       b.t += dt;
       const k = b.t / b.dur;
@@ -250,6 +306,7 @@ export class FX {
   }
 
   clear() {
+    for (const h of this.sectors || []) h.dead = true;
     for (const r of this.rings) r.dead = true;
     for (const b of this.beams) b.dead = true;
     this.glow.p.length = 0;

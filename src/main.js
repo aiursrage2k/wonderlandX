@@ -17,10 +17,12 @@ import { glowTexture } from './gfx/textures.js';
 import { Player } from './game/player.js';
 import { Combat } from './game/combat.js';
 import { Director } from './game/enemies.js';
+import './game/clockenemies.js'; // registers the Clockworks cast
 import { Chest, BiscuitTin, Pickup, LookingGlass, TeaTable } from './game/interactables.js';
 import { Shop } from './game/shop.js';
 import { RARITY } from './game/items.js';
 import { HUD } from './ui/hud.js';
+import { renderPerks } from './ui/perks.js';
 
 const params = new URLSearchParams(location.search);
 const DEBUG = params.has('debug');
@@ -130,6 +132,11 @@ class Game {
       this.setPaused(false);
     };
     document.getElementById('btn-shop-close').onclick = () => this.closeShop();
+    document.getElementById('btn-perks-close').onclick = () => this.closePerks();
+    document.getElementById('btn-shop-perks').onclick = () => {
+      this.closeShop(false);
+      this.openPerks(true);
+    };
     document.getElementById('btn-restart').onclick = () => {
       document.getElementById('screen-dead').classList.add('hidden');
       this.startRun();
@@ -155,12 +162,32 @@ class Game {
     document.exitPointerLock?.();
   }
 
-  closeShop() {
+  closeShop(relock = true) {
     if (this.state !== 'shop') return;
     this.state = 'play';
     document.getElementById('screen-shop').classList.add('hidden');
     this.last = performance.now();
-    this.input.requestLock();
+    if (relock) this.input.requestLock();
+  }
+
+  openPerks(fromShop = false) {
+    if (this.state !== 'play') return;
+    this.state = 'perks';
+    this.perksFromShop = fromShop;
+    this.input.mouse.left = false;
+    this.hud.prompt(null);
+    renderPerks(this);
+    document.getElementById('screen-perks').classList.remove('hidden');
+    document.exitPointerLock?.();
+  }
+
+  closePerks() {
+    if (this.state !== 'perks') return;
+    this.state = 'play';
+    document.getElementById('screen-perks').classList.add('hidden');
+    this.last = performance.now();
+    if (this.perksFromShop && this.openShopRef) this.openShop(this.openShopRef);
+    else this.input.requestLock();
   }
 
   setPaused(p) {
@@ -206,6 +233,7 @@ class Game {
     this.depth = depth;
     const seed = preview ? 777 : (Math.random() * 1e9) | 0;
     this.world = new World(this.scene, depth, seed);
+    this.world.game = this;
     if (!this.fx) {
       this.fx = new FX(this.scene, this.glowTex, this.world);
       this.resize();
@@ -434,9 +462,11 @@ class Game {
     if (input.hit('escape') && this.state === 'pause') this.setPaused(false);
     if (input.hit('p') && this.state === 'play') this.setPaused(true);
     if (this.state === 'shop' && (input.hit('escape') || input.hit('e'))) this.closeShop();
+    else if (this.state === 'perks' && (input.hit('escape') || input.hit('tab'))) this.closePerks();
+    else if (this.state === 'play' && input.hit('tab')) this.openPerks();
 
     const playing = this.state === 'play' || this.state === 'dying';
-    if (this.state === 'pause' || this.state === 'dead' || this.state === 'shop') dt = 0;
+    if (this.state === 'pause' || this.state === 'dead' || this.state === 'shop' || this.state === 'perks') dt = 0;
     this.time += dt;
     this.dt = dt;
 
@@ -469,7 +499,6 @@ class Game {
     this.fx.update(dt);
     this.gore.update(dt);
     if (this.state !== 'title') this.hud.update(dt);
-    if (this.state === 'shop') this.openShopRef.render();
     input.endFrame();
   }
 

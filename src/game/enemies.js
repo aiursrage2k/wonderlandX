@@ -11,13 +11,21 @@ const tmp = new THREE.Vector3();
 const FLASH_MAT = new THREE.MeshBasicMaterial({ color: '#fff4f0' });
 const tmp2 = new THREE.Vector3();
 
+// Evolution: as enemy level climbs they grow, glow, and learn new tricks.
+export const TIERS = [
+  { name: '', color: null },
+  { name: 'Veteran', color: '#ffb040', min: 4 },
+  { name: 'Nightmare', color: '#b040ff', min: 8 },
+];
+export const tierFor = (level) => (level >= TIERS[2].min ? 2 : level >= TIERS[1].min ? 1 : 0);
+
 export const ELITES = [
   { id: 'crimson', name: 'Crimson', color: '#ff2a3a' },
   { id: 'gilded', name: 'Gilded', color: '#ffcf40' },
   { id: 'void', name: 'Voidborne', color: '#9a50ff' },
 ];
 
-class Enemy {
+export class Enemy {
   constructor(game, built, x, z, o) {
     this.game = game;
     this.model = built.root;
@@ -28,11 +36,13 @@ class Enemy {
     this.vel = new THREE.Vector3();
     this.yaw = rand() * TAU;
     this.level = o.level;
-    const hpMult = (1 + 0.25 * (o.level - 1)) * (o.elite ? 3 : 1);
+    this.tier = o.boss ? 0 : tierFor(o.level);
+    const hpMult = (1 + 0.25 * (o.level - 1)) * (o.elite ? 3 : 1) * (1 + 0.25 * this.tier);
     this.maxHp = this.hp = o.hp * hpMult;
     this.dmgMult = (1 + 0.2 * (o.level - 1)) * (o.elite ? 1.8 : 1);
     this.goldValue = o.gold * (1 + 0.25 * (o.level - 1)) * (o.elite ? 3 : 1);
     this.elite = o.elite || null;
+    this.xpValue = o.xp || 10;
     this.alive = true;
     this.state = 'spawn';
     this.t = 0;
@@ -41,7 +51,7 @@ class Enemy {
     this.bleeds = [];
     this.bleedTick = 0;
     this.deadT = 0;
-    this.scale = o.elite ? 1.2 : 1;
+    this.scale = (o.elite ? 1.2 : 1) * (1 + 0.1 * this.tier);
     this.phase = rand() * 10;
     this.cooldown = 1 + rand() * 2;
   }
@@ -60,6 +70,21 @@ class Enemy {
     );
     ring.position.y = 0.08;
     this.model.add(ring);
+  }
+
+  addTierMark() {
+    const col = TIERS[this.tier].color;
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(this.radius * 1.1, this.radius * 1.35, 32).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false }),
+    );
+    ring.position.y = 0.07;
+    this.model.add(ring);
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.game.glowTex, color: col, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, opacity: 0.35 }));
+    sp.scale.set(this.height * 1.1, this.height * 1.1, 1);
+    sp.position.y = this.height * 0.55;
+    this.model.add(sp);
+    this.tierMark = ring;
   }
 
   hitCenter(out) {
@@ -200,8 +225,22 @@ class Enemy {
   }
 
   update(dt) {
+    // time-slowed by the Broken Pocket Watch
+    if (this.slowT > 0) {
+      this.slowT -= dt;
+      dt *= 0.35;
+      if (Math.random() < 0.15) {
+        const c = this.hitCenter(tmp2);
+        this.game.fx.spark(c.x, c.y + 0.5, c.z, '#b080ff', { speed: 1, g: -1, size: 0.3, life: 0.5 });
+      }
+    }
     // subclasses set radius/height after super(), so dress elites lazily
     if (this.elite && !this.aura) this.addEliteAura();
+    if (this.tier && !this.tierMark) this.addTierMark();
+    if (this.tier === 2 && Math.random() < 0.15) {
+      const c = this.hitCenter(tmp2);
+      this.game.fx.spark(c.x + (rand() - 0.5), c.y + rand(), c.z + (rand() - 0.5), '#2a0840', { matter: true, speed: 0.6, g: -1.5, size: 0.7, life: 1, a: 0.5, grow: 1 });
+    }
     this.baseUpdate(dt);
     if (!this.alive) {
       this.deadT += dt;
@@ -251,7 +290,7 @@ export class CardGuard extends Enemy {
   constructor(game, x, z, o) {
     const suit = SUITS[Math.floor(rand() * SUITS.length)];
     const red = suit === '♥' || suit === '♦';
-    super(game, buildCardGuard(suit, RANKS[Math.floor(rand() * RANKS.length)], red ? '#5c0d14' : '#1c1a26'), x, z, { ...o, hp: 48, gold: 15 });
+    super(game, buildCardGuard(suit, RANKS[Math.floor(rand() * RANKS.length)], red ? '#5c0d14' : '#1c1a26'), x, z, { ...o, hp: 48, gold: 15, xp: 11 });
     this.name = 'Card Guard';
     this.radius = 0.55;
     this.height = 2.5;
@@ -281,8 +320,9 @@ export class CardGuard extends Enemy {
       case 'windup': {
         this.vel.multiplyScalar(Math.exp(-10 * dt));
         this.faceToward(p.pos.x, p.pos.z, dt, 12);
-        if (this.t > 0.55) {
+        if (this.t > (this.tier === 2 ? 0.42 : 0.55)) {
           this.state = 'lunge';
+          this.lungesLeft = this.lungesLeft ?? this.tier;
           this.t = 0;
           this.lunge.set(Math.sin(this.yaw), 0, Math.cos(this.yaw));
           this.didHit = false;
@@ -299,8 +339,17 @@ export class CardGuard extends Enemy {
           p.hurt(12 * this.dmgMult);
         }
         if (this.t > 0.22) {
-          this.state = 'recover';
-          this.t = 0;
+          if (this.lungesLeft > 0) {
+            // evolved guards chain a second strike
+            this.lungesLeft--;
+            this.state = 'windup';
+            this.t = 0.3;
+            sfx('telegraph');
+          } else {
+            this.lungesLeft = undefined;
+            this.state = 'recover';
+            this.t = 0;
+          }
         }
         break;
       }
@@ -351,7 +400,7 @@ export class CardGuard extends Enemy {
 // ───────────────────────── Teacup Mimic ─────────────────────────
 export class Teacup extends Enemy {
   constructor(game, x, z, o) {
-    super(game, buildTeacup(1.1), x, z, { ...o, hp: 40, gold: 17 });
+    super(game, buildTeacup(1.1), x, z, { ...o, hp: 40, gold: 17, xp: 13 });
     this.name = 'Teacup Mimic';
     this.radius = 0.7;
     this.height = 1.3;
@@ -423,6 +472,10 @@ export class Teacup extends Enemy {
   }
 
   spit() {
+    for (let i = 0; i <= this.tier; i++) this.spitOne(i === 0 ? 0 : (i % 2 ? 1 : -1) * 3);
+  }
+
+  spitOne(offset) {
     const g = this.game;
     const p = g.player;
     const from = this.hitCenter(new THREE.Vector3());
@@ -430,6 +483,10 @@ export class Teacup extends Enemy {
     const d = this.distToPlayer();
     const T = clamp(d / 17, 0.6, 1.5);
     const target = p.pos.clone().addScaledVector(p.vel, T * 0.55);
+    if (offset) {
+      target.x += Math.cos(this.yaw) * offset;
+      target.z -= Math.sin(this.yaw) * offset;
+    }
     target.y = g.world.height(target.x, target.z);
     const v = new THREE.Vector3((target.x - from.x) / T, 0, (target.z - from.z) / T);
     v.y = (target.y - from.y + 0.5 * 20 * T * T) / T;
@@ -452,7 +509,7 @@ export class Teacup extends Enemy {
 // ───────────────────────── Clockwork Wisp ─────────────────────────
 export class ClockWisp extends Enemy {
   constructor(game, x, z, o) {
-    super(game, buildClockWisp(), x, z, { ...o, hp: 30, gold: 13 });
+    super(game, buildClockWisp(), x, z, { ...o, hp: 30, gold: 13, xp: 9 });
     this.name = 'Clockwork Wisp';
     this.flying = true;
     this.radius = 0.6;
@@ -495,7 +552,7 @@ export class ClockWisp extends Enemy {
       if (this.t > 0.9) {
         this.state = 'volley';
         this.t = 0;
-        this.volley = 3;
+        this.volley = 3 + 2 * this.tier;
       }
     }
     if (this.state === 'volley') {
@@ -540,7 +597,7 @@ export class ClockWisp extends Enemy {
 // ───────────────────────── The White Rabbit ─────────────────────────
 export class WhiteRabbit extends Enemy {
   constructor(game, x, z, o) {
-    super(game, buildWhiteRabbit(), x, z, { ...o, hp: 1900, gold: 140, elite: null });
+    super(game, buildWhiteRabbit(), x, z, { ...o, hp: 2700, gold: 140, xp: 220, elite: null, boss: true });
     this.name = 'The White Rabbit';
     this.subtitle = 'Herald of the Hour';
     this.boss = true;
@@ -578,26 +635,20 @@ export class WhiteRabbit extends Enemy {
             const r = rand();
             this.state = r < 0.35 ? 'slam' : r < 0.7 ? 'barrage' : 'charge';
           }
-          if (this.state === 'charge') {
-            this.dashDir.set(p.pos.x - this.pos.x, 0, p.pos.z - this.pos.z).normalize();
-            const end = this.pos.clone().addScaledVector(this.dashDir, 24);
-            end.y = g.world.height(end.x, end.z) + 0.3;
-            const b = g.fx.beam(this.pos.clone().setY(this.pos.y + 0.3), end, { color: '#ff2020', width: 1.2, dur: 0.9, opacity: 0.35 });
-            b.hold = false;
-          }
+          this.telegraph();
           sfx('telegraph');
         }
         break;
       }
       case 'claw': {
         this.vel.multiplyScalar(Math.exp(-8 * dt));
-        if (this.t < 0.6) this.faceToward(p.pos.x, p.pos.z, dt, 6);
-        if (this.t > 0.6 && !this.didHit) {
+        if (this.t < 0.5) this.faceToward(p.pos.x, p.pos.z, dt, 5);
+        if (this.t > 0.85 && !this.didHit) {
           this.didHit = true;
           const fwd = tmp.set(Math.sin(this.yaw), 0, Math.cos(this.yaw));
           const to = tmp2.set(p.pos.x - this.pos.x, 0, p.pos.z - this.pos.z);
           const dist = to.length();
-          if (dist < 7 && fwd.dot(to.normalize()) > 0.3) p.hurt(24 * this.dmgMult);
+          if (dist < 7.2 && fwd.dot(to.normalize()) > Math.cos(0.96)) p.hurt(24 * this.dmgMult);
           const c = this.pos.clone().addScaledVector(fwd, 3);
           c.y += 1.5;
           g.fx.burst(c, 30, '#ffffff', { speed: 12, size: 0.3, life: 0.3 });
@@ -605,35 +656,37 @@ export class WhiteRabbit extends Enemy {
           g.camShake(0.3);
           sfx('slash3');
         }
-        if (this.t > 1.1) this.endAttack(1.2);
+        if (this.t > 1.35) this.endAttack(1.2);
         break;
       }
       case 'slam': {
         this.vel.multiplyScalar(Math.exp(-5 * dt));
-        if (this.t < 0.1) {
+        parts.body.position.y = this.t < 0.9 ? -Math.min(1, this.t / 0.9) * 0.6 : 0; // crouch
+        if (this.t >= 0.9 && !this.leapt) {
+          this.leapt = true;
           this.vel.y = 16;
           sfx('dash');
         }
-        if (this.t > 0.3 && this.grounded && !this.didHit) {
+        if (this.leapt && this.t > 1.2 && this.grounded && !this.didHit) {
           this.didHit = true;
           g.camShake(0.9);
           sfx('bell');
           g.fx.burst(this.pos.clone().setY(this.pos.y + 0.3), 60, '#bdb0c8', { matter: true, speed: 14, size: 0.5, life: 1, g: 12 });
           for (let i = 0; i < (enraged ? 2 : 1); i++) this.shockwave(i * 0.45);
         }
-        if (this.t > 1.8) this.endAttack(1.4);
+        if (this.t > 2.7) this.endAttack(1.4);
         break;
       }
       case 'barrage': {
         this.vel.multiplyScalar(Math.exp(-8 * dt));
-        this.faceToward(p.pos.x, p.pos.z, dt, 6);
+        if (this.t > 0.85) this.faceToward(p.pos.x, p.pos.z, dt, 6);
         const waves = enraged ? 3 : 2;
-        const w = Math.floor((this.t - 0.5) / 0.45);
-        if (this.t > 0.5 && w < waves && w >= (this.wavesFired || 0)) {
+        const w = Math.floor((this.t - 0.85) / 0.45);
+        if (this.t > 0.85 && w < waves && w >= (this.wavesFired || 0)) {
           this.wavesFired = w + 1;
           const from = this.hitCenter(new THREE.Vector3());
           from.y += 0.5;
-          const base = Math.atan2(p.pos.x - this.pos.x, p.pos.z - this.pos.z);
+          const base = w === 0 ? this.fanBase : Math.atan2(p.pos.x - this.pos.x, p.pos.z - this.pos.z);
           const n = 13;
           for (let i = 0; i < n; i++) {
             const a = base + (i - (n - 1) / 2) * 0.12 + (w % 2 ? 0.06 : 0);
@@ -645,17 +698,19 @@ export class WhiteRabbit extends Enemy {
           sfx('tick');
           g.fx.flash(from, '#ffd060', 5, 0.2);
         }
-        if (this.t > 0.5 + waves * 0.45 + 0.4) {
+        if (this.t > 0.85 + waves * 0.45 + 0.4) {
           this.wavesFired = 0;
           this.endAttack(1.2);
         }
         break;
       }
       case 'charge': {
-        if (this.t < 0.9) {
+        if (this.t < 1.0) {
           this.vel.multiplyScalar(Math.exp(-10 * dt));
           this.yaw += angleDiff(this.yaw, Math.atan2(this.dashDir.x, this.dashDir.z)) * 0.3;
-        } else if (this.t < 2.0) {
+          parts.body.position.y = -Math.min(1, this.t) * 0.3;
+        } else if (this.t < 2.1) {
+          parts.body.position.y = 0;
           this.vel.x = this.dashDir.x * 24;
           this.vel.z = this.dashDir.z * 24;
           if (!this.didHit && this.pos.distanceTo(p.pos) < 2.6) {
@@ -670,16 +725,13 @@ export class WhiteRabbit extends Enemy {
       }
       case 'summon': {
         this.vel.multiplyScalar(Math.exp(-8 * dt));
-        if (this.t > 0.8 && !this.didHit) {
+        if (this.t > 1.0 && !this.didHit) {
           this.didHit = true;
           sfx('bell');
-          for (let i = 0; i < 3; i++) {
-            const a = rand() * TAU;
-            g.director.spawn('guard', this.pos.x + Math.cos(a) * 5, this.pos.z + Math.sin(a) * 5, false);
-          }
+          for (const sp of this.summonSpots) g.director.spawn(g.world.theme.summon || 'guard', sp.x, sp.z, null);
           this.summonT = 22;
         }
-        if (this.t > 1.4) this.endAttack(0.8);
+        if (this.t > 1.6) this.endAttack(0.8);
         break;
       }
     }
@@ -732,9 +784,55 @@ export class WhiteRabbit extends Enemy {
     });
   }
 
+  // Every attack announces itself: a ground indicator plus a named callout.
+  telegraph() {
+    const g = this.game;
+    const p = g.player;
+    const enraged = this.hp < this.maxHp * 0.5;
+    this.leapt = false;
+    switch (this.state) {
+      case 'claw':
+        g.fx.sector(this.pos.x, this.pos.z, this.yaw, 1.92, 7.2, 0.85, { follow: this.pos, yawFn: () => this.yaw });
+        g.hud.warn('Claw Swipe', 'step out of the cone', 0.85);
+        break;
+      case 'slam':
+        g.fx.ring(this.pos.x, this.pos.z, { r0: 6, r1: 6, dur: 1.3, color: '#ff3050', pulse: true, fill: true, opacity: 0.35 });
+        g.hud.warn('Shockwave', enraged ? 'JUMP — twice!' : 'JUMP over the ring', 1.6);
+        break;
+      case 'barrage': {
+        this.fanBase = Math.atan2(p.pos.x - this.pos.x, p.pos.z - this.pos.z);
+        const y = this.pos.y + 0.25;
+        for (let i = 0; i < 13; i++) {
+          const a = this.fanBase + (i - 6) * 0.12;
+          const end = new THREE.Vector3(this.pos.x + Math.sin(a) * 26, y, this.pos.z + Math.cos(a) * 26);
+          g.fx.beam(new THREE.Vector3(this.pos.x, y, this.pos.z), end, { color: '#ffb020', width: 0.07, dur: 0.85, opacity: 0.5 });
+        }
+        g.hud.warn('Clock Barrage', 'find a gap between the lanes', 0.85);
+        break;
+      }
+      case 'charge': {
+        this.dashDir.set(p.pos.x - this.pos.x, 0, p.pos.z - this.pos.z).normalize();
+        const end = this.pos.clone().addScaledVector(this.dashDir, 26);
+        end.y = g.world.height(end.x, end.z) + 0.3;
+        g.fx.beam(this.pos.clone().setY(this.pos.y + 0.3), end, { color: '#ff2020', width: 1.3, dur: 1.0, opacity: 0.4 });
+        g.hud.warn('Charge', 'dodge sideways', 1.0);
+        break;
+      }
+      case 'summon':
+        this.summonSpots = [0, 1, 2].map(() => {
+          const a = rand() * TAU;
+          return { x: this.pos.x + Math.cos(a) * 5, z: this.pos.z + Math.sin(a) * 5 };
+        });
+        for (const sp of this.summonSpots) g.fx.ring(sp.x, sp.z, { r0: 1.5, r1: 1.5, dur: 1.0, color: '#a040ff', pulse: true, fill: true, opacity: 0.4 });
+        g.hud.warn('Summoning', 'reinforcements incoming', 1.0);
+        break;
+    }
+  }
+
   endAttack(cd) {
     this.state = 'chase';
     this.didHit = false;
+    this.parts.body.position.y = 0;
     this.cooldown = cd * (this.hp < this.maxHp * 0.5 ? 0.7 : 1);
   }
 
@@ -761,7 +859,7 @@ export class WhiteRabbit extends Enemy {
 // ───────────────────────── The Queen of Hearts ─────────────────────────
 export class QueenOfHearts extends Enemy {
   constructor(game, x, z, o) {
-    super(game, buildQueen(), x, z, { ...o, hp: 2100, gold: 160, elite: null });
+    super(game, buildQueen(), x, z, { ...o, hp: 2900, gold: 160, xp: 260, elite: null, boss: true });
     this.name = 'The Queen of Hearts';
     this.gibKinds = ['flesh', 'card', 'chunk', 'flesh', 'card'];
     this.subtitle = 'Sovereign of Severance';
@@ -799,26 +897,39 @@ export class QueenOfHearts extends Enemy {
             this.state = r < 0.38 ? 'decree' : r < 0.7 ? 'hearts' : 'cards';
           }
           if (this.state === 'decree') {
-            g.hud.banner('“Off with her head!”', '', '#ff3048', '👑');
+            g.hud.warn('“Off with her head!”', 'thorn lines race toward you', 1.4);
             sfx('boss');
           } else sfx('telegraph');
+          if (this.state === 'sweep') {
+            g.fx.sector(this.pos.x, this.pos.z, this.yaw, 2.4, 8, 0.9, { follow: this.pos, yawFn: () => this.yaw });
+            g.hud.warn('Scepter Sweep', 'get behind her', 0.9);
+          } else if (this.state === 'hearts') g.hud.warn('Rain of Hearts', 'leave the circles', 1.2);
+          else if (this.state === 'cards') {
+            this.fanBase = Math.atan2(p.pos.x - this.pos.x, p.pos.z - this.pos.z);
+            for (let i = -3; i <= 3; i++) {
+              const a = this.fanBase + i * 0.16;
+              const y = this.pos.y + 0.25;
+              g.fx.beam(new THREE.Vector3(this.pos.x, y, this.pos.z), new THREE.Vector3(this.pos.x + Math.sin(a) * 24, y, this.pos.z + Math.cos(a) * 24), { color: '#ff3050', width: 0.07, dur: 0.8, opacity: 0.5 });
+            }
+            g.hud.warn('Card Volley', 'slip between the lanes', 0.8);
+          } else if (this.state === 'summon') g.hud.warn('Guards!', 'reinforcements incoming', 1.0);
         }
         break;
       case 'sweep': {
         this.vel.multiplyScalar(Math.exp(-8 * dt));
-        if (this.t < 0.7) this.faceToward(p.pos.x, p.pos.z, dt, 5);
-        if (this.t > 0.7 && !this.didHit) {
+        if (this.t < 0.5) this.faceToward(p.pos.x, p.pos.z, dt, 4);
+        if (this.t > 0.9 && !this.didHit) {
           this.didHit = true;
           const fwd = tmp.set(Math.sin(this.yaw), 0, Math.cos(this.yaw));
           const to = tmp2.set(p.pos.x - this.pos.x, 0, p.pos.z - this.pos.z);
-          if (to.length() < 8 && fwd.dot(to.normalize()) > 0.1) p.hurt(26 * this.dmgMult);
+          if (to.length() < 8 && fwd.dot(to.normalize()) > Math.cos(1.2)) p.hurt(26 * this.dmgMult);
           const c = this.pos.clone().addScaledVector(fwd, 3.5);
           g.fx.ring(c.x, c.z, { r0: 1, r1: 6, dur: 0.35, color: '#ff2040' });
           g.fx.burst(c.setY(c.y + 2), 30, '#ff4060', { speed: 12, size: 0.35, life: 0.35 });
           g.camShake(0.35);
           sfx('slash3');
         }
-        if (this.t > 1.3) this.endAttack(1.1);
+        if (this.t > 1.5) this.endAttack(1.1);
         break;
       }
       case 'decree': {
@@ -855,11 +966,11 @@ export class QueenOfHearts extends Enemy {
       case 'cards': {
         this.vel.multiplyScalar(Math.exp(-8 * dt));
         this.faceToward(p.pos.x, p.pos.z, dt, 5);
-        if (this.t > 0.5 && this.fired < (enraged ? 5 : 3) && this.t > 0.5 + this.fired * 0.28) {
+        if (this.t > 0.8 && this.fired < (enraged ? 5 : 3) && this.t > 0.8 + this.fired * 0.28) {
           this.fired++;
           const from = this.hitCenter(new THREE.Vector3());
           from.y += 1;
-          const base = Math.atan2(p.pos.x - this.pos.x, p.pos.z - this.pos.z) + (this.fired % 2 ? 0.08 : -0.08);
+          const base = this.fired === 1 ? this.fanBase : Math.atan2(p.pos.x - this.pos.x, p.pos.z - this.pos.z) + (this.fired % 2 ? 0.08 : -0.08);
           for (let i = -3; i <= 3; i++) {
             const a = base + i * 0.16;
             const dir = new THREE.Vector3(Math.sin(a), (p.center.y - from.y) / Math.max(5, d), Math.cos(a)).normalize();
@@ -867,7 +978,7 @@ export class QueenOfHearts extends Enemy {
           }
           sfx('cards');
         }
-        if (this.t > 2.2) this.endAttack(1.0);
+        if (this.t > 2.5) this.endAttack(1.0);
         break;
       }
       case 'summon':
@@ -968,11 +1079,14 @@ export class QueenOfHearts extends Enemy {
 }
 
 // ───────────────────────── Director ─────────────────────────
-const CARDS = [
-  { type: 'guard', cost: 12, weight: 5, min: 0 },
-  { type: 'teacup', cost: 15, weight: 3, min: 0 },
-  { type: 'wisp', cost: 11, weight: 3, min: 0.6 },
-];
+// Enemy types register here so stage packs (e.g. clockenemies.js) can add
+// their own without a circular import.
+export const REGISTRY = {};
+export const CARDS = {
+  guard: { cost: 12, weight: 5, min: 0 },
+  teacup: { cost: 15, weight: 3, min: 0 },
+  wisp: { cost: 11, weight: 3, min: 0.6 },
+};
 
 export class Director {
   constructor(game) {
@@ -989,13 +1103,15 @@ export class Director {
     const g = this.game;
     const level = g.enemyLevel();
     const o = { level, elite };
-    let e;
-    if (type === 'guard') e = new CardGuard(g, x, z, o);
-    else if (type === 'teacup') e = new Teacup(g, x, z, o);
-    else if (type === 'wisp') e = new ClockWisp(g, x, z, o);
-    else if (type === 'rabbit') e = new WhiteRabbit(g, x, z, o);
-    else if (type === 'queen') e = new QueenOfHearts(g, x, z, o);
+    const Cls = REGISTRY[type];
+    const e = new Cls(g, x, z, o);
     g.enemies.push(e);
+    if (e.tier > (this.tierSeen || 0)) {
+      this.tierSeen = e.tier;
+      const tn = TIERS[e.tier];
+      g.hud.banner(`The creatures evolve: ${tn.name}s`, e.tier === 1 ? 'Bigger, faster, and they have learned new tricks.' : 'Nightmares walk the garden now. Run, or grow stronger.', tn.color, e.tier === 1 ? '⚔️' : '💀');
+      sfx('boss');
+    }
     g.fx.ring(x, z, { r0: 0.2, r1: e.boss ? 6 : 2, dur: 0.8, color: e.elite ? e.elite.color : '#a040ff' });
     g.fx.burst(new THREE.Vector3(x, g.world.height(x, z) + 0.3, z), e.boss ? 60 : 14, '#8040ff', { speed: 4, g: -4, size: 0.4, life: 0.9 });
     return e;
@@ -1013,7 +1129,8 @@ export class Director {
     const minutes = g.runTime / 60;
     // the crowd cap starts small and grows with time and depth
     if (alive >= Math.min(30, 8 + Math.floor(minutes * 2) + (g.depth - 1) * 3)) return;
-    const opts = CARDS.filter((c) => (g.runTime / 60) >= c.min);
+    const roster = g.world.theme.enemies || ['guard', 'teacup', 'wisp'];
+    const opts = roster.map((type) => ({ type, ...CARDS[type] })).filter((c) => g.runTime / 60 >= c.min || g.depth > 1);
     let tot = opts.reduce((s, c) => s + c.weight, 0);
     let r = rand() * tot;
     let card = opts[0];
@@ -1038,13 +1155,19 @@ export class Director {
       const R = 22 + rand() * 18;
       const cx = p.x + Math.cos(a) * R;
       const cz = p.z + Math.sin(a) * R;
-      if (Math.hypot(cx, cz) > 95 || g.world.solidAt(cx, g.world.height(cx, cz) + 0.5, cz)) continue;
+      if (!g.world.canSpawn(cx, cz)) continue;
       for (let i = 0; i < n; i++) {
-        const x = cx + (rand() - 0.5) * 5;
-        const z = cz + (rand() - 0.5) * 5;
+        let x = cx + (rand() - 0.5) * 5;
+        let z = cz + (rand() - 0.5) * 5;
+        if (!g.world.canSpawn(x, z)) {
+          x = cx;
+          z = cz;
+        }
         this.spawn(card.type, x, z, eliteType);
       }
       break;
     }
   }
 }
+
+Object.assign(REGISTRY, { guard: CardGuard, teacup: Teacup, wisp: ClockWisp, rabbit: WhiteRabbit, queen: QueenOfHearts });

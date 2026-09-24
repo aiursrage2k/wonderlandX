@@ -8,13 +8,16 @@ import {
 } from '../gfx/textures.js';
 import { mat } from '../gfx/models.js';
 import { RIM } from '../gfx/rim.js';
+import { buildClockworks } from './clockworks.js';
 
+const GARDEN_FOES = ['guard', 'teacup', 'wisp'];
+const CLOCK_FOES = ['hatter', 'spider', 'cannon'];
 export const STAGES = [
-  { name: 'The Hollow Tea Garden', fog: '#35204a', skyTop: '#0c0620', skyHor: '#7a3a96', glow: '#3ff5dc', glow2: '#ff3fbf', moon: '#d8c8ff' },
-  { name: 'The Weeping Rosewood', fog: '#3a1422', skyTop: '#12040a', skyHor: '#962a40', glow: '#ff5a7a', glow2: '#ffb347', moon: '#ffd0d0' },
-  { name: "The Queen's Croquet Grounds", fog: '#182a34', skyTop: '#040c12', skyHor: '#2a7080', glow: '#7dff9a', glow2: '#ff4040', moon: '#c8fff0' },
-  { name: 'The Clockwork Burrow', fog: '#33261a', skyTop: '#0c0804', skyHor: '#8a5c24', glow: '#ffc04a', glow2: '#8a6bff', moon: '#ffe8b0' },
-  { name: 'The Pool of Tears', fog: '#14203e', skyTop: '#030514', skyHor: '#2e52a0', glow: '#5ab4ff', glow2: '#d05aff', moon: '#d0e0ff' },
+  { name: 'The Hollow Tea Garden', kind: 'garden', boss: 'rabbit', enemies: GARDEN_FOES, summon: 'guard', fog: '#35204a', skyTop: '#0c0620', skyHor: '#7a3a96', glow: '#3ff5dc', glow2: '#ff3fbf', moon: '#d8c8ff' },
+  { name: 'The Mad Hatter’s Clockworks', kind: 'clockworks', boss: 'madhatter', enemies: CLOCK_FOES, summon: 'spider', fog: '#2a1a12', skyTop: '#070a1c', skyHor: '#40305e', glow: '#ff9a30', glow2: '#b060ff', moon: '#dcd0ff' },
+  { name: 'The Weeping Rosewood', kind: 'garden', boss: 'queen', enemies: GARDEN_FOES, summon: 'guard', fog: '#3a1422', skyTop: '#12040a', skyHor: '#962a40', glow: '#ff5a7a', glow2: '#ffb347', moon: '#ffd0d0' },
+  { name: "The Queen's Croquet Grounds", kind: 'garden', boss: 'rabbit', enemies: GARDEN_FOES, summon: 'guard', fog: '#182a34', skyTop: '#040c12', skyHor: '#2a7080', glow: '#7dff9a', glow2: '#ff4040', moon: '#c8fff0' },
+  { name: 'The Pool of Tears', kind: 'garden', boss: 'queen', enemies: GARDEN_FOES, summon: 'guard', fog: '#14203e', skyTop: '#030514', skyHor: '#2e52a0', glow: '#5ab4ff', glow2: '#d05aff', moon: '#d0e0ff' },
 ];
 
 const HALF = 115; // playable half-extent
@@ -57,6 +60,12 @@ export class World {
     this.assets = sharedAssets();
     this.phase = this.rng() * 100;
 
+    if (this.theme.kind === 'clockworks') {
+      this.buildSky();
+      buildClockworks(this);
+      this.buildGrid();
+      return;
+    }
     this.planLayout();
     this.buildSky();
     this.buildTerrain();
@@ -115,17 +124,22 @@ export class World {
   }
 
   height(x, z) {
+    let h = this.heightFn ? this.heightFn(x, z) : this.gardenHeight(x, z);
+    if (this.platforms) {
+      for (const p of this.platforms) {
+        if ((x - p.x) ** 2 + (z - p.z) ** 2 < p.r * p.r && p.h > h) h = p.h;
+      }
+    }
+    return h;
+  }
+
+  gardenHeight(x, z) {
     let h = this.rawHeight(x, z);
     for (const p of this.plazas) {
       const d = Math.hypot(x - p.x, z - p.z);
       if (d < p.r + 10) {
         const w = d < p.r ? 1 : 1 - smooth((d - p.r) / 10);
         h = h + (p.h - h) * w;
-      }
-    }
-    if (this.platforms) {
-      for (const p of this.platforms) {
-        if ((x - p.x) ** 2 + (z - p.z) ** 2 < p.r * p.r && p.h > h) h = p.h;
       }
     }
     return h;
@@ -213,9 +227,10 @@ export class World {
       }
     });
     const d = Math.hypot(pos.x, pos.z);
-    if (d > HALF - 12) {
-      pos.x *= (HALF - 12) / d;
-      pos.z *= (HALF - 12) / d;
+    const lim = this.bound ?? HALF - 12;
+    if (d > lim) {
+      pos.x *= lim / d;
+      pos.z *= lim / d;
     }
     return hit;
   }
@@ -237,16 +252,22 @@ export class World {
     return hit;
   }
 
+  // Can an enemy be spawned standing here?
+  canSpawn(x, z) {
+    if (this.spawnOk) return this.spawnOk(x, z);
+    return Math.hypot(x, z) < 95 && !this.solidAt(x, this.height(x, z) + 0.5, z);
+  }
+
   freeSpot(minClear = 3, avoid = [], tries = 80) {
     for (let i = 0; i < tries; i++) {
-      const x = this.rng.range(-88, 88);
-      const z = this.rng.range(-88, 88);
-      if (Math.hypot(x, z) > 90) continue;
+      const s = this.sampleSpot ? this.sampleSpot() : { x: this.rng.range(-88, 88), z: this.rng.range(-88, 88) };
+      const { x, z } = s;
+      if (!this.sampleSpot && Math.hypot(x, z) > 90) continue;
       if (this.colliders.some((c) => Math.hypot(c.x - x, c.z - z) < c.r + minClear)) continue;
       if (avoid.some((a) => Math.hypot(a.x - x, a.z - z) < (a.r || 6))) continue;
       return { x, z };
     }
-    return { x: this.rng.range(-50, 50), z: this.rng.range(-50, 50) };
+    return this.sampleSpot ? this.sampleSpot() : { x: this.rng.range(-50, 50), z: this.rng.range(-50, 50) };
   }
 
   add(obj) {
@@ -1067,13 +1088,14 @@ export class World {
 
   update(t, dt, focus) {
     for (const f of this.anim) f(t, dt);
+    if (this.onUpdate) this.onUpdate(t, dt, focus);
     this.skyMat.uniforms.time.value = t;
     this.cheshire.material.opacity = 0.45 + 0.4 * (0.5 + 0.5 * Math.sin(t * 0.25));
     // celestial props ride along with the player so they sit at a fixed sky angle
     this.moon.position.set(focus.x + 140, 175, focus.z - 320);
     this.sky.position.set(focus.x, 0, focus.z);
-    this.castle.position.set(focus.x + 110, 70, focus.z - 330);
-    this.castle.lookAt(focus.x, 70, focus.z);
+    this.castle.position.set(focus.x + 110, this.castleY ?? 70, focus.z - 330);
+    this.castle.lookAt(focus.x, this.castleY ?? 70, focus.z);
     this.cheshire.position.set(focus.x - 90, 150, focus.z + 360);
     // shadow frustum follows the player
     this.sun.position.set(focus.x + 60, focus.y + 90, focus.z - 70);

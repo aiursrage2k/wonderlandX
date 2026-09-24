@@ -283,12 +283,29 @@ export class LookingGlass {
       this.state = 'charging';
       sfx('boss');
       sfx('bell');
-      const queen = g.depth % 2 === 0;
-      if (queen) g.hud.banner('The Queen of Hearts', '“Who has been painting my roses red?”', '#ff3a50', '👑');
-      else g.hud.banner('The White Rabbit', '“I’m late! I’m late! For a very important date!”', '#ff3a50', '🐇');
+      const boss = g.world.theme.boss || 'rabbit';
+      const intro = {
+        rabbit: ['The White Rabbit', '“I’m late! I’m late! For a very important date!”', '🐇'],
+        queen: ['The Queen of Hearts', '“Who has been painting my roses red?”', '👑'],
+        madhatter: ['The Mad Hatter', '“No room! No room! …Oh, there’s always room for YOU.”', '🎩'],
+      }[boss];
+      g.hud.banner(intro[0], intro[1], '#ff3a50', intro[2]);
       g.camShake(0.6);
-      const a = rand() * TAU;
-      g.boss = g.director.spawn(queen ? 'queen' : 'rabbit', this.pos.x + Math.cos(a) * 14, this.pos.z + Math.sin(a) * 14, null);
+      // find standing room near the glass (the Clockworks has tea to avoid)
+      let bx = this.pos.x;
+      let bz = this.pos.z + 14;
+      for (let k = 0; k < 30; k++) {
+        const a = rand() * TAU;
+        const r = 12 + rand() * 8;
+        const x = this.pos.x + Math.cos(a) * r;
+        const z = this.pos.z + Math.sin(a) * r;
+        if (g.world.canSpawn(x, z)) {
+          bx = x;
+          bz = z;
+          break;
+        }
+      }
+      g.boss = g.director.spawn(boss, bx, bz, null);
       this.zoneRing = g.fx.ring(this.pos.x, this.pos.z, { r0: this.radius, r1: this.radius, dur: 1e9, color: '#ff2a5a', pulse: true, opacity: 0.4 });
       this.zoneRing.hold = true;
     } else if (this.state === 'ready') {
@@ -316,12 +333,14 @@ export class LookingGlass {
       }
       if (this.charge >= 1) {
         this.state = 'charged';
-        g.hud.banner('The Glass is Charged', 'Only the boss stands in your way.', '#ff8aa0', '🪞');
+        g.hud.banner('The Glass Resonates', 'A gift falls from the mirror.', '#ff8aa0', '🪞');
+        g.spawnPickup(rollItem(rand, { legendary: 0.1, uncommon: 0.6 }), this.pos.clone().setY(this.pos.y + 4), new THREE.Vector3((rand() - 0.5) * 4, 8, 4));
         sfx('bell');
       }
     }
-    if (this.state === 'charged' || (this.state === 'charging' && this.charge >= 1)) {
-      if (!g.enemies.some((e) => e.boss && e.alive)) {
+    if (this.state === 'charged' || this.state === 'charging') {
+      // the boss falling is what opens the way; charging is a bonus timer
+      if (g.boss && !g.boss.alive) {
         this.state = 'ready';
         if (this.zoneRing) this.zoneRing.dead = true;
         g.hud.banner('The Way Is Open', 'Step through the Looking Glass… deeper still.', '#d0b0ff', '✨');

@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { buildAlice } from '../gfx/alice.js';
 import { rimModel } from '../gfx/rim.js';
-import { Inventory } from './items.js';
+import { Inventory, PERKS, xpToNext } from './items.js';
 import { clamp, lerp, angleDiff, rand } from '../engine/util.js';
 import { sfx } from '../engine/audio.js';
 
@@ -32,6 +32,9 @@ export class Player {
     this.camYaw = Math.PI;
     this.camPitch = -0.12;
     this.inv = new Inventory();
+    this.level = 1;
+    this.xp = 0;
+    this.perks = {};
     this.recompute();
     this.hp = this.stats.maxHp;
     this.corruption = 0;
@@ -64,7 +67,17 @@ export class Player {
 
   recompute() {
     const old = this.stats;
-    this.stats = this.inv.stats();
+    const s = this.inv.stats();
+    // level bonuses, RoR2-style: every level adds health, damage and regen
+    const L = (this.level || 1) - 1;
+    s.maxHp += 24 * L;
+    s.damage *= 1 + 0.12 * L;
+    s.regen += 0.25 * L;
+    for (const perk of PERKS) {
+      const r = this.perks?.[perk.id] || 0;
+      if (r) perk.apply(s, r);
+    }
+    this.stats = s;
     if (old && this.stats.maxHp > old.maxHp) this.hp += this.stats.maxHp - old.maxHp;
     if (this.hp > this.stats.maxHp) this.hp = this.stats.maxHp;
     if (old && this.stats.teapotCharges > old.teapotCharges) this.teapotCharges++;
@@ -119,6 +132,31 @@ export class Player {
     return true;
   }
 
+  gainXp(n) {
+    if (!this.alive) return;
+    this.xp += n;
+    while (this.xp >= xpToNext(this.level)) {
+      this.xp -= xpToNext(this.level);
+      this.levelUp();
+    }
+  }
+
+  levelUp() {
+    const g = this.game;
+    const before = this.stats.maxHp;
+    this.level++;
+    this.recompute();
+    this.hp = Math.min(this.stats.maxHp, this.hp + (this.stats.maxHp - before) + this.stats.maxHp * 0.15);
+    g.hud.banner(`Level ${this.level}`, '+24 max health · +12% damage · +0.25 regen', '#ffd24a', '⬆️');
+    g.hud.levelFlash();
+    sfx('chest');
+    // a golden pillar and a burst of motes
+    const base = this.pos.clone();
+    g.fx.ring(base.x, base.z, { y: base.y, r0: 0.3, r1: 4, dur: 0.6, color: '#ffd24a' });
+    g.fx.beam(base.clone().setY(base.y - 0.2), base.clone().setY(base.y + 14), { color: '#ffd870', width: 0.9, dur: 0.8, opacity: 0.6 });
+    for (let i = 0; i < 60; i++) g.fx.spark(base.x, base.y + Math.random() * 2, base.z, i % 2 ? '#ffd24a' : '#fff0b0', { speed: 5, g: -6, size: 0.3, life: 1.2 });
+  }
+
   heal(n) {
     if (!this.alive) return;
     const before = this.hp;
@@ -146,7 +184,8 @@ export class Player {
     const wish = new THREE.Vector3().addScaledVector(fwd, mv.y).addScaledVector(right, mv.x);
     const moving = wish.lengthSq() > 0.01;
     this.sprinting = moving && mv.y > 0.5 && this.lastShot > 0.6 && input.sprintHeld !== false;
-    const speed = st.speed * (this.sprinting ? 1.45 : 1) * (this.madness > 0 ? 1.15 : 1);
+    const speed = st.speed * (this.sprinting ? 1.45 : 1) * (this.madness > 0 ? 1.15 : 1) * (this.envSlow || 1);
+    this.envSlow = 1;
 
     if (this.dashT > 0) {
       this.dashT -= dt;
@@ -229,6 +268,17 @@ export class Player {
       this.jumpsUsed = Math.min(this.jumpsUsed, 1);
       g.fx.ring(this.pos.x, this.pos.z, { y: this.pos.y, r0: 0.4, r1: 2.5, dur: 0.35, color: '#b090ff' });
       sfx('dash');
+      const watch = this.inv.count('broken_watch');
+      if (watch) {
+        // the cursed watch: time stumbles around you, at a price
+        for (const e of g.enemies) {
+          if (e.alive && e.pos.distanceTo(this.pos) < 14) e.slowT = 1.5 + watch;
+        }
+        this.corruption = Math.min(100, this.corruption + 8);
+        g.fx.ring(this.pos.x, this.pos.z, { y: this.pos.y, r0: 1, r1: 14, dur: 0.5, color: '#b060ff' });
+        g.fx.ring(this.pos.x, this.pos.z, { y: this.pos.y, r0: 14, r1: 14, dur: 0.6, color: '#8040ff', fill: true, opacity: 0.18 });
+        sfx('tick');
+      }
     }
     if ((input.hit('q') || input.hit('r') || input.hit('touch4')) && this.corruption >= 50 && this.madness <= 0) {
       this.goMad();
@@ -256,14 +306,26 @@ export class Player {
     desired.y += 0.25;
     // walk the boom out from the pivot and stop short of anything solid
     const w = this.game.world;
-    let k = 1;
     const p = new THREE.Vector3();
-    for (let i = 1; i <= 12; i++) {
-      const t = i / 12;
-      p.lerpVectors(pivot, desired, t);
-      if (w.cameraBlocked(p.x, p.y, p.z)) {
-        k = Math.max(0.15, (i - 1) / 12);
-        break;
+    const reach = (from, to) => {
+      for (let i = 1; i <= 12; i++) {
+        p.lerpVectors(from, to, i / 12);
+        if (w.cameraBlocked(p.x, p.y, p.z)) return Math.max(0.15, (i - 1) / 12);
+      }
+      return 1;
+    };
+    let k = reach(pivot, desired);
+    if (k < 0.6) {
+      // boxed in (a pit, a wall of raised floor): try looking down from higher up
+      const hiPivot = pivot.clone();
+      hiPivot.y += 2.6;
+      const hiDesired = desired.clone();
+      hiDesired.y += 3.2;
+      const k2 = reach(hiPivot, hiDesired);
+      if (k2 > k + 0.2) {
+        pivot.copy(hiPivot);
+        desired.copy(hiDesired);
+        k = k2;
       }
     }
     this.boom = this.boom === undefined ? k : k < this.boom ? k : lerp(this.boom, k, 1 - Math.exp(-4 * dt));

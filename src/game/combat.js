@@ -35,6 +35,7 @@ export class Combat {
     this.enemyShots = [];
     this.puddles = [];
     this.teapots = [];
+    this.coins = [];
     const cardGeo = new THREE.PlaneGeometry(0.2, 0.3);
     this.cardGeo = cardGeo;
     this.bladeGeo = new THREE.TorusGeometry(0.45, 0.06, 4, 16, Math.PI);
@@ -60,10 +61,12 @@ export class Combat {
   clear() {
     for (const s of [...this.shots, ...this.enemyShots, ...this.teapots]) this.game.scene.remove(s.mesh);
     for (const p of this.puddles) this.game.fx.scene.remove(p.ring?.mesh);
+    for (const c of this.coins) this.game.scene.remove(c.mesh);
     this.shots = [];
     this.enemyShots = [];
     this.puddles = [];
     this.teapots = [];
+    this.coins = [];
   }
 
   // ─── player projectiles ───
@@ -174,12 +177,12 @@ export class Combat {
     const g = this.game;
     const p = g.player;
     p.kills++;
+    p.gainXp((e.xpValue || 10) * (1 + 0.25 * (e.level - 1)) * (e.elite ? 3 : 1));
     g.hitStop(e.boss ? 0.35 : e.elite ? 0.08 : 0.045);
     g.camShake(e.boss ? 1.2 : 0.12);
     p.corruption = Math.min(100, p.corruption + (e.elite ? 10 : e.boss ? 40 : 4));
     const gold = Math.round(e.goldValue);
-    p.gold += gold;
-    g.hud.goldPop(gold);
+    this.dropCoins(e.hitCenter(new THREE.Vector3()), gold, e.boss ? 30 : 0);
     const tart = p.inv.count('tart');
     if (tart) p.heal(8 + 6 * (tart - 1));
     const kettle = p.inv.count('kettle');
@@ -190,6 +193,65 @@ export class Combat {
     for (let i = 0; i < Math.min(12, 3 + gold / 5); i++) {
       g.fx.spark(e.pos.x, e.pos.y + 1, e.pos.z, '#ffd24a', { speed: 5, g: 6, size: 0.2, life: 0.7 });
     }
+  }
+
+  // Gold bursts out as coins that bounce, then home in on Alice.
+  dropCoins(pos, gold, extra = 0) {
+    const g = this.game;
+    this.coinGeo ||= new THREE.CylinderGeometry(0.16, 0.16, 0.05, 14).rotateX(Math.PI / 2);
+    this.coinMat ||= new THREE.MeshStandardMaterial({ color: '#ffcc40', metalness: 0.95, roughness: 0.25, emissive: '#6a4400', emissiveIntensity: 0.6 });
+    const n = Math.max(1, Math.min(14 + extra, Math.ceil(gold / 6)));
+    let left = gold;
+    for (let i = 0; i < n; i++) {
+      const v = i === n - 1 ? left : Math.floor(gold / n);
+      left -= v;
+      const mesh = new THREE.Mesh(this.coinGeo, this.coinMat);
+      mesh.position.copy(pos);
+      mesh.castShadow = true;
+      g.scene.add(mesh);
+      const a = rand() * TAU;
+      const sp = 2 + rand() * 4;
+      this.coins.push({ mesh, value: v, vel: new THREE.Vector3(Math.cos(a) * sp, 6 + rand() * 5, Math.sin(a) * sp), t: 0, spin: 6 + rand() * 8 });
+    }
+  }
+
+  updateCoins(dt) {
+    const g = this.game;
+    const p = g.player;
+    const pc = p.center;
+    for (const c of this.coins) {
+      c.t += dt;
+      const m = c.mesh;
+      const d = m.position.distanceTo(pc);
+      if (p.alive && (d < 9 || c.t > 5) && c.t > 0.5) {
+        // homing: accelerate toward the player
+        const k = Math.min(60, 14 + c.t * 20);
+        tmpA.subVectors(pc, m.position).normalize().multiplyScalar(k);
+        c.vel.lerp(tmpA, 1 - Math.exp(-6 * dt));
+      } else {
+        c.vel.y -= 22 * dt;
+      }
+      m.position.addScaledVector(c.vel, dt);
+      const gy = g.world.height(m.position.x, m.position.z) + 0.12;
+      if (m.position.y < gy) {
+        m.position.y = gy;
+        c.vel.y = Math.abs(c.vel.y) * 0.35;
+        c.vel.x *= 0.6;
+        c.vel.z *= 0.6;
+      }
+      m.rotation.y += c.spin * dt;
+      if (Math.random() < 0.05) g.fx.trail(m.position, '#ffe080', 0.3, 0.3, 0.6);
+      if (p.alive && d < 0.9) {
+        c.value && (p.gold += c.value);
+        c.got = true;
+        g.hud.goldPop(c.value);
+        sfx('coin');
+      }
+    }
+    this.coins = this.coins.filter((c) => {
+      if (c.got) g.scene.remove(c.mesh);
+      return !c.got;
+    });
   }
 
   explode(center, radius, coef, o = {}) {
@@ -220,6 +282,7 @@ export class Combat {
   update(dt) {
     const g = this.game;
     const w = g.world;
+    this.updateCoins(dt);
 
     // player shots
     for (const s of this.shots) {

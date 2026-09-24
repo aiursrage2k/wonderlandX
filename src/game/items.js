@@ -5,6 +5,7 @@ export const RARITY = {
   common: { label: 'Common', color: '#e8e4dc' },
   uncommon: { label: 'Uncommon', color: '#7ee07e' },
   legendary: { label: 'Legendary', color: '#ff5a5a' },
+  cursed: { label: 'Cursed', color: '#c070ff' },
 };
 
 export const ITEMS = [
@@ -26,6 +27,7 @@ export const ITEMS = [
   { id: 'vorpal', name: 'The Vorpal Blade', rarity: 'legendary', icon: '⚔️', desc: 'Every 5th throw is a piercing vorpal blade for 600% damage.' },
   { id: 'unbirthday', name: 'Unbirthday Present', rarity: 'legendary', icon: '🎁', desc: 'Upon death, wake up and keep going. Consumed.' },
   { id: 'jabberwock', name: "Jabberwock's Heart", rarity: 'legendary', icon: '🐉', desc: 'Damage +60%. Max health +40.' },
+  { id: 'broken_watch', name: 'Broken Pocket Watch', rarity: 'cursed', icon: '🕰️', desc: 'Dodging freezes time: enemies within 14m are slowed for 2.5s (+1s per stack). Each dodge raises Corruption by 8.' },
 ];
 
 export const ITEM_BY_ID = Object.fromEntries(ITEMS.map((i) => [i.id, i]));
@@ -77,4 +79,24 @@ export class Inventory {
       teapotCharges: 1 + c('decree'),
     };
   }
+}
+
+// Perks: permanent (per run) upgrades bought with gold. Each rank stacks.
+export const PERKS = [
+  { id: 'vitality', name: 'Vitality', icon: '❤️', per: '+15 max health', max: 10, apply: (s, r) => { s.maxHp += 15 * r; } },
+  { id: 'ferocity', name: 'Ferocity', icon: '🗡️', per: '+8% damage', max: 10, apply: (s, r) => { s.damage *= 1 + 0.08 * r; } },
+  { id: 'alacrity', name: 'Alacrity', icon: '🃏', per: '+7% attack speed', max: 10, apply: (s, r) => { s.attackSpeed += 0.07 * r; } },
+  { id: 'fleetfoot', name: 'Fleetfoot', icon: '👢', per: '+5% move speed', max: 8, apply: (s, r) => { s.speed *= 1 + 0.05 * r; } },
+  { id: 'sharpeye', name: 'Sharp Eye', icon: '🎯', per: '+3% critical chance', max: 10, apply: (s, r) => { s.crit += 0.03 * r; } },
+  { id: 'steeped', name: 'Steeped', icon: '🍵', per: '+0.6 health regen/s', max: 10, apply: (s, r) => { s.regen += 0.6 * r; } },
+  { id: 'ironskin', name: 'Ironskin', icon: '🛡️', per: '+6 armor', max: 10, apply: (s, r) => { s.armor += 6 * r; } },
+];
+
+export function perkCost(rank, coeff) {
+  return Math.round(40 * 1.45 ** rank * coeff ** 0.8);
+}
+
+// XP needed to go from `level` to level + 1 (RoR2-like exponential curve).
+export function xpToNext(level) {
+  return Math.round(60 * 1.5 ** (level - 1));
 }

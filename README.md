@@ -32,6 +32,7 @@ cursor. Touch devices get a virtual stick and buttons.
 | Shift | **Rabbit Hop** — invulnerable dash |
 | Q | **Madness** — spend 50+ Corruption to erupt and enter Madness (faster homing violet cards) |
 | E | Interact |
+| Tab | Perks |
 | Esc / P | Pause · **M** mute |
 
 ## The loop
@@ -48,12 +49,30 @@ cursor. Touch devices get a virtual stick and buttons.
   while you browse.
 - **Kills are messy:** enemies burst into bleeding gibs, blood mist and
   directional splatter that stays on the floor, with a hit-stop on each kill.
-- **The Looking Glass** (the ♥ on the minimap) starts the hour: stay inside its
-  circle for it to charge while the boss hunts you. Charge it, kill the boss,
-  and step through to the next depth.
-- **Bosses:** the White Rabbit (odd depths: claw combo, jumpable shockwave
-  slams, clock-bolt barrages, charges, summons) and the Queen of Hearts (even
-  depths: racing thorn lines, a rain of hearts, card volleys, guard summons).
+- **The Looking Glass** (the ♥ on the minimap) summons the stage's boss. Kill
+  it and the Glass opens to the next depth. Standing near the Glass while you
+  fight charges it; a full charge drops a bonus item.
+- **Bosses wind up and warn you:** every attack paints its danger zone first
+  (cones, lanes, rings) and names itself on screen.
+  - The White Rabbit: claw cone, jumpable shockwave, clock-bolt barrage,
+    charge, summons.
+  - The Mad Hatter: tea-bomb barrage, boomerang hat throw, snip dash, spider
+    summons, and *The Watch Strikes Twelve*: hours flash red (sinking into
+    boiling tea) or gold (rising), then the floor rearranges.
+  - The Queen of Hearts: racing thorn lines, a rain of hearts, card volleys,
+    scepter sweep, guard summons.
+- **Stages:** 01 The Hollow Tea Garden · 02 The Mad Hatter's Clockworks · 03 The
+  Weeping Rosewood · 04 The Queen's Croquet Grounds · 05 The Pool of Tears.
+- **The Clockworks** is a giant clock face: two enormous hands sweep the floor
+  and shove you toward the boiling-tea channel (jump them, or stand on a raised
+  hour). Tea scalds and slows. Its cast: Scissor-Handed Hatters, Pocket-Watch
+  Spiders, and Walking Teapot Cannons.
+- **Levels:** kills give XP; every level adds max health, damage and regen.
+- **Perks:** press **Tab** (or use the shop) to spend gold on ranked upgrades.
+- **Evolution:** enemies level with the run and evolve into Veterans (Lv 4+)
+  and Nightmares (Lv 8+): bigger, faster, with extra attacks.
+- **Cursed items** (purple) carry a cost: the Hatter's *Broken Pocket Watch*
+  slows time around you when you dodge, but each dodge raises Corruption.
 - **Enemies:** Card Guards (telegraphed spear lunges), Teacup Mimics (hopping
   artillery that spits boiling tea), Clockwork Wisps (flying, charged bolt
   volleys).

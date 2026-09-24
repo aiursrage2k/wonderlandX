@@ -20,12 +20,13 @@
 
     <!-- top-left: portrait + bars -->
     <div id="status" class="panel">
-      <canvas id="portrait" width="128" height="128"></canvas>
+      <div class="portrait-wrap"><canvas id="portrait" width="128" height="128"></canvas><div id="lvl">1</div></div>
       <div class="bars">
         <div class="bar hp"><div class="fill" id="hp-fill"></div><div class="ghost" id="hp-ghost"></div><span id="hp-text">110 / 110</span></div>
         <div class="bar-label">Corruption</div>
         <div class="bar corr"><div class="fill" id="corr-fill"></div><div class="mark"></div></div>
-        <div id="gold"><span class="coin">◈</span> <span id="gold-text">0</span></div>
+        <div class="bar xp"><div class="fill" id="xp-fill"></div></div>
+        <div id="gold"><span class="coin">◈</span> <span id="gold-text">0</span> <span class="perk-hint"><kbd>Tab</kbd> Perks</span></div>
       </div>
     </div>
 
@@ -64,6 +65,7 @@
 
     <div id="crosshair"><i></i><i></i><i></i><i></i><b></b></div>
     <div id="prompt" class="hidden"></div>
+    <div id="warn" class="hidden"></div>
     <div id="banner" class="hidden"><div class="icon"></div><div><div class="name"></div><div class="desc"></div></div></div>
     <div id="numbers"></div>
     <div id="bars"></div>
@@ -112,7 +114,25 @@
         <button id="shop-reroll" class="svc"></button>
       </div>
       <div id="shop-msg"></div>
-      <button id="btn-shop-close" class="big">Leave the Cart <small>(E / Esc)</small></button>
+      <div class="shop-actions">
+        <button id="btn-shop-perks" class="svc">✦ Perks <small>spend gold on permanent upgrades</small></button>
+        <button id="btn-shop-close" class="big">Leave the Cart <small>(E / Esc)</small></button>
+      </div>
+    </div>
+  </div>
+
+  <div id="screen-perks" class="screen hidden">
+    <div class="shop-panel">
+      <div class="shop-head">
+        <div>
+          <h2>Perks</h2>
+          <div class="subtle">Spend gold to sharpen yourself. Ranks last until the run ends.</div>
+        </div>
+        <div class="shop-purse">◈ <span id="perk-gold">0</span></div>
+      </div>
+      <div id="perk-list"></div>
+      <div id="perk-msg"></div>
+      <button id="btn-perks-close" class="big">Back to the Garden <small>(Tab / Esc)</small></button>
     </div>
   </div>
 

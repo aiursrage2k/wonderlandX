@@ -300,3 +300,52 @@ button.big:hover { transform: scale(1.04); box-shadow: 0 0 0 3px #0c0710, 0 0 0 
 #shop-msg.pop { animation: bannerIn 0.3s ease-out; }
 #btn-shop-close { align-self: center; }
 #btn-shop-close small { font-size: 12px; opacity: 0.7; }
+
+/* boss attack callout */
+#warn {
+  position: absolute; left: 50%; top: 26%; transform: translateX(-50%);
+  font-size: 26px; letter-spacing: 0.12em; color: #ffe0e0; white-space: nowrap;
+  text-shadow: 0 0 12px #ff0020, 0 0 30px rgba(255, 0, 40, 0.7), 0 2px 3px #000;
+  animation: warnPulse 0.5s ease-in-out infinite alternate;
+}
+#warn small { display: block; font-family: var(--fell); font-style: italic; font-size: 16px; letter-spacing: 0.04em; color: #ffc0c0; text-align: center; }
+@keyframes warnPulse { from { opacity: 0.75; transform: translateX(-50%) scale(1); } to { opacity: 1; transform: translateX(-50%) scale(1.06); } }
+
+/* level badge + xp */
+.portrait-wrap { position: relative; }
+#lvl {
+  position: absolute; right: -4px; bottom: -4px; min-width: 28px; height: 28px; padding: 0 5px; border-radius: 14px;
+  display: grid; place-items: center; font-size: 14px; font-weight: 800; color: #1a0e04;
+  background: radial-gradient(circle at 40% 35%, #fff2b8, #e8b040 60%, #8a5a10); border: 1px solid #4a2a08;
+  box-shadow: 0 0 0 2px #150d18, 0 2px 6px rgba(0, 0, 0, 0.8);
+}
+#lvl.flash { animation: lvlPop 0.9s ease-out; }
+@keyframes lvlPop { 0% { transform: scale(1); box-shadow: 0 0 0 2px #150d18, 0 0 0 rgba(255, 210, 80, 0); } 30% { transform: scale(1.5); box-shadow: 0 0 0 2px #150d18, 0 0 30px rgba(255, 210, 80, 1); } 100% { transform: scale(1); } }
+.bar.xp { height: 5px; width: 80%; margin-top: 5px; border-color: rgba(201, 164, 90, 0.5); }
+.bar.xp .fill { background: linear-gradient(90deg, #a07020, #ffd24a); }
+
+/* perks */
+#screen-perks { background: radial-gradient(ellipse at 50% 40%, rgba(24, 14, 40, 0.85), rgba(5, 2, 8, 0.95) 75%); overflow-y: auto; justify-content: flex-start; padding-block: 5vh; }
+#perk-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 10px; }
+.perk {
+  pointer-events: auto; display: grid; grid-template-columns: 44px 1fr auto; align-items: center; gap: 12px; padding: 10px 12px; text-align: left;
+  background: linear-gradient(180deg, rgba(34, 20, 44, 0.95), rgba(12, 6, 16, 0.95)); border: 1px solid rgba(201, 164, 90, 0.5);
+}
+.perk-icon { font-size: 30px; text-align: center; font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif; }
+.perk-name { font-size: 16px; color: #fff3dc; }
+.perk-per { font-family: var(--fell); font-size: 14px; color: #d8cce0; }
+.pips { display: flex; gap: 3px; margin-top: 5px; }
+.pips i { width: 9px; height: 9px; transform: rotate(45deg); border: 1px solid rgba(201, 164, 90, 0.6); }
+.pips i.on { background: linear-gradient(135deg, #fff0b0, #d8a030); border-color: #ffd870; box-shadow: 0 0 6px rgba(255, 200, 80, 0.7); }
+.perk button { pointer-events: auto; cursor: pointer; font-family: var(--serif); color: #fff3dc; background: linear-gradient(180deg, #5a1020, #2a0610); border: 1px solid var(--gold); padding: 8px 12px; font-size: 14px; min-width: 76px; }
+.perk button:disabled { cursor: default; filter: grayscale(0.7) brightness(0.6); }
+#perk-msg { min-height: 22px; font-family: var(--fell); font-style: italic; font-size: 17px; color: #f2d792; }
+#perk-msg.pop { animation: bannerIn 0.3s ease-out; }
+#btn-perks-close { align-self: center; }
+#btn-perks-close small { font-size: 12px; opacity: 0.7; }
+.shop-actions { display: flex; gap: 12px; align-items: center; justify-content: center; flex-wrap: wrap; }
+.shop-actions .svc { flex: 0 1 280px; }
+.perk-hint { margin-left: 10px; font-size: 11px; color: #c8b8a0; letter-spacing: 0.08em; }
+.perk-hint kbd { font-family: var(--serif); border: 1px solid rgba(201, 164, 90, 0.7); padding: 0 4px; font-size: 10px; }
+
+.ebar .lv { color: #e8dcc8; font-size: 10px; opacity: 0.85; }
