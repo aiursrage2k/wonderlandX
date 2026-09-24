@@ -535,3 +535,19 @@ button.big:hover { transform: scale(1.04); box-shadow: 0 0 0 3px #0c0710, 0 0 0 
   #bossbar { width: 86vw; }
 }
 body.paused #hud { opacity: 0.15; transition: opacity 0.2s; }
+
+/* kill cam */
+canvas#game.killcam { filter: saturate(0.35) contrast(1.08) brightness(0.9); transition: filter 0.6s; }
+#killcam { position: fixed; inset: 0; z-index: 9; pointer-events: none; }
+#killcam::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 45%, rgba(120, 0, 20, 0.55) 100%); }
+.kc-bar { position: absolute; left: 0; right: 0; height: 11vh; background: #000; animation: kcBar 0.6s ease-out both; }
+.kc-bar.top { top: 0; transform-origin: top; }
+.kc-bar.bottom { bottom: 0; transform-origin: bottom; }
+@keyframes kcBar { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+.kc-card { position: absolute; left: 50%; top: calc(11vh + 22px); transform: translateX(-50%); text-align: center; animation: bannerIn 0.6s 0.5s ease-out both; }
+.kc-title { font-size: clamp(28px, 4vw, 44px); letter-spacing: 0.14em; color: #ff4a5a; text-shadow: 0 3px 0 #1a0a10, 0 0 24px rgba(255, 0, 40, 0.5); }
+.kc-by { margin-top: 6px; font-size: 11px; letter-spacing: 0.3em; text-transform: uppercase; color: #cdb8a0; }
+#kc-name { font-size: 24px; letter-spacing: 0.06em; color: #fff3dc; text-shadow: 0 2px 6px #000; }
+#kc-sub { font-family: var(--fell); font-style: italic; font-size: 15px; color: #d8c0c8; }
+#kc-count { margin-top: 10px; font-family: var(--fell); font-style: italic; font-size: 14px; color: #b8a8c0; }
+body.dying #hud { opacity: 0; transition: opacity 0.5s; }

@@ -12,12 +12,12 @@ import { buildClockworks, brassPlazaMaterial, WALL_R } from './clockworks.js';
 import { buildWastes } from './wastes.js';
 import { buildThrone } from './throne.js';
 
-const GARDEN_FOES = ['guard', 'diamond', 'teacup', 'wisp'];
+const GARDEN_FOES = ['guard', 'diamond', 'teacup', 'wisp', 'rook'];
 const CLOCK_FOES = ['hatter', 'spider', 'cannon'];
 export const STAGES = [
   { name: 'The Hollow Tea Garden', kind: 'garden', size: 2, boss: 'rabbit', enemies: GARDEN_FOES, summon: 'guard', fog: '#35204a', skyTop: '#0c0620', skyHor: '#7a3a96', glow: '#3ff5dc', glow2: '#ff3fbf', moon: '#d8c8ff' },
   { name: 'The Mad Hatter’s Clockworks', kind: 'clockworks', open: true, size: 2, seals: 5, boss: 'madhatter', enemies: CLOCK_FOES, summon: 'spider', fog: '#2a1a12', skyTop: '#070a1c', skyHor: '#40305e', glow: '#ff9a30', glow2: '#b060ff', moon: '#dcd0ff' },
-  { name: 'The Crimson Throne', kind: 'throne', final: true, loot: 0.45, boss: 'queen', enemies: ['guard', 'diamond'], summon: 'guard', fog: '#2a0c1a', skyTop: '#0a0214', skyHor: '#6a1a4a', glow: '#ff3050', glow2: '#b040ff', moon: '#e0c0ff' },
+  { name: 'The Crimson Throne', kind: 'throne', final: true, look: { bloom: 0.45, threshold: 0.86, exposure: 0.95 }, loot: 0.45, boss: 'queen', enemies: ['guard', 'diamond'], summon: 'guard', fog: '#2a0c1a', skyTop: '#0a0214', skyHor: '#6a1a4a', glow: '#ff3050', glow2: '#b040ff', moon: '#e0c0ff' },
 ];
 
 const HALF = 115; // playable half-extent

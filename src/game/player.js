@@ -130,6 +130,7 @@ export class Player {
       } else {
         this.hp = 0;
         this.alive = false;
+        this.killer = from && from.name ? from : this.game.guessAttacker();
         this.game.onPlayerDeath();
       }
     }
@@ -476,10 +477,53 @@ export class Player {
     this.model.visible = !(this.invuln > 0 && Math.floor(this.invuln * 12) % 2 === 0);
   }
 
+  // Stagger, a burst of cards, a fall onto her back — then she comes apart
+  // into petals and cards drifting upward (waking up, Wonderland-style).
   animateDeath(dt) {
-    this.model.rotation.x = lerp(this.model.rotation.x, -Math.PI / 2, 1 - Math.exp(-4 * dt));
-    this.model.position.y = lerp(this.model.position.y, this.pos.y + 0.2, 1 - Math.exp(-4 * dt));
-    this.updateCamera(dt);
-    this.camYaw += dt * 0.15;
+    const g = this.game;
+    const p = this.parts;
+    if (this.deathT === undefined) {
+      this.deathT = 0;
+      const c = this.center.clone();
+      g.fx.burst(c, 40, '#efe6d4', { matter: true, speed: 9, g: 10, size: 0.3, life: 1.6 });
+      g.fx.burst(c, 30, '#c01030', { speed: 6, g: 4, size: 0.3, life: 1.2 });
+      g.fx.flash(c, '#ffb0c0', 1.6, 0.2);
+    }
+    this.deathT += dt;
+    const t = this.deathT;
+    const k = 1 - Math.exp(-10 * dt);
+    // 0–0.35 s: knees buckle and the arms fly up
+    const buckle = t < 0.35;
+    for (let i = 0; i < 2; i++) {
+      p.knees[i].rotation.x = lerp(p.knees[i].rotation.x, buckle ? 1.3 : 0.35, k);
+      p.legs[i].rotation.x = lerp(p.legs[i].rotation.x, buckle ? -0.4 : 0.15 * (i ? 1 : -1), k);
+    }
+    p.arms[0].sh.rotation.x = lerp(p.arms[0].sh.rotation.x, -2.7, k);
+    p.arms[1].sh.rotation.x = lerp(p.arms[1].sh.rotation.x, -2.4, k);
+    p.arms[0].sh.rotation.z = lerp(p.arms[0].sh.rotation.z, 0.9, k);
+    p.arms[1].sh.rotation.z = lerp(p.arms[1].sh.rotation.z, -0.9, k);
+    p.body.rotation.x = 0;
+    p.body.position.set(0, buckle ? -0.25 * (t / 0.35) : 0, 0);
+    p.head.rotation.x = lerp(p.head.rotation.x, -0.4, k);
+    // 0.3–1.1 s: topple backwards, with a small bounce as she lands
+    const f = Math.max(0, Math.min(1, (t - 0.3) / 0.8));
+    const bounce = f < 1 ? f * f : 1;
+    const land = t > 1.1 ? Math.sin(Math.min(1, (t - 1.1) / 0.25) * Math.PI) * 0.12 : 0;
+    this.model.rotation.x = -Math.PI / 2 * bounce + land;
+    this.model.position.set(this.pos.x, this.pos.y + 0.18 * bounce, this.pos.z);
+    if (t > 1.1 && !this.landed) {
+      this.landed = true;
+      g.fx.burst(this.pos.clone().setY(this.pos.y + 0.2), 20, '#8a7a90', { matter: true, speed: 4, g: 12, size: 0.25, life: 0.8 });
+      g.camShake(0.25);
+    }
+    // from 2.2 s: she dissolves into drifting petals and cards
+    if (t > 2.2) {
+      const d = Math.min(1, (t - 2.2) / 1.6);
+      this.model.scale.setScalar(Math.max(0.001, 1 - d * d));
+      if (Math.random() < 0.8) {
+        const q = this.pos;
+        g.fx.spark(q.x + (Math.random() - 0.5) * 1.4, q.y + 0.3, q.z + (Math.random() - 0.5) * 1.4, Math.random() < 0.5 ? '#ff5070' : '#f0e6d8', { speed: 1.2, g: -2.5, size: 0.28, life: 1.6, drag: 0.4 });
+      }
+    }
   }
 }

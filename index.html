@@ -31,7 +31,7 @@
         <div class="bar-row"><span class="bar-tag corr-tag">Corruption</span><span id="corr-text">0%</span></div>
         <div class="bar corr"><div class="fill" id="corr-fill"></div><div class="mark"></div></div>
         <div class="bar xp"><div class="fill" id="xp-fill"></div></div>
-        <div id="gold"><span class="purse"><span class="coin">◈</span> <span id="gold-text">0</span></span> <span class="perk-hint"><kbd>Tab</kbd> Perks</span></div>
+        <div id="gold"><span class="purse"><span class="coin">◈</span> <span id="gold-text">0</span></span></div>
       </div>
     </div>
 
@@ -103,7 +103,7 @@
     <div class="controls">
       <div><b>WASD</b> move · <b>Mouse</b> aim · <b>Space</b> jump (twice!)</div>
       <div><b>LMB</b> Razor Deck · <b>RMB</b> Teapot Grenade · <b>Shift</b> Rabbit Hop · <b>R</b> Roll · <b>Q</b> Madness</div>
-      <div><b>E</b> interact · <b>Tab</b> perks · <b>Esc</b> pause · <b>M</b> mute</div>
+      <div><b>E</b> interact · buy · <b>Esc</b> pause · <b>M</b> mute</div>
       <div class="hint">Loot tea chests, stack items, find the Looking Glass, and survive the hour. It only gets madder.</div>
     </div>
     <div class="level-select">
@@ -113,43 +113,6 @@
         <label><input type="checkbox" id="ls-reveal" /> Reveal the Looking Glass</label>
         <label><input type="checkbox" id="ls-glass" /> Start beside the Looking Glass</label>
       </div>
-    </div>
-  </div>
-
-  <div id="screen-shop" class="screen hidden">
-    <div class="shop-panel">
-      <div class="shop-head">
-        <div>
-          <h2>The Dormouse’s Curio Cart</h2>
-          <div class="subtle">“Twinkle, twinkle, little bat… everything’s for sale, and none of it’s returnable.”</div>
-        </div>
-        <div class="shop-purse">◈ <span id="shop-gold">0</span></div>
-      </div>
-      <div id="shop-items"></div>
-      <div class="shop-services">
-        <button id="shop-tea" class="svc"></button>
-        <button id="shop-reroll" class="svc"></button>
-      </div>
-      <div id="shop-msg"></div>
-      <div class="shop-actions">
-        <button id="btn-shop-perks" class="svc">✦ Perks <small>spend gold on permanent upgrades</small></button>
-        <button id="btn-shop-close" class="big">Leave the Cart <small>(E / Esc)</small></button>
-      </div>
-    </div>
-  </div>
-
-  <div id="screen-perks" class="screen hidden">
-    <div class="shop-panel">
-      <div class="shop-head">
-        <div>
-          <h2>Perks</h2>
-          <div class="subtle">Spend gold to sharpen yourself. Ranks last until the run ends.</div>
-        </div>
-        <div class="shop-purse">◈ <span id="perk-gold">0</span></div>
-      </div>
-      <div id="perk-list"></div>
-      <div id="perk-msg"></div>
-      <button id="btn-perks-close" class="big">Back to the Garden <small>(Tab / Esc)</small></button>
     </div>
   </div>
 
@@ -178,7 +141,6 @@
             <dt>R</dt><dd>Tumble (dodge roll)</dd>
             <dt>Q</dt><dd>Madness (50+ corruption)</dd>
             <dt>E</dt><dd>Interact · buy</dd>
-            <dt>Tab</dt><dd>Perks</dd>
             <dt>M</dt><dd>Mute</dd>
           </dl>
         </section>
@@ -214,6 +176,18 @@
     <div class="subtle">“Who cares for you? You’re nothing but a pack of cards!” — and the whole pack rose up into the air, and Alice woke.</div>
     <div id="win-stats"></div>
     <button id="btn-again" class="big">Fall Again</button>
+  </div>
+
+  <div id="killcam" class="hidden">
+    <div class="kc-bar top"></div>
+    <div class="kc-bar bottom"></div>
+    <div class="kc-card">
+      <div class="kc-title">You have fallen</div>
+      <div class="kc-by">Slain by</div>
+      <div id="kc-name">—</div>
+      <div id="kc-sub"></div>
+      <div id="kc-count"></div>
+    </div>
   </div>
 
   <div id="fade"></div>

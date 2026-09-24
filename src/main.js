@@ -21,12 +21,11 @@ import { Combat } from './game/combat.js';
 import { Director } from './game/enemies.js';
 import './game/clockenemies.js'; // registers the Clockworks cast
 import './game/throneenemies.js'; // registers the Queen's court
+import './game/rook.js'; // registers the Rook Sentinel
 import { Chest, BiscuitTin, Pickup, LookingGlass, TeaTable, PerkChest } from './game/interactables.js';
 import { MultiShop } from './game/multishop.js';
-import { Shop } from './game/shop.js';
 import { RARITY } from './game/items.js';
 import { HUD } from './ui/hud.js';
-import { renderPerks } from './ui/perks.js';
 import { Transition } from './ui/transition.js';
 
 const params = new URLSearchParams(location.search);
@@ -176,12 +175,6 @@ class Game {
       this.startRun();
       this.input.requestLock();
     };
-    document.getElementById('btn-shop-close').onclick = () => this.closeShop();
-    document.getElementById('btn-perks-close').onclick = () => this.closePerks();
-    document.getElementById('btn-shop-perks').onclick = () => {
-      this.closeShop(false);
-      this.openPerks(true);
-    };
     document.getElementById('btn-restart').onclick = () => {
       document.getElementById('screen-dead').classList.add('hidden');
       this.startRun();
@@ -199,45 +192,6 @@ class Game {
       if (!locked && this.state === 'play' && !this.input.isTouch && !this.input.fallbackAim && !DEBUG) this.setPaused(true);
     };
     if (this.input.isTouch) document.getElementById('touch').classList.remove('hidden');
-  }
-
-  openShop(shop) {
-    if (this.state !== 'play') return;
-    this.state = 'shop';
-    this.openShopRef = shop;
-    this.input.mouse.left = false;
-    this.hud.prompt(null);
-    shop.render();
-    document.getElementById('screen-shop').classList.remove('hidden');
-    document.exitPointerLock?.();
-  }
-
-  closeShop(relock = true) {
-    if (this.state !== 'shop') return;
-    this.state = 'play';
-    document.getElementById('screen-shop').classList.add('hidden');
-    this.last = performance.now();
-    if (relock) this.input.requestLock();
-  }
-
-  openPerks(fromShop = false) {
-    if (this.state !== 'play') return;
-    this.state = 'perks';
-    this.perksFromShop = fromShop;
-    this.input.mouse.left = false;
-    this.hud.prompt(null);
-    renderPerks(this);
-    document.getElementById('screen-perks').classList.remove('hidden');
-    document.exitPointerLock?.();
-  }
-
-  closePerks() {
-    if (this.state !== 'perks') return;
-    this.state = 'play';
-    document.getElementById('screen-perks').classList.add('hidden');
-    this.last = performance.now();
-    if (this.perksFromShop && this.openShopRef) this.openShop(this.openShopRef);
-    else this.input.requestLock();
   }
 
   setPaused(p) {
@@ -269,6 +223,10 @@ class Game {
   // ─── run / stage lifecycle ───
   startRun(depth = 1, opts = {}) {
     setMusic('stage');
+    this.killcam = null;
+    document.getElementById('killcam').classList.add('hidden');
+    this.canvas.classList.remove('killcam');
+    document.body.classList.remove('dying');
     this.runTime = 0;
     this.depth = depth;
     if (this.player) this.scene.remove(this.player.model);
@@ -339,6 +297,11 @@ class Game {
     }
     this.fx.world = this.world;
     this.makeEnvironment();
+    // per-stage grade: the polished throne hall needs a much gentler bloom
+    const look = this.world.theme.look || {};
+    this.bloom.strength = look.bloom ?? 0.9;
+    this.bloom.threshold = look.threshold ?? 0.62;
+    this.renderer.toneMappingExposure = look.exposure ?? 1.15;
     this.hud.setStage(this.world.theme.name, depth);
     const w = this.world;
     this.teleporter = new LookingGlass(this, w.glassPos.x, w.glassPos.z);
@@ -371,7 +334,7 @@ class Game {
       this.interactables.push(new PerkChest(this, s.x, s.z));
     }
     // Risk-of-Rain multishops: three terminals, buy one and the rest lock
-    const nShops = w.theme.kind === 'garden' ? 3 : 2;
+    const nShops = (w.S || 1) > 1 ? 4 : 2;
     for (let i = 0; i < nShops; i++) {
       const s = w.freeSpot(5, avoid);
       avoid.push({ ...s, r: 9 });
@@ -379,25 +342,6 @@ class Game {
       const shop = new MultiShop(this, s.x, s.z, facing);
       this.multishops.push(shop);
       this.interactables.push(...shop.terminals);
-    }
-    // the curio cart sits on the edge of the starting plaza, facing its centre
-    {
-      const sp = w.plazas[0];
-      const a = Math.atan2(w.glassPos.z - sp.z, w.glassPos.x - sp.x) + 0.9;
-      let sx = sp.x + Math.cos(a) * sp.r * 0.62;
-      let sz = sp.z + Math.sin(a) * sp.r * 0.62;
-      this.shop = new Shop(this, sx, sz, sp.x, sp.z);
-      this.interactables.push(this.shop);
-      avoid.push({ x: sx, z: sz, r: 5 });
-      // nudge any loot that landed where the stall now stands
-      for (const it of this.interactables) {
-        if (it === this.shop || it.kind === 'glass') continue;
-        if (Math.hypot(it.pos.x - sx, it.pos.z - sz) < 4) {
-          const f = w.freeSpot(2, avoid);
-          it.pos.set(f.x, w.height(f.x, f.z), f.z);
-          it.model.position.copy(it.pos);
-        }
-      }
     }
     for (let i = 0; i < 2; i++) {
       const s = w.freeSpot(3, avoid);
@@ -487,24 +431,87 @@ class Game {
     requestAnimationFrame(() => requestAnimationFrame(() => (f.style.opacity = 0)));
   }
 
+  // Who most likely landed the killing blow when the damage had no source.
+  guessAttacker() {
+    const p = this.player;
+    let best = null;
+    let bd = Infinity;
+    for (const e of this.enemies) {
+      if (!e.alive) continue;
+      const d = e.pos.distanceTo(p.pos) - (e.boss ? 25 : 0);
+      if (d < bd) {
+        bd = d;
+        best = e;
+      }
+    }
+    return best;
+  }
+
   onPlayerDeath() {
     this.state = 'dying';
-    setMusic(null);
-    setTimeout(() => setMusic('title'), 2400);
     sfx('boss');
-    setTimeout(() => {
-      this.state = 'dead';
-      document.exitPointerLock?.();
-      const p = this.player;
-      const t = this.runTime;
-      const quotes = ['“Off with her head!”', '“Who in the world am I? Ah, that’s the great puzzle.”', '“It’s no use going back to yesterday.”', '“I can’t go back to yesterday, because I was a different person then.”'];
-      document.getElementById('dead-quote').textContent = quotes[Math.floor(rand() * quotes.length)];
-      document.getElementById('dead-stats').innerHTML = `
-        Reached <b>Depth ${String(this.depth).padStart(2, '0')}</b> — ${this.world.theme.name}<br>
-        Survived <b>${Math.floor(t / 60)}m ${Math.floor(t % 60)}s</b> · Slain <b>${p.kills}</b> · Damage <b>${Math.round(p.damageDealt).toLocaleString()}</b><br>
-        Items collected <b>${[...p.inv.stacks.values()].reduce((a, b) => a + b, 0)}</b>`;
-      document.getElementById('screen-dead').classList.remove('hidden');
-    }, 2200);
+    setMusic(null);
+    const p = this.player;
+    const killer = p.killer;
+    this.killcam = { t: 0, dur: 4.4, killer, yaw0: p.camYaw };
+    // the kill card
+    const name = killer ? `${killer.elite ? killer.elite.name + ' ' : ''}${killer.tier ? ['', 'Veteran ', 'Nightmare '][killer.tier] : ''}${killer.name}` : 'Wonderland itself';
+    document.getElementById('kc-name').textContent = name;
+    document.getElementById('kc-sub').textContent = killer ? `Level ${killer.level}${killer.boss ? ' · ' + (killer.subtitle || 'boss') : ''}` : '';
+    document.getElementById('killcam').classList.remove('hidden');
+    this.canvas.classList.add('killcam');
+    document.body.classList.add('dying');
+    this.deathKiller = name;
+  }
+
+  updateKillCam(realDt) {
+    const kc = this.killcam;
+    const p = this.player;
+    kc.t += realDt;
+    const t = kc.t;
+    const A = p.pos.clone().setY(p.pos.y + 0.6);
+    // first a slow orbit over Alice…
+    const a = kc.yaw0 + Math.PI + t * 0.45;
+    const cam = A.clone().add(new THREE.Vector3(Math.sin(a) * 4.4, 3.0 + t * 0.35, Math.cos(a) * 4.4));
+    const look = A.clone();
+    // …then swing round to frame whoever did it
+    const K = kc.killer ? kc.killer.hitCenter(new THREE.Vector3()) : null;
+    if (K && t > 1.3) {
+      const k = Math.min(1, (t - 1.3) / 1.6);
+      const e = k * k * (3 - 2 * k);
+      const dir = new THREE.Vector3(A.x - K.x, 0, A.z - K.z);
+      const dist = dir.length() || 1;
+      dir.multiplyScalar(1 / dist);
+      const side = new THREE.Vector3(-dir.z, 0, dir.x);
+      const cam2 = A.clone().addScaledVector(dir, 4.5 + Math.min(12, dist * 0.2)).addScaledVector(side, 2.5);
+      cam2.y = Math.max(A.y, K.y * 0.5) + 2.2 + Math.min(10, (kc.killer.height || 2) * 0.35);
+      cam.lerp(cam2, e);
+      look.lerp(A.clone().lerp(K, 0.7), e);
+    }
+    cam.y = Math.max(cam.y, this.world.height(cam.x, cam.z) + 0.8);
+    p.cam.copy(cam);
+    p.lookDir.copy(look.sub(cam).normalize());
+    document.getElementById('kc-count').textContent = t < kc.dur ? `Waking up in ${Math.ceil(kc.dur - t)}…` : '';
+    if (t >= kc.dur && this.state === 'dying') this.finishDeath();
+  }
+
+  finishDeath() {
+    this.state = 'dead';
+    document.getElementById('killcam').classList.add('hidden');
+    this.canvas.classList.remove('killcam');
+    document.body.classList.remove('dying');
+    document.exitPointerLock?.();
+    setTimeout(() => setMusic('title'), 400);
+    const p = this.player;
+    const t = this.runTime;
+    const quotes = ['“Off with her head!”', '“Who in the world am I? Ah, that’s the great puzzle.”', '“It’s no use going back to yesterday.”', '“I can’t go back to yesterday, because I was a different person then.”'];
+    document.getElementById('dead-quote').textContent = quotes[Math.floor(rand() * quotes.length)];
+    document.getElementById('dead-stats').innerHTML = `
+      Slain by <b>${this.deathKiller}</b><br>
+      Reached <b>Depth ${String(this.depth).padStart(2, '0')}</b> — ${this.world.theme.name}<br>
+      Survived <b>${Math.floor(t / 60)}m ${Math.floor(t % 60)}s</b> · Slain <b>${p.kills}</b> · Damage <b>${Math.round(p.damageDealt).toLocaleString()}</b><br>
+      Items collected <b>${[...p.inv.stacks.values()].reduce((a, b) => a + b, 0)}</b>`;
+    document.getElementById('screen-dead').classList.remove('hidden');
   }
 
   // The Crimson Queen is dead: the run is won.
@@ -601,12 +608,12 @@ class Game {
     if (input.hit('m')) toggleMute();
     if (input.hit('escape') && this.state === 'pause') this.setPaused(false);
     if (input.hit('p') && this.state === 'play') this.setPaused(true);
-    if (this.state === 'shop' && (input.hit('escape') || input.hit('e'))) this.closeShop();
-    else if (this.state === 'perks' && (input.hit('escape') || input.hit('tab'))) this.closePerks();
-    else if (this.state === 'play' && input.hit('tab')) this.openPerks();
 
+    // the kill cam runs in slow motion
+    const realDt = dt;
+    if (this.state === 'dying' && this.killcam) dt *= this.killcam.t < 1.4 ? 0.3 : 0.7;
     const playing = this.state === 'play' || this.state === 'dying';
-    if (this.state === 'pause' || this.state === 'dead' || this.state === 'won' || this.state === 'shop' || this.state === 'perks') dt = 0;
+    if (this.state === 'pause' || this.state === 'dead' || this.state === 'won') dt = 0;
     this.time += dt;
     this.dt = dt;
 
@@ -619,7 +626,9 @@ class Game {
       const look = input.consumeLook();
       if (this.state === 'play') this.player.look(look.dx, look.dy);
       if (this.autopilot) this.autopilot(dt);
-      this.player.update(dt, input);
+      // her fall plays in real time while the world slows around her
+      this.player.update(this.state === 'dying' ? realDt : dt, input);
+      if (this.state === 'dying' && this.killcam) this.updateKillCam(realDt);
       this.director.update(dt);
       // enemies spawned mid-loop (boss summons) land past n0 and are kept
       const n0 = this.enemies.length;

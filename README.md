@@ -35,7 +35,6 @@ cursor. Touch devices get a virtual stick and buttons.
 | R | **Tumble** — quick dodge roll with i-frames (1.2 s cooldown) |
 | Q | **Madness** — spend 50+ Corruption to erupt and enter Madness (faster homing violet cards) |
 | E | Interact |
-| Tab | Perks |
 | Esc / P | Pause · **M** mute |
 
 ## The loop
@@ -47,9 +46,6 @@ cursor. Touch devices get a virtual stick and buttons.
 - **Gold** from kills and biscuit tins buys **Tea Chests** (common/uncommon) and
   **Royal Tea Chests** (uncommon/legendary). The **Mad Hatter's Tea Table** is a
   chance shrine.
-- **The Dormouse's Curio Cart** (⚖ on the minimap, on every starting plaza) sells
-  five chosen items at fixed prices, plus Healing Tea and rerolls. The game pauses
-  while you browse.
 - **Kills are messy:** enemies burst into bleeding gibs, blood mist and
   directional splatter that stays on the floor, with a hit-stop on each kill.
 - **The Looking Glass** (the ♥ on the minimap) summons the stage's boss. Kill
@@ -99,13 +95,19 @@ cursor. Touch devices get a virtual stick and buttons.
   half health the heart breaks and everything comes faster. Aim for the heart.
 - **Levels:** kills drop green XP orbs you have to walk over (they pull in
   when you're close); every level adds max health, damage and regen.
-- **Perks:** press **Tab** (or use the shop) to spend gold on ranked upgrades.
-  Violet **Perk Reliquaries** around each level sell a random perk rank.
+- **Perks** come only from violet **Perk Reliquaries** (a random rank) and the
+  occasional perk offer in a multishop, so a run can't buy its way out of
+  control.
 - **Evolution:** enemies level with the run and evolve into Veterans (Lv 3+)
   and Nightmares (Lv 6+): bigger, faster, with extra attacks. They climb out of
   rabbit-hole portals when they spawn.
 - **Cursed items** (purple) carry a cost: the Hatter's *Broken Pocket Watch*
   slows time around you when you dodge, but each dodge raises Corruption.
+- **Rook Sentinels** (depth 01): slow, tanky walking chess rooks. They paint a
+  tracking line on the ground, lock it a beat before firing, then scorch it
+  with an eye-beam — sidestep or roll. Up close they stomp.
+- **Death** plays out in slow motion: Alice falls, the kill cam swings round
+  to show who did it, and after a few seconds you can descend again.
 - **Enemies:** Card Guards (telegraphed spear lunges), Diamond Guards (ranged
   bursts of spinning diamonds), Teacup Mimics (hopping
   artillery that spits boiling tea), Clockwork Wisps (flying, charged bolt

@@ -355,7 +355,7 @@ export function buildThrone(w) {
   const ft = floorTextures();
   const floorMat = new THREE.MeshStandardMaterial({
     map: ft.map, emissiveMap: ft.emissive, emissive: new THREE.Color('#ff2030'), emissiveIntensity: 0,
-    roughness: 0.2, metalness: 0.15, envMapIntensity: 1.4,
+    roughness: 0.38, metalness: 0.1, envMapIntensity: 0.6,
   });
   throne.floorMat = floorMat;
   const floor = new THREE.Mesh(new THREE.CircleGeometry(ARENA_R, 96).rotateX(-Math.PI / 2), floorMat);
@@ -554,7 +554,7 @@ export function buildThrone(w) {
   add(bushes);
   add(roses);
   // candelabra: gold stands with candle flames (sprites; a few carry lights)
-  const flameMat = new THREE.SpriteMaterial({ map: w.assets.glow, color: '#ffb050', blending: THREE.AdditiveBlending, transparent: true, depthWrite: false });
+  const flameMat = new THREE.SpriteMaterial({ map: w.assets.glow, color: '#ffb050', blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, opacity: 0.55 });
   const candleMat = mat('#efe6d6', { roughness: 0.6 });
   const nC = 20;
   const flames = [];
@@ -575,7 +575,7 @@ export function buildThrone(w) {
       cdl.position.set(dx, dx === 0 ? 3.7 : 3.4, 0);
       g.add(cdl);
       const f = new THREE.Sprite(flameMat);
-      f.scale.set(0.9, 1.2, 1);
+      f.scale.set(0.55, 0.75, 1);
       f.position.set(dx, (dx === 0 ? 3.7 : 3.4) + 0.5, 0);
       g.add(f);
       flames.push(f);
@@ -587,7 +587,7 @@ export function buildThrone(w) {
   w.anim.push((t) => {
     for (let i = 0; i < flames.length; i++) {
       const k = 1 + Math.sin(t * 9 + i * 1.7) * 0.08 + Math.sin(t * 23 + i) * 0.05;
-      flames[i].scale.set(0.9 * k, 1.2 * k, 1);
+      flames[i].scale.set(0.55 * k, 0.75 * k, 1);
     }
   });
 
@@ -598,7 +598,7 @@ export function buildThrone(w) {
   wall.material = mat('#2a1e26', { roughness: 0.8, side: THREE.BackSide });
   wall.position.y = WALL_H / 2 - 20;
   add(wall);
-  const glassMats = [0, 1, 2].map((k) => new THREE.MeshBasicMaterial({ map: stainedGlassTexture(70 + k), fog: false, toneMapped: false, color: new THREE.Color(1.3, 1.3, 1.3) }));
+  const glassMats = [0, 1, 2].map((k) => new THREE.MeshBasicMaterial({ map: stainedGlassTexture(70 + k), fog: false, toneMapped: false, color: new THREE.Color(0.9, 0.9, 0.9) }));
   const nW = 18;
   for (let i = 0; i < nW; i++) {
     const a = (i / nW) * TAU;
@@ -616,7 +616,7 @@ export function buildThrone(w) {
     // a shaft of coloured light falling across the floor from each window
     const shaft = new THREE.Mesh(
       new THREE.PlaneGeometry(6, 34),
-      new THREE.MeshBasicMaterial({ color: i % 2 ? '#ff3050' : '#a040ff', transparent: true, opacity: 0.05, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }),
+      new THREE.MeshBasicMaterial({ color: i % 2 ? '#ff3050' : '#a040ff', transparent: true, opacity: 0.025, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }),
     );
     shaft.position.set(Math.sin(a) * (WALL_R - 14), 10, Math.cos(a) * (WALL_R - 14));
     shaft.lookAt(0, 10, 0);
@@ -687,12 +687,12 @@ export function buildThrone(w) {
   const warm = [];
   for (let i = 0; i < 6; i++) {
     const a = (i / 6) * TAU + 0.3;
-    const l = new THREE.PointLight('#ffa050', 120, 40, 1.7);
+    const l = new THREE.PointLight('#ffa050', 55, 36, 1.8);
     l.position.set(Math.sin(a) * (ARENA_R - 4), 4, Math.cos(a) * (ARENA_R - 4));
     add(l);
     warm.push(l);
   }
-  const thronelight = new THREE.PointLight('#ff2040', 160, 30, 1.6);
+  const thronelight = new THREE.PointLight('#ff2040', 70, 30, 1.7);
   thronelight.position.set(DAIS.x, 8, DAIS.z + 4);
   add(thronelight);
   throne.redLight = thronelight;
@@ -724,7 +724,7 @@ function updateThrone(w, time, dt, focus) {
   th.corona.position.set(focus.x + 140, 175, focus.z - 320);
   th.corona.material.rotation = time * 0.02;
   th.corona.material.opacity = 0.75 + Math.sin(time * 0.7) * 0.1 + th.crack * 0.2;
-  th.redLight.intensity = (140 + Math.sin(time * 2) * 20) * (1 - th.crack * 0.7);
+  th.redLight.intensity = (65 + Math.sin(time * 2) * 10) * (1 - th.crack * 0.7);
   if (!th.phase) return;
   th.phaseT += dt;
   th.crack = Math.min(1, th.phaseT / 3);
