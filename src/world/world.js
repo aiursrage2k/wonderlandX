@@ -9,11 +9,11 @@ import {
 import { mat } from '../gfx/models.js';
 
 export const STAGES = [
-  { name: 'The Hollow Tea Garden', fog: '#2a1838', skyTop: '#07040f', skyHor: '#5a2a6e', glow: '#3ff5dc', glow2: '#ff3fbf', moon: '#d8c8ff' },
-  { name: 'The Weeping Rosewood', fog: '#32121e', skyTop: '#0a0306', skyHor: '#7a1a2e', glow: '#ff5a7a', glow2: '#ffb347', moon: '#ffd0d0' },
-  { name: "The Queen's Croquet Grounds", fog: '#14222a', skyTop: '#03080c', skyHor: '#1f5a66', glow: '#7dff9a', glow2: '#ff4040', moon: '#c8fff0' },
-  { name: 'The Clockwork Burrow', fog: '#2a2014', skyTop: '#080503', skyHor: '#6e4a1a', glow: '#ffc04a', glow2: '#8a6bff', moon: '#ffe8b0' },
-  { name: 'The Pool of Tears', fog: '#101a36', skyTop: '#02030c', skyHor: '#23407e', glow: '#5ab4ff', glow2: '#d05aff', moon: '#d0e0ff' },
+  { name: 'The Hollow Tea Garden', fog: '#35204a', skyTop: '#0c0620', skyHor: '#7a3a96', glow: '#3ff5dc', glow2: '#ff3fbf', moon: '#d8c8ff' },
+  { name: 'The Weeping Rosewood', fog: '#3a1422', skyTop: '#12040a', skyHor: '#962a40', glow: '#ff5a7a', glow2: '#ffb347', moon: '#ffd0d0' },
+  { name: "The Queen's Croquet Grounds", fog: '#182a34', skyTop: '#040c12', skyHor: '#2a7080', glow: '#7dff9a', glow2: '#ff4040', moon: '#c8fff0' },
+  { name: 'The Clockwork Burrow', fog: '#33261a', skyTop: '#0c0804', skyHor: '#8a5c24', glow: '#ffc04a', glow2: '#8a6bff', moon: '#ffe8b0' },
+  { name: 'The Pool of Tears', fog: '#14203e', skyTop: '#030514', skyHor: '#2e52a0', glow: '#5ab4ff', glow2: '#d05aff', moon: '#d0e0ff' },
 ];
 
 const HALF = 115; // playable half-extent
@@ -220,8 +220,11 @@ export class World {
         float hash(vec3 p){ p = fract(p*0.3183099+.1); p *= 17.0; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
         void main(){
           float h = clamp(vDir.y, -0.2, 1.0);
-          vec3 c = mix(hor, top, pow(max(h,0.0), 0.55));
-          c += hor * 0.35 * exp(-abs(h)*9.0);
+          vec3 c = mix(hor, top, smoothstep(0.0, 0.75, h));
+          c += hor * 0.6 * exp(-abs(h)*7.0);
+          // violet nebula wash in the moon's quarter
+          float neb = max(0.0, dot(normalize(vDir.xz), normalize(vec2(0.4,-1.0))));
+          c += hor * 0.35 * pow(neb, 3.0) * smoothstep(0.05, 0.4, h) * (1.0 - h);
           vec3 q = floor(vDir*420.0);
           float s = hash(q);
           float star = step(0.9975, s) * smoothstep(0.05, 0.4, h) * (0.6+0.4*sin(time*2.0+s*50.0));
@@ -618,7 +621,7 @@ export class World {
     }
     const cupGeo = new THREE.LatheGeometry([new THREE.Vector2(0, 0), ...prof], 32);
     for (let i = 0; i < 8; i++) {
-      const s = this.freeSpot(7, [{ ...this.glassPos, r: 14 }, { ...this.spawn, r: 10 }]);
+      const s = this.freeSpot(7, this.plazas.map((p) => ({ x: p.x, z: p.z, r: p.r + 7 })));
       const scale = this.rng.range(2.5, 5.5);
       const y = this.height(s.x, s.z);
       const g = new THREE.Group();
@@ -666,7 +669,7 @@ export class World {
     const face = new THREE.MeshStandardMaterial({ map: this.assets.clock, roughness: 0.5, emissive: '#ffcf8a', emissiveMap: this.assets.clock, emissiveIntensity: 0.15 });
     const gold = mat('#9a7a3a', { metalness: 0.8, roughness: 0.35 });
     for (let i = 0; i < 5; i++) {
-      const s = this.freeSpot(6, [{ ...this.glassPos, r: 14 }, { ...this.spawn, r: 10 }]);
+      const s = this.freeSpot(6, this.plazas.map((p) => ({ x: p.x, z: p.z, r: p.r + 5 })));
       const R = this.rng.range(2, 4.5);
       const y = this.height(s.x, s.z);
       const g = new THREE.Group();
@@ -802,8 +805,8 @@ export class World {
     this.skyMat.uniforms.time.value = t;
     this.cheshire.material.opacity = 0.45 + 0.4 * (0.5 + 0.5 * Math.sin(t * 0.25));
     // celestial props ride along with the player so they sit at a fixed sky angle
-    this.moon.position.set(focus.x + 150, 125, focus.z - 330);
-    this.cheshire.position.set(focus.x - 70, 105, focus.z - 360);
+    this.moon.position.set(focus.x + 140, 175, focus.z - 320);
+    this.cheshire.position.set(focus.x - 90, 150, focus.z + 360);
     // shadow frustum follows the player
     this.sun.position.set(focus.x + 60, focus.y + 90, focus.z - 70);
     this.sun.target.position.set(focus.x, focus.y, focus.z);

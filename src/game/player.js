@@ -291,7 +291,7 @@ export class Player {
       const d2 = dir.clone().applyAxisAngle(UP, (Math.random() - 0.5) * 0.1);
       g.combat.spawnPlayerShot({ kind: 'mirror', pos: from, dir: d2, speed: 85, coef: 1, homing: true });
     }
-    g.fx.flash(from, mad ? '#b060ff' : '#ffc070', 0.8, 0.08);
+    g.fx.flash(from, mad ? '#b060ff' : '#ffc070', 0.3, 0.06);
   }
 
   throwTeapot() {

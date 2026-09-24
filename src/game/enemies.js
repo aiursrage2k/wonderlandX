@@ -7,6 +7,7 @@ import { sfx } from '../engine/audio.js';
 import { rollItem } from './items.js';
 
 const tmp = new THREE.Vector3();
+const FLASH_MAT = new THREE.MeshBasicMaterial({ color: '#fff4f0' });
 const tmp2 = new THREE.Vector3();
 
 export const ELITES = [
@@ -41,7 +42,6 @@ class Enemy {
     this.scale = o.elite ? 1.2 : 1;
     this.phase = rand() * 10;
     this.cooldown = 1 + rand() * 2;
-    if (this.elite) this.addEliteAura();
   }
 
   addEliteAura() {
@@ -68,6 +68,7 @@ class Enemy {
     if (!this.alive) return 0;
     this.hp -= dmg;
     this.pop = 1;
+    this.flash(crit ? 0.09 : 0.06);
     if (dir && !this.boss) {
       tmp.copy(dir).setY(0).normalize();
       this.vel.addScaledVector(tmp, (crit ? 2.5 : 1.2) / this.scale);
@@ -77,6 +78,22 @@ class Enemy {
     if (this.state === 'spawn') this.state = 'chase';
     if (this.hp <= 0) this.die();
     return dmg;
+  }
+
+  // Briefly swap every mesh to flat white — the classic hit flash.
+  flash(t) {
+    if (!this.meshes) {
+      this.meshes = [];
+      this.model.traverse((o) => {
+        if (o.isMesh && o.material !== FLASH_MAT && !o.material.transparent) this.meshes.push([o, o.material]);
+      });
+    }
+    if (this.flashT <= 0 || this.flashT === undefined) for (const [m] of this.meshes) m.material = FLASH_MAT;
+    this.flashT = t;
+  }
+
+  unflash() {
+    for (const [m, orig] of this.meshes) m.material = orig;
   }
 
   addBleed(total) {
@@ -125,6 +142,19 @@ class Enemy {
     this.pos.x += this.vel.x * dt;
     this.pos.z += this.vel.z * dt;
     w.collide(this.pos, this.radius, this.pos.y);
+    // don't stand inside Alice
+    const p = this.game.player;
+    if (p.alive && !this.flying) {
+      const dx = this.pos.x - p.pos.x;
+      const dz = this.pos.z - p.pos.z;
+      const rr = this.radius + 0.45;
+      const d2 = dx * dx + dz * dz;
+      if (d2 < rr * rr && d2 > 1e-6) {
+        const d = Math.sqrt(d2);
+        this.pos.x = p.pos.x + (dx / d) * rr;
+        this.pos.z = p.pos.z + (dz / d) * rr;
+      }
+    }
     if (this.flying) return;
     const gy = w.height(this.pos.x, this.pos.z);
     this.vel.y -= 28 * dt;
@@ -138,6 +168,10 @@ class Enemy {
 
   baseUpdate(dt) {
     this.t += dt;
+    if (this.flashT > 0) {
+      this.flashT -= dt;
+      if (this.flashT <= 0) this.unflash();
+    }
     this.pop = Math.max(0, this.pop - dt * 6);
     if (this.bleeds.length) {
       this.bleedTick -= dt;
@@ -163,6 +197,8 @@ class Enemy {
   }
 
   update(dt) {
+    // subclasses set radius/height after super(), so dress elites lazily
+    if (this.elite && !this.aura) this.addEliteAura();
     this.baseUpdate(dt);
     if (!this.alive) {
       this.deadT += dt;
@@ -733,13 +769,12 @@ const CARDS = [
 export class Director {
   constructor(game) {
     this.game = game;
-    this.credits = 45;
-    this.timer = 2;
+    this.reset();
   }
 
   reset() {
-    this.credits = 45;
-    this.timer = 2;
+    this.credits = 80;
+    this.timer = 1.5;
   }
 
   spawn(type, x, z, elite) {
@@ -761,10 +796,10 @@ export class Director {
     const g = this.game;
     const coeff = g.difficulty();
     const event = g.teleporter && g.teleporter.state === 'charging';
-    this.credits += dt * (0.85 + 0.45 * coeff) * (event ? 2.2 : 1);
+    this.credits += dt * (1.5 + 1.0 * coeff) * (event ? 2 : 1);
     this.timer -= dt;
     if (this.timer > 0) return;
-    this.timer = 2.5 + rand() * 3.5;
+    this.timer = 2 + rand() * 3;
     const alive = g.enemies.filter((e) => e.alive && !e.boss).length;
     if (alive >= 22 + Math.floor(coeff * 2)) return;
     const opts = CARDS.filter((c) => (g.runTime / 60) >= c.min);
@@ -782,7 +817,7 @@ export class Director {
     const elite = rand() < eliteChance;
     const cost = card.cost * (elite ? 4 : 1);
     if (this.credits < cost) return;
-    const n = clamp(Math.floor(this.credits / cost), 1, elite ? 2 : 5);
+    const n = clamp(Math.floor(this.credits / cost), 1, elite ? 2 : 6);
     this.credits -= n * cost;
     // spawn cluster somewhere around the player, not on top of them
     const p = g.player.pos;

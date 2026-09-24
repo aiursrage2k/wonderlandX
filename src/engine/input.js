@@ -38,7 +38,15 @@ export class Input {
       if (e.button === 0) this.mouse.left = false;
       if (e.button === 2) this.mouse.right = false;
     });
+    this.cursor = { x: 0, y: 0, inside: false };
+    this.fallbackAim = false;
+    document.addEventListener('pointerlockerror', () => {
+      this.fallbackAim = true;
+    });
     window.addEventListener('mousemove', (e) => {
+      this.cursor.x = e.clientX;
+      this.cursor.y = e.clientY;
+      this.cursor.inside = true;
       if (!this.locked) return;
       // clamp spikes some browsers emit when locking
       if (Math.abs(e.movementX) > 300 || Math.abs(e.movementY) > 300) return;
@@ -169,6 +177,17 @@ export class Input {
     if (this.down('s') || this.down('arrowdown')) y -= 1;
     const l = Math.hypot(x, y);
     return l > 0 ? { x: x / l, y: y / l } : { x: 0, y: 0 };
+  }
+
+  // Without pointer lock, aim like an edge-pan: the further the cursor is from
+  // the centre of the screen, the faster the camera turns toward it.
+  fallbackLook(dt) {
+    if (!this.fallbackAim || this.locked || !this.cursor.inside) return;
+    const nx = (this.cursor.x / window.innerWidth) * 2 - 1;
+    const ny = (this.cursor.y / window.innerHeight) * 2 - 1;
+    const f = (v) => (Math.abs(v) < 0.12 ? 0 : Math.sign(v) * ((Math.abs(v) - 0.12) / 0.88) ** 1.6);
+    this.look.dx += f(nx) * dt * 1400;
+    this.look.dy += f(ny) * dt * 900;
   }
 
   consumeLook() {

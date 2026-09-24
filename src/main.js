@@ -136,7 +136,7 @@ class Game {
       if (this.state === 'play' && !this.input.locked) this.input.requestLock();
     });
     this.input.onLockChange = (locked) => {
-      if (!locked && this.state === 'play' && !this.input.isTouch && !DEBUG) this.setPaused(true);
+      if (!locked && this.state === 'play' && !this.input.isTouch && !this.input.fallbackAim && !DEBUG) this.setPaused(true);
     };
     if (this.input.isTouch) document.getElementById('touch').classList.remove('hidden');
   }
@@ -373,6 +373,7 @@ class Game {
 
     if (playing) {
       if (this.state === 'play') this.runTime += dt;
+      input.fallbackLook(dt);
       const look = input.consumeLook();
       if (this.state === 'play') this.player.look(look.dx, look.dy);
       if (this.autopilot) this.autopilot(dt);
