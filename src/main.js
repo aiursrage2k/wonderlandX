@@ -8,7 +8,9 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 
 import { Input } from './engine/input.js';
-import { unlockAudio, toggleMute, sfx, setMusic } from './engine/audio.js';
+import { unlockAudio, toggleMute, sfx, setMusic, muted } from './engine/audio.js';
+
+const isMuted = () => muted;
 import { makeRng, rand, TAU } from './engine/util.js';
 import { World, STAGES } from './world/world.js';
 import { FX } from './fx/fx.js';
@@ -163,6 +165,17 @@ class Game {
       this.input.requestLock();
       this.setPaused(false);
     };
+    document.getElementById('btn-mute').onclick = () => {
+      toggleMute();
+      document.getElementById('btn-mute').textContent = `Sound: ${isMuted() ? 'off' : 'on'}`;
+    };
+    document.getElementById('btn-restart-run').onclick = () => {
+      document.getElementById('screen-pause').classList.add('hidden');
+      document.body.classList.remove('paused');
+      unlockAudio();
+      this.startRun();
+      this.input.requestLock();
+    };
     document.getElementById('btn-shop-close').onclick = () => this.closeShop();
     document.getElementById('btn-perks-close').onclick = () => this.closePerks();
     document.getElementById('btn-shop-perks').onclick = () => {
@@ -230,10 +243,25 @@ class Game {
   setPaused(p) {
     if (p && this.state === 'play') {
       this.state = 'pause';
+      const pl = this.player;
+      const t = this.runTime;
+      const rows = [
+        ['Depth', `${String(this.depth).padStart(2, '0')} — ${this.world.theme.name}`],
+        ['Time', `${Math.floor(t / 60)}m ${String(Math.floor(t % 60)).padStart(2, '0')}s`],
+        ['Level', `${pl.level}`],
+        ['Slain', `${pl.kills}`],
+        ['Gold', `◈ ${pl.gold}`],
+        ['Damage', Math.round(pl.damageDealt).toLocaleString()],
+      ];
+      document.getElementById('pause-stats').innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
+      this.hud.updateItems(pl.inv);
+      document.getElementById('btn-mute').textContent = `Sound: ${isMuted() ? 'off' : 'on'}`;
       document.getElementById('screen-pause').classList.remove('hidden');
+      document.body.classList.add('paused');
     } else if (!p && this.state === 'pause') {
       this.state = 'play';
       document.getElementById('screen-pause').classList.add('hidden');
+      document.body.classList.remove('paused');
       this.last = performance.now();
     }
   }
@@ -281,6 +309,9 @@ class Game {
   }
 
   clearStage() {
+    // a boss from the previous run or stage must not linger on the HUD
+    if (this.boss) this.boss.alive = false;
+    this.boss = null;
     for (const e of this.enemies) e.remove();
     for (const i of this.interactables) this.scene.remove(i.model);
     for (const p of this.pickups) p.remove();

@@ -14,7 +14,7 @@ export const CLOCK_R = 52;
 export const CH_OUT = 58;
 const WALK_OUT = 94;
 const MOAT_OUT = 100;
-const WALL_R = 103;
+export const WALL_R = 103;
 const WALL_H = 46;
 const U = CLOCK_R / 34; // clock-face layout was drawn for a 34 m face
 export const TEA_Y = -1.3;
@@ -28,6 +28,17 @@ const angDist = (a, b) => {
 };
 
 // ───────────────────────── textures ─────────────────────────
+// Riveted brass deck plates, for the plazas out in the wastes.
+export function brassPlazaMaterial() {
+  const t = plateTexture();
+  t.repeat.set(1, 1);
+  return new THREE.MeshStandardMaterial({
+    map: t, bumpMap: t, bumpScale: 2, roughness: 0.5, metalness: 0.6, color: '#e0c8a8',
+    emissive: '#3a1a06', emissiveIntensity: 0.4,
+    polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2,
+  });
+}
+
 function tex(c, { srgb = true, repeat = false } = {}) {
   const t = new THREE.CanvasTexture(c);
   if (srgb) t.colorSpace = THREE.SRGBColorSpace;
@@ -468,21 +479,26 @@ export function buildClockworks(w) {
     return o;
   };
   const t = w.theme;
-  w.bound = MOAT_OUT - 1.5;
+  // open mode: no hall around the arena — it sits in the middle of a wide
+  // wasteland (built by the garden generator) and has to be found
+  const open = !!w.arena;
   const midWalk = (CH_OUT + WALK_OUT) / 2;
-  w.spawn = { x: 0, z: midWalk };
   w.glassPos = { x: 0, z: -midWalk };
-  w.plazas = [
-    { x: 0, z: midWalk, r: 10, h: 0 },
-    { x: 0, z: 0, r: CLOCK_R, h: 0 },
-    { x: 0, z: -midWalk, r: 10, h: 0 },
-  ];
-  w.castle.visible = false;
-  w.cheshire.visible = false;
-  w.group.children.forEach((c) => {
-    if (c.geometry && c.geometry.type === 'CylinderGeometry' && c.material.map === w.assets.skyline) c.visible = false;
-  });
-  w.scene.fog.density = 0.0075;
+  if (!open) {
+    w.bound = MOAT_OUT - 1.5;
+    w.spawn = { x: 0, z: midWalk };
+    w.plazas = [
+      { x: 0, z: midWalk, r: 10, h: 0 },
+      { x: 0, z: 0, r: CLOCK_R, h: 0 },
+      { x: 0, z: -midWalk, r: 10, h: 0 },
+    ];
+    w.castle.visible = false;
+    w.cheshire.visible = false;
+    w.group.children.forEach((c) => {
+      if (c.geometry && c.geometry.type === 'CylinderGeometry' && c.material.map === w.assets.skyline) c.visible = false;
+    });
+    w.scene.fog.density = 0.0075;
+  }
 
   const clock = { sectors: [], hands: [], hurtT: 0, teaT: 0, strikes: 0 };
   w.clock = clock;
@@ -499,14 +515,25 @@ export function buildClockworks(w) {
     if (r < CLOCK_R) return clock.sectors[Math.floor(angOf(x, z) / SECTOR) % 12].y;
     if (r < CH_OUT) return onBridge(x, z) ? 0.25 : TEA_Y;
     if (r < WALK_OUT) return 0;
-    if (r < MOAT_OUT) return TEA_Y;
-    return 14;
+    if (r < MOAT_OUT) return open && onBridge(x, z) ? 0.25 : TEA_Y;
+    if (!open) return 14;
+    if (r < w.arena.r) return 0;
+    return w.gardenHeight(x, z);
   };
   w.isTea = (x, z, y) => {
     const h = w.heightFn(x, z);
     return h <= TEA_Y + 0.05 && y < TEA_Y + 0.6;
   };
   w.sampleSpot = () => {
+    if (open && rng() < 0.75) {
+      // out in the wastes
+      for (let k = 0; k < 20; k++) {
+        const x = rng.range(-88, 88) * w.S;
+        const z = rng.range(-88, 88) * w.S;
+        const d = Math.hypot(x, z);
+        if (d > w.arena.r + 4 && d < 90 * w.S) return { x, z };
+      }
+    }
     const onFace = rng() < 0.35;
     const r = onFace ? rng.range(HUB + 2, CLOCK_R - 3) : rng.range(CH_OUT + 2.5, WALK_OUT - 3);
     const a = rng() * TAU;
@@ -514,6 +541,7 @@ export function buildClockworks(w) {
   };
   w.spawnOk = (x, z) => {
     const r = Math.hypot(x, z);
+    if (open && r >= WALK_OUT - 2) return r > w.arena.r + 2 && r < 95 * w.S && !w.solidAt(x, w.height(x, z) + 0.5, z);
     return r < WALK_OUT - 2 && w.heightFn(x, z) > -0.5 && !w.solidAt(x, 0.5, z);
   };
 
@@ -571,17 +599,19 @@ export function buildClockworks(w) {
   for (let i = 0; i < wuv.count; i++) wuv.setXY(i, wpos.getX(i), wpos.getZ(i));
   walk.receiveShadow = true;
   add(walk);
-  const lip = new THREE.Mesh(disc(MOAT_OUT, WALL_R + 0.5, 3, 1), mat('#3a2a20', { roughness: 0.8 }));
-  lip.position.y = 0.4;
+  const lip = new THREE.Mesh(disc(MOAT_OUT, (open ? w.arena.r : WALL_R) + 0.5, 3, 1), mat('#3a2a20', { roughness: 0.8 }));
+  lip.position.y = open ? 0.02 : 0.4;
   add(lip);
 
   // bridges over the channel
   const grate = mat('#4a3a2a', { metalness: 0.7, roughness: 0.4 });
   const brass = mat('#c9a04a', { metalness: 0.9, roughness: 0.28 });
-  for (const b of BRIDGES) {
+  const spans = [[CLOCK_R, CH_OUT]];
+  if (open) spans.push([WALK_OUT, MOAT_OUT]);
+  for (const b of BRIDGES) for (const [r0, r1] of spans) {
     const g = new THREE.Group();
-    const bl = CH_OUT - CLOCK_R + 3;
-    const bc = (CH_OUT + CLOCK_R) / 2;
+    const bl = r1 - r0 + 3;
+    const bc = (r1 + r0) / 2;
     const deck = new THREE.Mesh(new THREE.BoxGeometry(bl, 0.5, 4.4), grate);
     deck.position.set(bc, 0.0, 0);
     deck.receiveShadow = deck.castShadow = true;
@@ -639,6 +669,8 @@ export function buildClockworks(w) {
   add(capTop);
   w.colliders.push({ x: 0, z: 0, r: 4.1, top: 1.8 });
 
+  const iron = mat('#1c1612', { metalness: 0.8, roughness: 0.45 });
+  if (!open) {
   // ── walls, windows, dome girders ──
   const wallT = wallTexture();
   wallT.map.repeat.set(15, 1);
@@ -649,7 +681,6 @@ export function buildClockworks(w) {
   );
   wall.position.y = WALL_H / 2;
   add(wall);
-  const iron = mat('#1c1612', { metalness: 0.8, roughness: 0.45 });
   for (let k = 0; k < 8; k++) {
     const arc = new THREE.Mesh(new THREE.TorusGeometry(WALL_R, 0.9, 6, 64, Math.PI), iron);
     arc.rotation.y = (k / 8) * Math.PI;
@@ -763,6 +794,8 @@ export function buildClockworks(w) {
     });
   }
 
+  }
+
   // ── teacup & top-hat conveyor along the west wall ──
   {
     const a0 = Math.PI * 0.85;
@@ -859,6 +892,7 @@ export function buildClockworks(w) {
     });
   }
 
+  if (!open) {
   // ── the Hatter, looming over the north wall ──
   const face = new THREE.Mesh(
     new THREE.PlaneGeometry(150, 150),
@@ -876,6 +910,8 @@ export function buildClockworks(w) {
     face.position.y = 78 + Math.sin(time * 0.3) * 2;
   });
   clock.face = face;
+
+  }
 
   dressClockworks(w, add, brass, iron, grate);
 
@@ -911,7 +947,9 @@ export function buildClockworks(w) {
 // Set dressing: light shafts, balcony, machinery, floor gears, chandeliers.
 function dressClockworks(w, add, brass, iron, grate) {
   const rng = w.rng;
+  const open = !!w.arena;
 
+  if (!open) {
   // ── light shafts slanting in through the windows ──
   const shaftTex = (() => {
     const c = makeCanvas(64, 256);
@@ -985,6 +1023,8 @@ function dressClockworks(w, add, brass, iron, grate) {
   add(posts);
   add(brackets);
 
+  }
+
   // ── flywheels with pumping pistons on the walkway ──
   const wheelGeo = new THREE.TorusGeometry(3.4, 0.45, 8, 36);
   const spokeGeo = new THREE.BoxGeometry(6.8, 0.3, 0.3);
@@ -1047,6 +1087,7 @@ function dressClockworks(w, add, brass, iron, grate) {
     });
   }
 
+  if (!open) {
   // ── candle-ring chandeliers hanging from the dome ──
   const flame = new THREE.MeshBasicMaterial({ color: '#ffc070' });
   const halo = new THREE.SpriteMaterial({ map: w.assets.glow, color: '#ff9a40', transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.7 });
@@ -1085,6 +1126,8 @@ function dressClockworks(w, add, brass, iron, grate) {
     w.anim.push((time) => {
       ch.rotation.y = Math.sin(time * 0.2 + ph) * 0.15;
     });
+  }
+
   }
 
   // ── embers rising off the boiling tea ──

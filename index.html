@@ -20,13 +20,18 @@
 
     <!-- top-left: portrait + bars -->
     <div id="status" class="panel">
-      <div class="portrait-wrap"><canvas id="portrait" width="128" height="128"></canvas><div id="lvl">1</div></div>
+      <div class="portrait-wrap">
+        <div id="xp-ring"></div>
+        <canvas id="portrait" width="128" height="128"></canvas>
+        <div id="lvl">1</div>
+      </div>
       <div class="bars">
-        <div class="bar hp"><div class="fill" id="hp-fill"></div><div class="ghost" id="hp-ghost"></div><span id="hp-text">110 / 110</span></div>
-        <div class="bar-label">Corruption</div>
+        <div class="bar-row"><span class="bar-tag">Vitality</span><span id="regen"></span></div>
+        <div class="bar hp"><div class="fill" id="hp-fill"></div><div class="ghost" id="hp-ghost"></div><div class="ticks"></div><span id="hp-text">110 / 110</span></div>
+        <div class="bar-row"><span class="bar-tag corr-tag">Corruption</span><span id="corr-text">0%</span></div>
         <div class="bar corr"><div class="fill" id="corr-fill"></div><div class="mark"></div></div>
         <div class="bar xp"><div class="fill" id="xp-fill"></div></div>
-        <div id="gold"><span class="coin">◈</span> <span id="gold-text">0</span> <span class="perk-hint"><kbd>Tab</kbd> Perks</span></div>
+        <div id="gold"><span class="purse"><span class="coin">◈</span> <span id="gold-text">0</span></span> <span class="perk-hint"><kbd>Tab</kbd> Perks</span></div>
       </div>
     </div>
 
@@ -34,10 +39,11 @@
     <div id="title">
       <div class="flourish">⟡ ━━━━━ <span id="stage-name">The Hollow Tea Garden</span> ━━━━━ ⟡</div>
       <div id="depth">Depth 01</div>
-      <div id="objective">Find the Looking Glass</div>
+      <div id="objective-wrap"><span class="obj-gem">◆</span><span id="objective">Find the Looking Glass</span></div>
       <div id="bossbar" class="hidden">
-        <div class="boss-name"><span id="boss-name">The White Rabbit</span> <em id="boss-sub">Herald of the Hour</em></div>
-        <div class="bar boss"><div class="fill" id="boss-fill"></div></div>
+        <div class="boss-name"><span class="boss-cap">❦</span><span id="boss-name">The White Rabbit</span><span class="boss-cap">❦</span></div>
+        <div class="boss-frame"><div class="bar boss"><div class="ghost" id="boss-ghost"></div><div class="fill" id="boss-fill"></div><span id="boss-pct">100%</span></div></div>
+        <em id="boss-sub">Herald of the Hour</em>
         <div id="boss-extra"></div>
       </div>
       <div id="charge" class="hidden"><div class="fill" id="charge-fill"></div><span id="charge-text">0%</span></div>
@@ -45,7 +51,7 @@
 
     <!-- top-right: minimap + run timer -->
     <div id="mapwrap">
-      <div class="panel map"><canvas id="minimap" width="220" height="220"></canvas></div>
+      <div class="map"><canvas id="minimap" width="220" height="220"></canvas><div class="map-ring"></div><div class="map-n">▲</div></div>
       <div id="runinfo" class="panel">
         <div id="timer">00:00</div>
         <div id="diff-bar"><div id="diff-fill"></div></div>
@@ -58,11 +64,11 @@
 
     <!-- bottom-center: skills -->
     <div id="skills">
-      <div class="skill" data-i="0"><canvas width="96" height="96"></canvas><div class="cd"></div><div class="charges"></div><label>LMB</label></div>
-      <div class="skill" data-i="1"><canvas width="96" height="96"></canvas><div class="cd"></div><div class="charges"></div><label>RMB</label></div>
-      <div class="skill" data-i="2"><canvas width="96" height="96"></canvas><div class="cd"></div><div class="charges"></div><label>SHIFT</label></div>
-      <div class="skill" data-i="3"><canvas width="96" height="96"></canvas><div class="cd"></div><div class="charges"></div><label>Q</label></div>
-      <div class="skill small" data-i="4"><canvas width="96" height="96"></canvas><div class="cd"></div><div class="charges"></div><label>R</label></div>
+      <div class="skill" data-i="0"><canvas width="96" height="96"></canvas><div class="cd"><span></span></div><div class="charges"></div><label>LMB</label></div>
+      <div class="skill" data-i="1"><canvas width="96" height="96"></canvas><div class="cd"><span></span></div><div class="charges"></div><label>RMB</label></div>
+      <div class="skill" data-i="2"><canvas width="96" height="96"></canvas><div class="cd"><span></span></div><div class="charges"></div><label>SHIFT</label></div>
+      <div class="skill" data-i="3"><canvas width="96" height="96"></canvas><div class="cd"><span></span></div><div class="charges"></div><label>Q</label></div>
+      <div class="skill small" data-i="4"><canvas width="96" height="96"></canvas><div class="cd"><span></span></div><div class="charges"></div><label>R</label></div>
     </div>
 
     <div id="crosshair"><i></i><i></i><i></i><i></i><b></b></div>
@@ -148,10 +154,41 @@
   </div>
 
   <div id="screen-pause" class="screen hidden">
-    <h2>Paused</h2>
-    <div class="subtle">A moment's tea break.</div>
-    <div id="pause-items"></div>
-    <button id="btn-resume" class="big">Resume</button>
+    <div class="pause-panel">
+      <div class="pause-head">
+        <h2>Paused</h2>
+        <div class="subtle">A moment’s tea break.</div>
+      </div>
+      <div class="pause-cols">
+        <section class="pause-card">
+          <h3>This run</h3>
+          <dl id="pause-stats"></dl>
+          <h3>Items &amp; perks</h3>
+          <div id="pause-items"></div>
+        </section>
+        <section class="pause-card">
+          <h3>Controls</h3>
+          <dl class="keys">
+            <dt>WASD</dt><dd>Move</dd>
+            <dt>Mouse</dt><dd>Aim</dd>
+            <dt>Space</dt><dd>Jump · jump again to flip</dd>
+            <dt>LMB</dt><dd>Razor Deck</dd>
+            <dt>RMB</dt><dd>Teapot Grenade</dd>
+            <dt>Shift</dt><dd>Rabbit Hop</dd>
+            <dt>R</dt><dd>Tumble (dodge roll)</dd>
+            <dt>Q</dt><dd>Madness (50+ corruption)</dd>
+            <dt>E</dt><dd>Interact · buy</dd>
+            <dt>Tab</dt><dd>Perks</dd>
+            <dt>M</dt><dd>Mute</dd>
+          </dl>
+        </section>
+      </div>
+      <div class="pause-actions">
+        <button id="btn-resume" class="big">Resume</button>
+        <button id="btn-mute" class="svc-small">Sound: on</button>
+        <button id="btn-restart-run" class="svc-small">Restart run</button>
+      </div>
+    </div>
   </div>
 
   <div id="screen-dead" class="screen hidden">

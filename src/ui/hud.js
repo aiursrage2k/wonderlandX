@@ -400,10 +400,13 @@ export class HUD {
     $('hp-fill').style.transform = `scaleX(${hpk})`;
     $('hp-ghost').style.transform = `scaleX(${hpk})`;
     this.setText('hp-text', `${Math.ceil(p.hp)} / ${Math.round(p.stats.maxHp)}`);
+    $('hp-fill').parentElement.classList.toggle('low', hpk < 0.3 && p.alive);
+    this.setText('regen', `+${p.stats.regen.toFixed(1)}/s`);
+    this.setText('corr-text', `${Math.floor(p.corruption)}%`);
     $('corr-fill').style.transform = `scaleX(${p.corruption / 100})`;
     $('corr-fill').parentElement.classList.toggle('ready', p.corruption >= 50);
     this.setText('gold-text', String(p.gold));
-    $('xp-fill').style.transform = `scaleX(${Math.min(1, p.xp / xpToNext(p.level))})`;
+    $('xp-ring').style.setProperty('--xp', `${Math.min(100, (p.xp / xpToNext(p.level)) * 100).toFixed(1)}%`);
     this.setText('lvl', String(p.level));
 
     // timer & difficulty
@@ -430,12 +433,19 @@ export class HUD {
       const ready = c.txt === '';
       s.cd.style.display = ready ? 'none' : '';
       if (!ready) {
-        s.cd.style.background = `linear-gradient(to top, rgba(5,2,8,0.35) ${c.k * 100}%, rgba(5,2,8,0.78) ${c.k * 100}%)`;
+        // radial sweep: the dark wedge shrinks clockwise as the skill recharges
+        s.cd.style.setProperty('--k', `${Math.max(0, Math.min(1, c.k)) * 100}%`);
         if (s.lastTxt !== c.txt) {
-          s.cd.textContent = c.txt;
+          s.cd.firstChild.textContent = c.txt;
           s.lastTxt = c.txt;
         }
       }
+      if (ready && s.wasCooling) {
+        s.el.classList.remove('ready-pop');
+        void s.el.offsetWidth;
+        s.el.classList.add('ready-pop');
+      }
+      s.wasCooling = !ready;
       s.charges.textContent = c.charges || '';
       s.el.classList.toggle('flash', i === 3 && p.madness > 0);
     });
@@ -518,7 +528,10 @@ export class HUD {
     if (boss) {
       this.setText('boss-name', boss.name);
       this.setText('boss-sub', boss.subtitle);
-      $('boss-fill').style.transform = `scaleX(${Math.max(0, boss.hp / boss.maxHp)})`;
+      const bk = Math.max(0, boss.hp / boss.maxHp);
+      $('boss-fill').style.transform = `scaleX(${bk})`;
+      $('boss-ghost').style.transform = `scaleX(${bk})`;
+      this.setText('boss-pct', `${Math.ceil(bk * 100)}%`);
     }
     const others = bosses.filter((e) => e !== boss);
     const ex = $('boss-extra');
@@ -589,10 +602,33 @@ export class HUD {
         x.shadowColor = glow;
         x.shadowBlur = 8;
       }
-      x.fillText(ch, Math.max(8, Math.min(S - 8, cx)), Math.max(8, Math.min(S - 8, cz)));
+      // off-map markers ride the round bezel
+      let px = cx - R;
+      let pz = cz - R;
+      const dd = Math.hypot(px, pz);
+      if (dd > R - 12) {
+        px *= (R - 12) / dd;
+        pz *= (R - 12) / dd;
+      }
+      x.fillText(ch, R + px, R + pz);
       x.restore();
     };
     x.lineWidth = 2;
+    const ar = g.world.arena;
+    if (ar && g.teleporter.discovered) {
+      // the clock arena: tea ring and face
+      const [cx, cz] = m(ar.x, ar.z);
+      x.strokeStyle = 'rgba(255,150,60,0.55)';
+      x.lineWidth = 6;
+      x.beginPath();
+      x.arc(cx, cz, 97 * scale, 0, TAU);
+      x.stroke();
+      x.fillStyle = 'rgba(120,80,40,0.35)';
+      x.beginPath();
+      x.arc(cx, cz, 52 * scale, 0, TAU);
+      x.fill();
+      x.lineWidth = 2;
+    }
     for (const pl of g.world.plazas) {
       const [cx, cz] = m(pl.x, pl.z);
       x.fillStyle = 'rgba(90,80,100,0.45)';

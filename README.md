@@ -79,13 +79,18 @@ cursor. Touch devices get a virtual stick and buttons.
   after four minutes).
 - **Stages:** 01 The Hollow Tea Garden · 02 The Mad Hatter's Clockworks · 03 The
   Crimson Throne (final). Beat the Crimson Queen and the run is won.
+- **The Clockwork Wastes** (depth 02) is as big as the Tea Garden: brass-plated
+  plazas, half-buried gears, leaning clock towers and steam pipes. The Hatter's
+  clock arena is hidden somewhere in the fog and shows on your map once you
+  reach it (or once the Cheshire Cat takes pity).
 - **The Clockworks** is a giant clock face: two enormous hands sweep the floor
   and shove you toward the boiling-tea channel (jump them, or stand on a raised
   hour). Tea scalds and slows. Its cast: Scissor-Handed Hatters, Pocket-Watch
   Spiders, and Walking Teapot Cannons. Five clockwork seals chain the Looking
   Glass: every 7 kills breaks one.
 - **The Crimson Throne** is a multi-boss finale in a round throne hall of
-  polished marble under an eclipse. Touch the Queen's Mirror to face her court:
+  polished marble under an eclipse. The hall is empty until you touch the
+  Queen's Mirror to summon her court:
   the Queen of Hearts and two Knights of Hearts (shield charges, halberd
   cleaves, a raised shield that turns aside frontal hits). When all three fall,
   the hall cracks open and **the Crimson Queen** rises from the abyss: Talon

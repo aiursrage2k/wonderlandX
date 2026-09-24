@@ -1192,6 +1192,8 @@ export class Director {
 
   update(dt) {
     const g = this.game;
+    // the final hall is silent until the Queen is summoned; her court brings its own
+    if (g.world.theme.final && !(g.teleporter && g.teleporter.court)) return;
     const coeff = g.difficulty();
     const event = g.teleporter && g.teleporter.state === 'charging';
     this.credits += dt * (1.9 + 1.1 * coeff) * (event ? 1.8 : 1);

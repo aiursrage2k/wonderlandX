@@ -585,9 +585,12 @@ export class LookingGlass {
     if (!this.discovered) {
       const d = Math.hypot(g.player.pos.x - this.pos.x, g.player.pos.z - this.pos.z);
       const small = (g.world.S || 1) <= 1;
-      if (small || d < 60) {
+      const ar = g.world.arena;
+      const found = ar ? Math.hypot(g.player.pos.x - ar.x, g.player.pos.z - ar.z) < ar.r + 25 : d < 60;
+      if (small || found) {
         this.discovered = true;
-        if (!small) g.hud.banner('The Looking Glass', 'There it is — marked on your map.', '#ff8aa0', '🪞');
+        if (ar) g.hud.banner('The Mad Hatter’s Clockworks', 'The great clock ticks in the fog. The Looking Glass is on your map.', '#ffb040', '🕰️');
+        else if (!small) g.hud.banner('The Looking Glass', 'There it is — marked on your map.', '#ff8aa0', '🪞');
       } else if (g.stageTime > 240) {
         this.discovered = true;
         g.hud.banner('The Cheshire Cat whispers…', '“Lost, are we? It’s where the light is.” The Glass is on your map.', '#c080ff', '😸');

@@ -8,14 +8,15 @@ import {
 } from '../gfx/textures.js';
 import { mat } from '../gfx/models.js';
 import { RIM } from '../gfx/rim.js';
-import { buildClockworks } from './clockworks.js';
+import { buildClockworks, brassPlazaMaterial, WALL_R } from './clockworks.js';
+import { buildWastes } from './wastes.js';
 import { buildThrone } from './throne.js';
 
 const GARDEN_FOES = ['guard', 'diamond', 'teacup', 'wisp'];
 const CLOCK_FOES = ['hatter', 'spider', 'cannon'];
 export const STAGES = [
   { name: 'The Hollow Tea Garden', kind: 'garden', size: 2, boss: 'rabbit', enemies: GARDEN_FOES, summon: 'guard', fog: '#35204a', skyTop: '#0c0620', skyHor: '#7a3a96', glow: '#3ff5dc', glow2: '#ff3fbf', moon: '#d8c8ff' },
-  { name: 'The Mad Hatter’s Clockworks', kind: 'clockworks', seals: 5, boss: 'madhatter', enemies: CLOCK_FOES, summon: 'spider', fog: '#2a1a12', skyTop: '#070a1c', skyHor: '#40305e', glow: '#ff9a30', glow2: '#b060ff', moon: '#dcd0ff' },
+  { name: 'The Mad Hatter’s Clockworks', kind: 'clockworks', open: true, size: 2, seals: 5, boss: 'madhatter', enemies: CLOCK_FOES, summon: 'spider', fog: '#2a1a12', skyTop: '#070a1c', skyHor: '#40305e', glow: '#ff9a30', glow2: '#b060ff', moon: '#dcd0ff' },
   { name: 'The Crimson Throne', kind: 'throne', final: true, loot: 0.45, boss: 'queen', enemies: ['guard', 'diamond'], summon: 'guard', fog: '#2a0c1a', skyTop: '#0a0214', skyHor: '#6a1a4a', glow: '#ff3050', glow2: '#b040ff', moon: '#e0c0ff' },
 ];
 
@@ -98,6 +99,26 @@ export class World {
     this.S = this.theme.size || 1; // linear scale of the garden
     this.A = this.S * this.S; // area factor for prop counts
 
+    if (this.theme.kind === 'clockworks' && this.theme.open) {
+      // the clock arena, open to the sky, somewhere in a wide wasteland
+      this.arena = { x: 0, z: 0, r: WALL_R + 4 };
+      this.planLayout();
+      this.buildSky();
+      buildClockworks(this);
+      this.buildTerrain();
+      this.buildPlazas();
+      this.buildMushrooms();
+      this.buildTrees();
+      this.buildRocks();
+      this.buildHedges();
+      this.buildTeacups();
+      this.buildClocks();
+      this.buildLanterns();
+      this.buildFloatingCards();
+      buildWastes(this);
+      this.buildGrid();
+      return;
+    }
     if (this.theme.kind === 'clockworks' || this.theme.kind === 'throne') {
       this.buildSky();
       (this.theme.kind === 'throne' ? buildThrone : buildClockworks)(this);
@@ -137,6 +158,11 @@ export class World {
     const r = this.rng;
     const S = this.S;
     this.spawn = { x: r.range(-20, 20) * S, z: r.range(55, 75) * S };
+    if (this.arena) {
+      // start out on the rim of the wastes; the arena is somewhere in the fog
+      const a = r.range(0, TAU);
+      this.spawn = { x: Math.cos(a) * 80 * S, z: Math.sin(a) * 80 * S };
+    }
     // Looking glass placed far from spawn
     const a = r.range(0, TAU);
     // the Looking Glass hides deep on the far side of the garden
@@ -144,11 +170,13 @@ export class World {
       ? { x: r.range(-0.55, 0.55) * 88 * S, z: -r.range(0.55, 0.78) * 88 * S }
       : { x: Math.cos(a) * 25 + r.range(-10, 10), z: -60 + Math.sin(a) * 15 };
     this.plazas.push({ x: this.spawn.x, z: this.spawn.z, r: 14 });
-    this.plazas.push({ x: this.glassPos.x, z: this.glassPos.z, r: 20 });
+    if (!this.arena) this.plazas.push({ x: this.glassPos.x, z: this.glassPos.z, r: 20 });
+    else this.glassPos = { x: 0, z: 0 };
     let tries = 0;
     while (this.plazas.length < Math.round(9 * this.A * 0.65) && tries++ < 600) {
       const p = { x: r.range(-90, 90) * S, z: r.range(-90, 90) * S, r: r.range(9, 18) };
       if (Math.hypot(p.x, p.z) > 92 * S) continue;
+      if (this.arena && Math.hypot(p.x - this.arena.x, p.z - this.arena.z) < this.arena.r + p.r + 12) continue;
       if (this.plazas.some((q) => Math.hypot(q.x - p.x, q.z - p.z) < q.r + p.r + 8)) continue;
       this.plazas.push(p);
     }
@@ -178,6 +206,11 @@ export class World {
 
   gardenHeight(x, z) {
     let h = this.rawHeight(x, z);
+    if (this.arena) {
+      // the land levels out into the arena's rim
+      const d = Math.hypot(x - this.arena.x, z - this.arena.z) - this.arena.r;
+      if (d < 16) h *= d <= 0 ? 0 : smooth(d / 16);
+    }
     for (const p of this.plazas) {
       const d = Math.hypot(x - p.x, z - p.z);
       if (d < p.r + 10) {
@@ -188,7 +221,13 @@ export class World {
     return h;
   }
 
+  // inside the open Clockworks arena (plus a margin)?
+  inArena(x, z, pad = 0) {
+    return !!this.arena && Math.hypot(x - this.arena.x, z - this.arena.z) < this.arena.r + pad;
+  }
+
   onPlaza(x, z) {
+    if (this.arena && Math.hypot(x - this.arena.x, z - this.arena.z) < this.arena.r + 3) return true;
     return this.plazas.some((p) => Math.hypot(x - p.x, z - p.z) < p.r * 0.9);
   }
 
@@ -308,6 +347,7 @@ export class World {
       if (!this.sampleSpot && Math.hypot(x, z) > 90 * this.S) continue;
       if (this.colliders.some((c) => Math.hypot(c.x - x, c.z - z) < c.r + minClear)) continue;
       if (avoid.some((a) => Math.hypot(a.x - x, a.z - z) < (a.r || 6))) continue;
+      if (this.arena && Math.hypot(this.arena.x - x, this.arena.z - z) < this.arena.r + minClear + 2) continue;
       return { x, z };
     }
     return this.sampleSpot ? this.sampleSpot() : { x: this.rng.range(-50, 50), z: this.rng.range(-50, 50) };
@@ -492,6 +532,8 @@ export class World {
       const x = pos.getX(i);
       const z = pos.getZ(i);
       let h = this.height(x, z);
+      // inside the open arena the terrain drops away under the clockwork floor
+      if (this.arena && Math.hypot(x - this.arena.x, z - this.arena.z) < this.arena.r - 1) h = -8;
       // tuck the terrain under the marble so the two never z-fight
       for (const p of this.plazas) {
         const d = Math.hypot(x - p.x, z - p.z);
@@ -530,6 +572,7 @@ export class World {
       polygonOffsetFactor: -1,
       polygonOffsetUnits: -2,
     });
+    const plazaMat = this.arena ? brassPlazaMaterial() : matP;
     for (const p of this.plazas) {
       const seg = 64;
       const rings = 6;
@@ -563,7 +606,7 @@ export class World {
       g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
       g.setIndex(idx);
       g.computeVertexNormals();
-      const m = new THREE.Mesh(g, matP);
+      const m = new THREE.Mesh(g, plazaMat);
       m.position.set(p.x, p.h, p.z);
       m.receiveShadow = true;
       this.add(m);
@@ -819,6 +862,7 @@ export class World {
     const matR = this.rockMaterial();
     const per = geos.map(() => []);
     const place = (x, z, size, tilt = 0.25) => {
+      if (this.inArena(x, z, 2)) return;
       const y = this.height(x, z);
       // big rocks get the finer meshes, pebbles the coarse ones
       const v = (size > 1.3 ? 0 : 2) + Math.floor(this.rng() * 2);
@@ -899,6 +943,7 @@ export class World {
     let bn = 0;
     // hedges hug the plaza rims and the world edge
     const place = (x, z, s) => {
+      if (this.inArena(x, z, 3)) return;
       if (this.colliders.some((c) => Math.hypot(c.x - x, c.z - z) < c.r + s)) return;
       const y = this.height(x, z);
       d.position.set(x, y + s * 0.35, z);
