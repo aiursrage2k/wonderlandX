@@ -264,7 +264,7 @@ export class LookingGlass {
     // stepped dais is walkable
     const base = y;
     game.world.platforms = [5.2, 4.3, 3.4, 2.5].map((r, i) => ({ x, z, r, h: base + 0.35 * (i + 1) }));
-    game.world.colliders.push({ x, z, r: 1.4, top: y + 8 });
+    game.world.addCollider({ x, z, r: 1.4, top: y + 8 });
   }
 
   label() {

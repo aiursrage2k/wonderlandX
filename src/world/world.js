@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { makeRng, TAU, clamp, smooth } from '../engine/util.js';
 import {
   marbleChecker, groundTexture, barkTexture, gillsTexture, capTexture, porcelainTexture,
-  clockFaceTexture, cardTexture, moonTexture, cheshireTexture, skylineTexture, glowTexture,
+  clockFaceTexture, cardTexture, moonTexture, cheshireTexture, skylineTexture, glowTexture, rockTexture, leafTexture,
 } from '../gfx/textures.js';
 import { mat } from '../gfx/models.js';
 import { RIM } from '../gfx/rim.js';
@@ -34,6 +34,8 @@ function sharedAssets() {
     cheshire: cheshireTexture(),
     skyline: skylineTexture(9),
     glow: glowTexture(),
+    rock: rockTexture(61),
+    leaf: leafTexture(13),
   };
   return shared;
 }
@@ -61,12 +63,14 @@ export class World {
     this.buildPlazas();
     this.buildMushrooms();
     this.buildTrees();
+    this.buildRocks();
     this.buildHedges();
     this.buildTeacups();
     this.buildClocks();
     this.buildLanterns();
     this.buildFloatingCards();
     this.buildLights();
+    this.buildGrid();
   }
 
   dispose() {
@@ -106,7 +110,7 @@ export class World {
       + 1.3 * Math.sin(x * 0.09 + z * 0.07 + s * 1.3)
       + 0.6 * Math.sin(x * 0.21 - z * 0.17 + s * 2.1);
     const d = Math.hypot(x, z);
-    if (d > 96) h += (d - 96) ** 2 * 0.09;
+    if (d > 96) h += Math.min(14, (d - 96) ** 2 * 0.06) + Math.max(0, d - 120) * 0.2;
     return h;
   }
 
@@ -152,10 +156,51 @@ export class World {
   }
 
   // Push a circle out of solid props. Returns true if it collided.
+  // ─── collision grid ───
+  buildGrid() {
+    this.grid = new Map();
+    this.stamp = 0;
+    for (const c of this.colliders) this.insertGrid(c);
+  }
+
+  insertGrid(c) {
+    const k = 6;
+    for (let gx = Math.floor((c.x - c.r) / k); gx <= Math.floor((c.x + c.r) / k); gx++) {
+      for (let gz = Math.floor((c.z - c.r) / k); gz <= Math.floor((c.z + c.r) / k); gz++) {
+        const key = gx * 1000 + gz;
+        let cell = this.grid.get(key);
+        if (!cell) this.grid.set(key, (cell = []));
+        cell.push(c);
+      }
+    }
+  }
+
+  addCollider(c) {
+    this.colliders.push(c);
+    if (this.grid) this.insertGrid(c);
+  }
+
+  // Visit each collider whose cell overlaps the circle (x, z, r) once.
+  near(x, z, r, fn) {
+    const k = 6;
+    const stamp = ++this.stamp;
+    for (let gx = Math.floor((x - r) / k); gx <= Math.floor((x + r) / k); gx++) {
+      for (let gz = Math.floor((z - r) / k); gz <= Math.floor((z + r) / k); gz++) {
+        const cell = this.grid.get(gx * 1000 + gz);
+        if (!cell) continue;
+        for (const c of cell) {
+          if (c._q === stamp) continue;
+          c._q = stamp;
+          fn(c);
+        }
+      }
+    }
+  }
+
   collide(pos, radius, y = 0) {
     let hit = false;
-    for (const c of this.colliders) {
-      if (y > c.top) continue;
+    this.near(pos.x, pos.z, radius, (c) => {
+      if (y > c.top) return;
       const dx = pos.x - c.x;
       const dz = pos.z - c.z;
       const rr = c.r + radius;
@@ -166,7 +211,7 @@ export class World {
         pos.z = c.z + (dz / d) * rr;
         hit = true;
       }
-    }
+    });
     const d = Math.hypot(pos.x, pos.z);
     if (d > HALF - 12) {
       pos.x *= (HALF - 12) / d;
@@ -184,11 +229,12 @@ export class World {
   }
 
   solidAt(x, y, z) {
-    for (const c of this.colliders) {
-      if (y > c.top) continue;
-      if ((x - c.x) ** 2 + (z - c.z) ** 2 < c.r * c.r) return true;
-    }
-    return false;
+    if (!this.grid) return this.colliders.some((c) => y <= c.top && (x - c.x) ** 2 + (z - c.z) ** 2 < c.r * c.r);
+    let hit = false;
+    this.near(x, z, 0, (c) => {
+      if (!hit && y <= c.top && (x - c.x) ** 2 + (z - c.z) ** 2 < c.r * c.r) hit = true;
+    });
+    return hit;
   }
 
   freeSpot(minClear = 3, avoid = [], tries = 80) {
@@ -211,36 +257,73 @@ export class World {
   // ─── sky ───
   buildSky() {
     const t = this.theme;
+    const moonDir = new THREE.Vector3(140, 175, -320).normalize();
     const skyMat = new THREE.ShaderMaterial({
       side: THREE.BackSide,
       depthWrite: false,
       fog: false,
-      uniforms: { top: { value: new THREE.Color(t.skyTop) }, hor: { value: new THREE.Color(t.skyHor) }, time: { value: 0 } },
+      uniforms: {
+        top: { value: new THREE.Color(t.skyTop) },
+        hor: { value: new THREE.Color(t.skyHor) },
+        moonCol: { value: new THREE.Color(t.moon) },
+        glow: { value: new THREE.Color(t.glow2) },
+        moonDir: { value: moonDir },
+        time: { value: 0 },
+      },
       vertexShader: `varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
       fragmentShader: `
-        varying vec3 vDir; uniform vec3 top; uniform vec3 hor; uniform float time;
+        varying vec3 vDir;
+        uniform vec3 top, hor, moonCol, glow, moonDir; uniform float time;
         float hash(vec3 p){ p = fract(p*0.3183099+.1); p *= 17.0; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
+        float noise(vec3 x){
+          vec3 i = floor(x); vec3 f = fract(x); f = f*f*(3.0-2.0*f);
+          return mix(mix(mix(hash(i+vec3(0,0,0)),hash(i+vec3(1,0,0)),f.x), mix(hash(i+vec3(0,1,0)),hash(i+vec3(1,1,0)),f.x),f.y),
+                     mix(mix(hash(i+vec3(0,0,1)),hash(i+vec3(1,0,1)),f.x), mix(hash(i+vec3(0,1,1)),hash(i+vec3(1,1,1)),f.x),f.y), f.z);
+        }
+        float fbm(vec3 p){ float a = 0.5, s = 0.0; for(int i=0;i<5;i++){ s += a*noise(p); p *= 2.03; a *= 0.5; } return s; }
         void main(){
-          float h = clamp(vDir.y, -0.2, 1.0);
-          vec3 c = mix(hor, top, smoothstep(0.0, 0.75, h));
-          c += hor * 0.6 * exp(-abs(h)*7.0);
-          // violet nebula wash in the moon's quarter
-          float neb = max(0.0, dot(normalize(vDir.xz), normalize(vec2(0.4,-1.0))));
-          c += hor * 0.35 * pow(neb, 3.0) * smoothstep(0.05, 0.4, h) * (1.0 - h);
-          vec3 q = floor(vDir*420.0);
-          float s = hash(q);
-          float star = step(0.9975, s) * smoothstep(0.05, 0.4, h) * (0.6+0.4*sin(time*2.0+s*50.0));
-          c += vec3(star);
-          // swirling cloud bands
-          float band = sin(vDir.x*6.0 + vDir.z*4.0 + time*0.03) * sin(vDir.z*9.0 - vDir.x*3.0);
-          c += hor * 0.12 * smoothstep(0.2, 1.0, band) * smoothstep(0.0, 0.3, h) * (1.0-h);
+          vec3 d = normalize(vDir);
+          float h = clamp(d.y, -0.2, 1.0);
+          float md = max(dot(d, moonDir), 0.0);
+          // base gradient with a bright horizon band
+          vec3 c = mix(hor, top, smoothstep(0.0, 0.8, h));
+          c += hor * 0.45 * exp(-abs(h) * 6.0);
+          // moon halo: wide soft bloom + tight corona
+          c += moonCol * (0.16 * pow(md, 14.0) + 0.8 * pow(md, 110.0));
+          c += hor * 0.3 * pow(md, 4.0) * smoothstep(-0.05, 0.3, h);
+          // stars, hidden behind cloud
+          vec3 q = floor(d * 520.0);
+          float sh = hash(q);
+          float star = step(0.9965, sh) * smoothstep(0.08, 0.45, h) * (0.55 + 0.45 * sin(time * 2.5 + sh * 70.0));
+          // clouds: two drifting layers projected onto a dome
+          vec2 uv = d.xz / (h + 0.18);
+          float t = time * 0.012;
+          float cl = fbm(vec3(uv * 1.1 + vec2(t, t * 0.4), t * 0.5));
+          float cl2 = fbm(vec3(uv * 2.6 - vec2(t * 1.7, 0.0), 3.0 + t));
+          float cover = smoothstep(0.42, 0.78, cl * 0.75 + cl2 * 0.4);
+          cover *= smoothstep(-0.02, 0.18, h) * (1.0 - smoothstep(0.75, 1.0, h) * 0.5);
+          // cloud shading: dark bellies, moon-lit silver edges, violet underglow near the horizon
+          vec3 cloudCol = mix(top * 0.5, hor * 0.65, smoothstep(0.3, 0.9, cl2));
+          cloudCol += moonCol * 0.55 * pow(md, 8.0) * (1.0 - cl);
+          cloudCol += glow * 0.18 * exp(-h * 5.0);
+          float edge = smoothstep(0.35, 0.55, cl * 0.75 + cl2 * 0.4) - smoothstep(0.55, 0.8, cl * 0.75 + cl2 * 0.4);
+          cloudCol += moonCol * edge * 0.6 * pow(md, 2.0);
+          c = mix(c + vec3(star), cloudCol, cover * 0.9);
+          // faint aurora ribbon
+          float rib = sin(d.x * 5.0 + time * 0.05 + sin(d.z * 3.0 + time * 0.03) * 2.0);
+          float aur = exp(-pow((h - 0.38 - rib * 0.06) * 14.0, 2.0)) * smoothstep(0.2, 0.9, noise(vec3(d.xz * 4.0, time * 0.05)));
+          c += glow * aur * 0.22 * (1.0 - cover);
+          // below the horizon: sink into the fog
+          c = mix(c, hor * 0.45, smoothstep(0.0, -0.15, d.y));
           gl_FragColor = vec4(c, 1.0);
         }`,
     });
     this.skyMat = skyMat;
-    const sky = new THREE.Mesh(new THREE.SphereGeometry(480, 32, 16), skyMat);
+    const sky = new THREE.Mesh(new THREE.SphereGeometry(480, 48, 24), skyMat);
     sky.renderOrder = -10;
     this.add(sky);
+    this.sky = sky;
+    this.buildCastle();
 
     const moon = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.assets.moon, fog: false, color: t.moon, depthWrite: false }));
     moon.scale.set(170, 170, 1);
@@ -264,6 +347,68 @@ export class World {
 
     this.scene.fog = new THREE.FogExp2(t.fog, 0.0135);
     this.scene.background = new THREE.Color(t.fog);
+  }
+
+
+  // A distant gothic castle under the moon: layered silhouette with lit windows.
+  buildCastle() {
+    const W = 2048;
+    const H = 1024;
+    const c = document.createElement('canvas');
+    c.width = W;
+    c.height = H;
+    const x = c.getContext('2d');
+    const rng = makeRng(this.seed ^ 0xca57);
+    const fogC = new THREE.Color(this.theme.fog);
+    const layer = (shade, scale, baseY, count, lit) => {
+      x.fillStyle = `rgb(${(fogC.r * 255 * shade) | 0},${(fogC.g * 255 * shade) | 0},${(fogC.b * 255 * shade) | 0})`;
+      const windows = [];
+      for (let i = 0; i < count; i++) {
+        const cx = W * 0.2 + rng() * W * 0.6;
+        const w = (30 + rng() * 70) * scale;
+        const h = (150 + rng() * 380) * scale * (1 - Math.abs(cx / W - 0.5) * 1.2);
+        const top = baseY - h;
+        x.fillRect(cx - w / 2, top, w, H - top);
+        // spire or crenellations
+        if (rng() < 0.65) {
+          x.beginPath();
+          x.moveTo(cx - w / 2 - 6 * scale, top);
+          x.lineTo(cx, top - (60 + rng() * 140) * scale);
+          x.lineTo(cx + w / 2 + 6 * scale, top);
+          x.fill();
+        } else {
+          for (let k = 0; k < 4; k++) x.fillRect(cx - w / 2 + (k * w) / 4, top - 12 * scale, w / 8, 12 * scale);
+        }
+        for (let k = 0; k < 3 + rng() * 6; k++) windows.push([cx + (rng() - 0.5) * w * 0.6, top + 20 * scale + rng() * h * 0.7]);
+      }
+      // connecting walls and a great arched gate on the front layer
+      x.fillRect(W * 0.18, baseY - 110 * scale, W * 0.64, H);
+      if (lit) {
+        for (const [wx, wy] of windows) {
+          if (rng() < 0.45) continue;
+          x.fillStyle = `rgba(255,${150 + rng() * 60},${70 + rng() * 40},${0.6 + rng() * 0.4})`;
+          x.fillRect(wx, wy, 4 * scale, 8 * scale);
+        }
+        x.fillStyle = 'rgba(255,60,90,0.8)';
+        x.beginPath();
+        x.moveTo(W / 2 - 18, baseY - 110 * scale + 10);
+        x.bezierCurveTo(W / 2 - 40, baseY - 140 * scale, W / 2 - 10, baseY - 150 * scale, W / 2, baseY - 128 * scale);
+        x.bezierCurveTo(W / 2 + 10, baseY - 150 * scale, W / 2 + 40, baseY - 140 * scale, W / 2 + 18, baseY - 110 * scale + 10);
+        x.fill();
+      }
+    };
+    layer(0.85, 1.25, H * 0.95, 9, false);
+    layer(0.45, 1.0, H, 12, true);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const m = new THREE.Mesh(
+      new THREE.PlaneGeometry(420, 210),
+      new THREE.MeshBasicMaterial({ map: tex, transparent: true, fog: false, depthWrite: false, alphaTest: 0.02 }),
+    );
+    m.renderOrder = -8;
+    this.add(m);
+    this.castle = m;
+    // alpha from luminance-free shapes: anything not drawn stays transparent
   }
 
   // ─── terrain ───
@@ -356,8 +501,17 @@ export class World {
       this.add(m);
 
       // stone rim fragments + a broken balustrade on some
-      const rimMat = mat('#4a4150', { roughness: 0.8 });
-      const rimGeo = new THREE.BoxGeometry(1.4, 0.35, 0.5);
+      const rimMat = this.rockMaterial();
+      const rimGeo = this.rimGeo ||= (() => {
+        const g = new THREE.BoxGeometry(1.4, 0.4, 0.55, 6, 2, 3);
+        const q = g.attributes.position;
+        for (let i = 0; i < q.count; i++) {
+          const n = Math.sin(q.getX(i) * 9.1 + q.getZ(i) * 5.3) * 0.03 + Math.sin(q.getY(i) * 13.7 + q.getX(i) * 3.1) * 0.025;
+          q.setXYZ(i, q.getX(i) * (1 + n), q.getY(i) + (q.getY(i) > 0 ? n : 0), q.getZ(i) * (1 + n * 2));
+        }
+        g.computeVertexNormals();
+        return g;
+      })();
       const count = Math.floor(p.r * 2.2);
       const rim = new THREE.InstancedMesh(rimGeo, rimMat, count);
       const dummy = new THREE.Object3D();
@@ -372,6 +526,7 @@ export class World {
         dummy.rotation.set((this.rng() - 0.5) * 0.2, -a + Math.PI / 2, (this.rng() - 0.5) * 0.2);
         dummy.updateMatrix();
         rim.setMatrixAt(n++, dummy.matrix);
+        this.colliders.push({ x, z, r: 0.6, top: this.height(x, z) + 0.35, low: true });
       }
       rim.count = n;
       rim.castShadow = rim.receiveShadow = true;
@@ -549,16 +704,119 @@ export class World {
     }
   }
 
+
+  rockMaterial() {
+    if (!this.assets.rockMat) {
+      const { map, bump } = this.assets.rock;
+      this.assets.rockMat = new THREE.MeshStandardMaterial({ map, bumpMap: bump, bumpScale: 6, roughness: 0.85, color: '#e0d8e4' });
+    }
+    return this.assets.rockMat;
+  }
+
+  rockGeometries() {
+    if (this.assets.rockGeos) return this.assets.rockGeos;
+    const geos = [];
+    for (let v = 0; v < 4; v++) {
+      const g = new THREE.IcosahedronGeometry(1, v < 2 ? 3 : 2);
+      const q = g.attributes.position;
+      const ph = v * 12.7;
+      const vec = new THREE.Vector3();
+      for (let i = 0; i < q.count; i++) {
+        vec.fromBufferAttribute(q, i);
+        const n = 0.22 * Math.sin(vec.x * 2.1 + ph) * Math.cos(vec.z * 1.7 - ph)
+          + 0.12 * Math.sin(vec.y * 4.3 + vec.x * 3.1 + ph)
+          + 0.06 * Math.sin(vec.x * 9.7 + vec.z * 8.3 + ph * 2)
+          + 0.03 * Math.sin(vec.y * 17.0 + vec.z * 15.0);
+        vec.multiplyScalar(1 + n);
+        // facet-y chiselled planes
+        if (vec.y > 0.8) vec.y = 0.8 + (vec.y - 0.8) * 0.5;
+        if (vec.y < -0.1) vec.y = -0.1 + (vec.y + 0.1) * 0.25; // flat, sunk base
+        vec.x *= 1 + v * 0.12;
+        q.setXYZ(i, vec.x, vec.y, vec.z);
+      }
+      g.computeVertexNormals();
+      geos.push(g);
+    }
+    this.assets.rockGeos = geos;
+    return geos;
+  }
+
+  // Boulder clusters and scattered stones — all solid.
+  buildRocks() {
+    const geos = this.rockGeometries();
+    const matR = this.rockMaterial();
+    const per = geos.map(() => []);
+    const place = (x, z, size, tilt = 0.25) => {
+      const y = this.height(x, z);
+      // big rocks get the finer meshes, pebbles the coarse ones
+      const v = (size > 1.3 ? 0 : 2) + Math.floor(this.rng() * 2);
+      const sy = size * this.rng.range(0.85, 1.35);
+      per[v].push({ x, y: y - size * 0.08, z, sx: size * this.rng.range(0.8, 1.25), sy, sz: size * this.rng.range(0.8, 1.2), ry: this.rng() * TAU, rx: (this.rng() - 0.5) * tilt, rz: (this.rng() - 0.5) * tilt });
+      this.colliders.push({ x, z, r: size * 0.95, top: y + sy * 0.8, low: size < 1.2 });
+      if (size > 1.8) (this.boulders ||= []).push({ x, z, size });
+    };
+    const avoid = [...this.plazas.map((p) => ({ x: p.x, z: p.z, r: p.r + 1 })), { ...this.glassPos, r: 24 }];
+    // boulder clusters
+    for (let i = 0; i < 18; i++) {
+      const s = this.freeSpot(5, avoid);
+      const n = 2 + Math.floor(this.rng() * 4);
+      for (let k = 0; k < n; k++) {
+        const a = this.rng() * TAU;
+        const d = k === 0 ? 0 : this.rng.range(1.5, 4);
+        const size = k === 0 ? this.rng.range(1.8, 3.4) : this.rng.range(0.6, 1.6);
+        const x = s.x + Math.cos(a) * d;
+        const z = s.z + Math.sin(a) * d;
+        if (this.colliders.some((c) => !c.low && Math.hypot(c.x - x, c.z - z) < c.r + size * 0.5)) continue;
+        place(x, z, size);
+      }
+    }
+    // loose stones, some on plaza edges
+    for (let i = 0; i < 140; i++) {
+      let x;
+      let z;
+      if (i < 50) {
+        const p = this.plazas[Math.floor(this.rng() * this.plazas.length)];
+        const a = this.rng() * TAU;
+        const r = p.r * this.rng.range(0.95, 1.4);
+        x = p.x + Math.cos(a) * r;
+        z = p.z + Math.sin(a) * r;
+      } else {
+        x = this.rng.range(-92, 92);
+        z = this.rng.range(-92, 92);
+        if (this.onPlaza(x, z)) continue;
+      }
+      if (Math.hypot(x - this.glassPos.x, z - this.glassPos.z) < 7 || Math.hypot(x - this.spawn.x, z - this.spawn.z) < 5) continue;
+      if (this.colliders.some((c) => Math.hypot(c.x - x, c.z - z) < c.r + 0.4)) continue;
+      place(x, z, this.rng.range(0.3, 1.0), 0.6);
+    }
+    const d = new THREE.Object3D();
+    per.forEach((list, v) => {
+      if (!list.length) return;
+      const im = new THREE.InstancedMesh(geos[v], matR, list.length);
+      list.forEach((r, i) => {
+        d.position.set(r.x, r.y, r.z);
+        d.rotation.set(r.rx, r.ry, r.rz);
+        d.scale.set(r.sx, r.sy, r.sz);
+        d.updateMatrix();
+        im.setMatrixAt(i, d.matrix);
+      });
+      im.castShadow = im.receiveShadow = true;
+      this.add(im);
+    });
+  }
+
   // ─── rose hedges ───
   buildHedges() {
-    const bushGeo = new THREE.IcosahedronGeometry(1, 1);
+    const bushGeo = new THREE.IcosahedronGeometry(1, 2);
     const bp = bushGeo.attributes.position;
     for (let i = 0; i < bp.count; i++) {
-      const k = 0.85 + Math.random() * 0.3;
+      const k = 0.88 + Math.sin(bp.getX(i) * 7 + bp.getY(i) * 5) * 0.08 + Math.sin(bp.getZ(i) * 11) * 0.05;
       bp.setXYZ(i, bp.getX(i) * k, bp.getY(i) * k, bp.getZ(i) * k);
     }
     bushGeo.computeVertexNormals();
-    const bushMat = new THREE.MeshStandardMaterial({ color: '#12241a', roughness: 0.9, flatShading: true });
+    const leaf = this.assets.leaf;
+    leaf.repeat.set(2, 2);
+    const bushMat = new THREE.MeshStandardMaterial({ map: leaf, bumpMap: leaf, bumpScale: 3, color: '#b8d0c0', roughness: 0.55 });
     const roseGeo = new THREE.IcosahedronGeometry(0.16, 0);
     const roseMat = new THREE.MeshStandardMaterial({ color: '#9a0a1a', roughness: 0.45, emissive: '#3a0008' });
     const N = 340;
@@ -577,6 +835,7 @@ export class World {
       d.updateMatrix();
       bushes.setMatrixAt(bn++, d.matrix);
       this.camBlockers.push({ x, z, r: s * 1.1, top: y + s * 1.2 });
+      this.colliders.push({ x, z, r: s * 0.95, top: y + s * 1.0, low: true });
       for (let k = 0; k < 6; k++) {
         const a = this.rng() * TAU;
         const e = this.rng() * 1.2;
@@ -812,6 +1071,9 @@ export class World {
     this.cheshire.material.opacity = 0.45 + 0.4 * (0.5 + 0.5 * Math.sin(t * 0.25));
     // celestial props ride along with the player so they sit at a fixed sky angle
     this.moon.position.set(focus.x + 140, 175, focus.z - 320);
+    this.sky.position.set(focus.x, 0, focus.z);
+    this.castle.position.set(focus.x + 110, 70, focus.z - 330);
+    this.castle.lookAt(focus.x, 70, focus.z);
     this.cheshire.position.set(focus.x - 90, 150, focus.z + 360);
     // shadow frustum follows the player
     this.sun.position.set(focus.x + 60, focus.y + 90, focus.z - 70);

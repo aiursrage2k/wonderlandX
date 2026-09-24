@@ -108,7 +108,7 @@ function assets() {
     socket: new THREE.MeshStandardMaterial({ color: '#180a0e', roughness: 0.9 }),
     nose: new THREE.MeshPhysicalMaterial({ color: '#7a2a3a', roughness: 0.3, clearcoat: 1 }),
     gums: new THREE.MeshStandardMaterial({ color: '#4a0e18', roughness: 0.5 }),
-    glass: new THREE.MeshPhysicalMaterial({ color: '#ffffff', roughness: 0.05, transmission: 0.6, transparent: true, opacity: 0.35 }),
+    glass: new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.05, metalness: 0.5, transparent: true, opacity: 0.25 }),
     face: new THREE.MeshStandardMaterial({ map: clock, emissive: '#ffcf8a', emissiveMap: clock, emissiveIntensity: 0.45, roughness: 0.4 }),
     whisker: new THREE.MeshBasicMaterial({ color: '#e8e0d8' }),
     dark: new THREE.MeshStandardMaterial({ color: '#120808' }),

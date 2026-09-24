@@ -76,7 +76,8 @@ class Enemy {
       this.vel.addScaledVector(tmp, (crit ? 2.5 : 1.2) / this.scale);
     }
     const c = this.hitCenter(tmp2);
-    this.game.fx.burst(c, crit ? 10 : 5, this.bloodColor || '#b01020', { matter: true, speed: 5, size: 0.18, life: 0.6, g: 14 });
+    if (dir) (this.lastHitDir ||= new THREE.Vector3()).copy(dir);
+    this.game.gore.spray(c, dir, crit ? 14 : 7, this.bloodColor || '#9a0c18');
     if (this.state === 'spawn') this.state = 'chase';
     if (this.hp <= 0) this.die();
     return dmg;
@@ -341,10 +342,8 @@ export class CardGuard extends Enemy {
   onDeath() {
     const g = this.game;
     const c = this.hitCenter(new THREE.Vector3());
-    g.fx.burst(c, 24, '#efe4d0', { matter: true, speed: 9, size: 0.3, life: 1.4, g: 10 });
-    g.fx.burst(c, 16, '#c01020', { matter: true, speed: 7, size: 0.25, life: 1, g: 14 });
-    g.fx.burst(c, 12, '#ffb070', { speed: 6, size: 0.3, life: 0.4 });
-    g.splat(this.pos.x, this.pos.z, 1.4);
+    g.gore.explode(c, this.lastHitDir, { gibs: ['flesh', 'card', 'card', 'chunk'], count: 10, scale: this.scale });
+    g.fx.burst(c, 16, '#efe4d0', { matter: true, speed: 9, size: 0.3, life: 1.4, g: 10 });
     sfx('cards');
   }
 }
@@ -443,10 +442,9 @@ export class Teacup extends Enemy {
   onDeath() {
     const g = this.game;
     const c = this.hitCenter(new THREE.Vector3());
-    g.fx.burst(c, 30, '#f2ece0', { matter: true, speed: 10, size: 0.22, life: 1.4, g: 16 });
+    g.gore.explode(c, this.lastHitDir, { gibs: ['shard', 'shard', 'flesh', 'shard', 'chunk'], count: 11, blood: '#7a1208', scale: this.scale });
     g.fx.burst(c, 14, '#c9a04a', { speed: 8, size: 0.2, life: 0.6 });
-    g.fx.burst(c, 20, '#5a1a06', { matter: true, speed: 6, size: 0.3, life: 1, g: 14 });
-    g.splat(this.pos.x, this.pos.z, 1.6, '#3a1004');
+    g.gore.splat(this.pos.x, this.pos.z, 1.3, '#3a1004');
     sfx('shatter');
   }
 }
@@ -532,7 +530,7 @@ export class ClockWisp extends Enemy {
 
   onDeath() {
     const g = this.game;
-    g.fx.burst(this.pos, 26, '#c9a04a', { matter: true, speed: 9, size: 0.18, life: 1.2, g: 14 });
+    g.gore.explode(this.pos, this.lastHitDir, { gibs: ['gear', 'gear', 'flesh'], count: 8, scale: 0.7 * this.scale, blood: '#6a0a30' });
     g.fx.burst(this.pos, 20, '#a070ff', { speed: 8, size: 0.35, life: 0.5 });
     g.fx.flash(this.pos, '#a070ff', 3, 0.2);
     sfx('shatter');
@@ -743,11 +741,9 @@ export class WhiteRabbit extends Enemy {
   onDeath() {
     const g = this.game;
     const c = this.hitCenter(new THREE.Vector3());
-    g.fx.burst(c, 120, '#ffffff', { speed: 18, size: 0.5, life: 1.2 });
-    g.fx.burst(c, 80, '#c9a04a', { matter: true, speed: 14, size: 0.3, life: 2, g: 12 });
-    g.fx.burst(c, 60, '#b01020', { matter: true, speed: 10, size: 0.35, life: 1.5, g: 14 });
-    g.fx.ring(this.pos.x, this.pos.z, { r0: 1, r1: 18, dur: 0.8, color: '#ffffff' });
-    g.splat(this.pos.x, this.pos.z, 4);
+    g.fx.burst(c, 80, '#ffffff', { speed: 18, size: 0.5, life: 1.2 });
+    g.gore.explode(c, this.lastHitDir, { gibs: this.gibKinds || ['fur', 'flesh', 'chunk', 'gear', 'flesh'], count: 16, scale: 2.6 });
+    g.fx.ring(this.pos.x, this.pos.z, { r0: 1, r1: 18, dur: 0.8, color: '#ff3040' });
     g.camShake(1.2);
     // the Rabbit's pockets: one guaranteed uncommon (or better) plus a common per depth
     const drops = [rollItem(rand, { legendary: 0.12, uncommon: 0.88 })];
@@ -767,6 +763,7 @@ export class QueenOfHearts extends Enemy {
   constructor(game, x, z, o) {
     super(game, buildQueen(), x, z, { ...o, hp: 2100, gold: 160, elite: null });
     this.name = 'The Queen of Hearts';
+    this.gibKinds = ['flesh', 'card', 'chunk', 'flesh', 'card'];
     this.subtitle = 'Sovereign of Severance';
     this.boss = true;
     this.radius = 1.9;
@@ -950,7 +947,7 @@ export class QueenOfHearts extends Enemy {
         g.scene.remove(orb);
         ring.dead = true;
         g.combat.explode(new THREE.Vector3(x, y0 + 0.4, z), 2.2, 0, { dmg: 18 * this.dmgMult, color: '#ff3050' });
-        g.splat(x, z, 1.2, '#6a0818');
+        g.gore.splat(x, z, 1.2, '#6a0818');
         return false;
       }
       return true;
@@ -984,8 +981,8 @@ export class Director {
   }
 
   reset() {
-    this.credits = 24;
-    this.timer = 3;
+    this.credits = 40;
+    this.timer = 2;
   }
 
   spawn(type, x, z, elite) {
@@ -1008,14 +1005,14 @@ export class Director {
     const g = this.game;
     const coeff = g.difficulty();
     const event = g.teleporter && g.teleporter.state === 'charging';
-    this.credits += dt * (0.8 + 0.7 * coeff) * (event ? 1.8 : 1);
+    this.credits += dt * (1.2 + 0.9 * coeff) * (event ? 1.9 : 1);
     this.timer -= dt;
     if (this.timer > 0) return;
-    this.timer = 3 + rand() * 3;
+    this.timer = 2.2 + rand() * 2.6;
     const alive = g.enemies.filter((e) => e.alive && !e.boss).length;
     const minutes = g.runTime / 60;
     // the crowd cap starts small and grows with time and depth
-    if (alive >= Math.min(26, 5 + Math.floor(minutes * 1.5) + (g.depth - 1) * 3)) return;
+    if (alive >= Math.min(30, 8 + Math.floor(minutes * 2) + (g.depth - 1) * 3)) return;
     const opts = CARDS.filter((c) => (g.runTime / 60) >= c.min);
     let tot = opts.reduce((s, c) => s + c.weight, 0);
     let r = rand() * tot;
@@ -1031,7 +1028,7 @@ export class Director {
     const elite = rand() < eliteChance;
     const cost = card.cost * (elite ? 4 : 1);
     if (this.credits < cost) return;
-    const n = clamp(Math.floor(this.credits / cost), 1, elite ? 1 : Math.min(5, 2 + Math.floor(minutes / 3) + (g.depth - 1)));
+    const n = clamp(Math.floor(this.credits / cost), 1, elite ? 1 : Math.min(6, 3 + Math.floor(minutes / 3) + (g.depth - 1)));
     this.credits -= n * cost;
     // spawn cluster somewhere around the player, not on top of them
     const p = g.player.pos;

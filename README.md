@@ -43,6 +43,11 @@ cursor. Touch devices get a virtual stick and buttons.
 - **Gold** from kills and biscuit tins buys **Tea Chests** (common/uncommon) and
   **Royal Tea Chests** (uncommon/legendary). The **Mad Hatter's Tea Table** is a
   chance shrine.
+- **The Dormouse's Curio Cart** (⚖ on the minimap, on every starting plaza) sells
+  five chosen items at fixed prices, plus Healing Tea and rerolls. The game pauses
+  while you browse.
+- **Kills are messy:** enemies burst into bleeding gibs, blood mist and
+  directional splatter that stays on the floor, with a hit-stop on each kill.
 - **The Looking Glass** (the ♥ on the minimap) starts the hour: stay inside its
   circle for it to charge while the boss hunts you. Charge it, kill the boss,
   and step through to the next depth.

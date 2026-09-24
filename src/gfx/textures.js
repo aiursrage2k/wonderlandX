@@ -642,3 +642,119 @@ export function capTexture(base, spot) {
   }
   return tex(c, true);
 }
+
+// Weathered stone: mottled grey-violet, strata, hairline cracks, lichen.
+// Returns colour + bump (greyscale) maps.
+export function rockTexture(seed = 61) {
+  const S = 1024;
+  const c = makeCanvas(S, S);
+  const x = c.getContext('2d');
+  const h = makeCanvas(S, S);
+  const hx = h.getContext('2d');
+  const rng = makeRng(seed);
+  x.fillStyle = '#5a5260';
+  x.fillRect(0, 0, S, S);
+  hx.fillStyle = '#808080';
+  hx.fillRect(0, 0, S, S);
+  const wrapDraw = (ctx, fn) => {
+    for (const dx of [-S, 0, S]) for (const dy of [-S, 0, S]) {
+      ctx.save();
+      ctx.translate(dx, dy);
+      fn(ctx);
+      ctx.restore();
+    }
+  };
+  // mottling at several scales
+  for (const [n, rMin, rMax, a] of [[60, 60, 180, 0.18], [400, 10, 50, 0.16], [3000, 1, 6, 0.25]]) {
+    for (let i = 0; i < n; i++) {
+      const px = rng() * S;
+      const py = rng() * S;
+      const r = rMin + rng() * (rMax - rMin);
+      const t = rng();
+      const col = t < 0.4 ? '30,26,36' : t < 0.75 ? '120,112,128' : '84,70,78';
+      const ha = t < 0.4 ? '0,0,0' : '255,255,255';
+      const alpha = rng() * a;
+      wrapDraw(x, (ctx) => {
+        const g = ctx.createRadialGradient(px, py, 0, px, py, r);
+        g.addColorStop(0, `rgba(${col},${alpha})`);
+        g.addColorStop(1, `rgba(${col},0)`);
+        ctx.fillStyle = g;
+        ctx.fillRect(px - r, py - r, r * 2, r * 2);
+      });
+      wrapDraw(hx, (ctx) => {
+        const g = ctx.createRadialGradient(px, py, 0, px, py, r);
+        g.addColorStop(0, `rgba(${ha},${alpha * 1.5})`);
+        g.addColorStop(1, `rgba(${ha},0)`);
+        ctx.fillStyle = g;
+        ctx.fillRect(px - r, py - r, r * 2, r * 2);
+      });
+    }
+  }
+  // sedimentary strata
+  for (let i = 0; i < 26; i++) {
+    const y0 = rng() * S;
+    const amp = 6 + rng() * 20;
+    const f = 1 + Math.floor(rng() * 3);
+    const w = 1 + rng() * 4;
+    for (const [ctx, col] of [[x, `rgba(35,30,40,${0.2 + rng() * 0.3})`], [hx, 'rgba(0,0,0,0.5)']]) {
+      ctx.strokeStyle = col;
+      ctx.lineWidth = w;
+      ctx.beginPath();
+      for (let px = 0; px <= S; px += 8) ctx.lineTo(px, y0 + Math.sin((px / S) * TAU * f + i) * amp);
+      ctx.stroke();
+    }
+  }
+  // cracks
+  for (let i = 0; i < 30; i++) {
+    const pts = crackPath(rng, rng() * S, rng() * S, 8 + rng() * 30, S * 0.8);
+    strokePath(x, pts, 'rgba(15,10,18,0.8)', 1.5 + rng() * 2);
+    strokePath(hx, pts, 'rgba(0,0,0,0.9)', 3);
+  }
+  // lichen: teal-grey and ochre crusts
+  for (let i = 0; i < 90; i++) {
+    const px = rng() * S;
+    const py = rng() * S;
+    const col = rng() < 0.6 ? `rgba(${90 + rng() * 40},${130 + rng() * 40},${110 + rng() * 30},` : `rgba(${160 + rng() * 40},${120 + rng() * 30},${50},`;
+    for (let k = 0; k < 30; k++) {
+      x.fillStyle = col + `${0.2 + rng() * 0.4})`;
+      x.beginPath();
+      x.arc(px + (rng() - 0.5) * 40, py + (rng() - 0.5) * 40, 1 + rng() * 4, 0, TAU);
+      x.fill();
+    }
+  }
+  return { map: tex(c, true), bump: tex(h, true, false) };
+}
+
+// Clustered leaves for hedges: dark glossy greens with lighter veins.
+export function leafTexture(seed = 13) {
+  const S = 512;
+  const c = makeCanvas(S, S);
+  const x = c.getContext('2d');
+  const rng = makeRng(seed);
+  x.fillStyle = '#0c1a12';
+  x.fillRect(0, 0, S, S);
+  for (let i = 0; i < 1400; i++) {
+    const px = rng() * S;
+    const py = rng() * S;
+    const a = rng() * TAU;
+    const l = 8 + rng() * 14;
+    const g = 40 + rng() * 60;
+    for (const dx of [-S, 0, S]) for (const dy of [-S, 0, S]) {
+      x.save();
+      x.translate(px + dx, py + dy);
+      x.rotate(a);
+      x.fillStyle = `rgb(${g * 0.35},${g},${g * 0.55})`;
+      x.beginPath();
+      x.ellipse(0, 0, l, l * 0.42, 0, 0, TAU);
+      x.fill();
+      x.strokeStyle = `rgba(160,220,170,${0.15 + rng() * 0.2})`;
+      x.lineWidth = 1;
+      x.beginPath();
+      x.moveTo(-l, 0);
+      x.lineTo(l, 0);
+      x.stroke();
+      x.restore();
+    }
+  }
+  return tex(c, true);
+}

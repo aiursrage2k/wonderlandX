@@ -12,11 +12,13 @@ import { unlockAudio, toggleMute, sfx } from './engine/audio.js';
 import { makeRng, rand, TAU } from './engine/util.js';
 import { World } from './world/world.js';
 import { FX } from './fx/fx.js';
+import { Gore } from './fx/gore.js';
 import { glowTexture } from './gfx/textures.js';
 import { Player } from './game/player.js';
 import { Combat } from './game/combat.js';
 import { Director } from './game/enemies.js';
 import { Chest, BiscuitTin, Pickup, LookingGlass, TeaTable } from './game/interactables.js';
+import { Shop } from './game/shop.js';
 import { RARITY } from './game/items.js';
 import { HUD } from './ui/hud.js';
 
@@ -80,7 +82,6 @@ class Game {
     this.interactables = [];
     this.pickups = [];
     this.tickers = [];
-    this.splats = [];
     this.time = 0;
     this.runTime = 0;
     this.depth = 1;
@@ -88,6 +89,7 @@ class Game {
     this.shake = 0;
     this.director = new Director(this);
     this.combat = new Combat(this);
+    this.gore = new Gore(this);
 
     window.addEventListener('resize', () => this.resize());
     this.resize();
@@ -127,6 +129,7 @@ class Game {
       this.input.requestLock();
       this.setPaused(false);
     };
+    document.getElementById('btn-shop-close').onclick = () => this.closeShop();
     document.getElementById('btn-restart').onclick = () => {
       document.getElementById('screen-dead').classList.add('hidden');
       this.startRun();
@@ -139,6 +142,25 @@ class Game {
       if (!locked && this.state === 'play' && !this.input.isTouch && !this.input.fallbackAim && !DEBUG) this.setPaused(true);
     };
     if (this.input.isTouch) document.getElementById('touch').classList.remove('hidden');
+  }
+
+  openShop(shop) {
+    if (this.state !== 'play') return;
+    this.state = 'shop';
+    this.openShopRef = shop;
+    this.input.mouse.left = false;
+    this.hud.prompt(null);
+    shop.render();
+    document.getElementById('screen-shop').classList.remove('hidden');
+    document.exitPointerLock?.();
+  }
+
+  closeShop() {
+    if (this.state !== 'shop') return;
+    this.state = 'play';
+    document.getElementById('screen-shop').classList.add('hidden');
+    this.last = performance.now();
+    this.input.requestLock();
   }
 
   setPaused(p) {
@@ -169,13 +191,12 @@ class Game {
     for (const e of this.enemies) e.remove();
     for (const i of this.interactables) this.scene.remove(i.model);
     for (const p of this.pickups) p.remove();
-    for (const s of this.splats) this.scene.remove(s);
     this.enemies = [];
     this.interactables = [];
     this.pickups = [];
-    this.splats = [];
     this.tickers = [];
     this.combat.clear();
+    this.gore.clear();
     if (this.fx) this.fx.clear();
     if (this.world) this.world.dispose();
   }
@@ -215,6 +236,25 @@ class Game {
       const s = w.freeSpot(2, avoid);
       avoid.push({ ...s, r: 3 });
       this.interactables.push(new BiscuitTin(this, s.x, s.z));
+    }
+    // the curio cart sits on the edge of the starting plaza, facing its centre
+    {
+      const sp = w.plazas[0];
+      const a = Math.atan2(w.glassPos.z - sp.z, w.glassPos.x - sp.x) + 0.9;
+      let sx = sp.x + Math.cos(a) * sp.r * 0.62;
+      let sz = sp.z + Math.sin(a) * sp.r * 0.62;
+      this.shop = new Shop(this, sx, sz, sp.x, sp.z);
+      this.interactables.push(this.shop);
+      avoid.push({ x: sx, z: sz, r: 5 });
+      // nudge any loot that landed where the stall now stands
+      for (const it of this.interactables) {
+        if (it === this.shop || it.kind === 'glass') continue;
+        if (Math.hypot(it.pos.x - sx, it.pos.z - sz) < 4) {
+          const f = w.freeSpot(2, avoid);
+          it.pos.set(f.x, w.height(f.x, f.z), f.z);
+          it.model.position.copy(it.pos);
+        }
+      }
     }
     for (let i = 0; i < 2; i++) {
       const s = w.freeSpot(3, avoid);
@@ -345,36 +385,13 @@ class Game {
     sfx('orb');
   }
 
-  splat(x, z, r, color = '#5a0610') {
-    if (!this.splatTex) {
-      const c = document.createElement('canvas');
-      c.width = c.height = 128;
-      const g = c.getContext('2d');
-      g.fillStyle = '#fff';
-      g.beginPath();
-      g.arc(64, 64, 30, 0, TAU);
-      g.fill();
-      for (let i = 0; i < 26; i++) {
-        const a = Math.random() * TAU;
-        const d = 25 + Math.random() * 35;
-        g.beginPath();
-        g.arc(64 + Math.cos(a) * d, 64 + Math.sin(a) * d, 2 + Math.random() * 7, 0, TAU);
-        g.fill();
-      }
-      this.splatTex = new THREE.CanvasTexture(c);
-      this.splatGeo = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
-    }
-    const m = new THREE.Mesh(
-      this.splatGeo,
-      new THREE.MeshStandardMaterial({ color, map: null, alphaMap: this.splatTex, transparent: true, roughness: 0.15, metalness: 0.1, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }),
-    );
-    m.position.set(x, this.world.height(x, z) + 0.06, z);
-    m.rotation.y = rand() * TAU;
-    m.scale.setScalar(r * 2);
-    m.receiveShadow = true;
-    this.scene.add(m);
-    this.splats.push(m);
-    if (this.splats.length > 60) this.scene.remove(this.splats.shift());
+  splat(x, z, r, color = '#5a0610', dir = null) {
+    this.gore.splat(x, z, r, color, dir);
+  }
+
+  // Freeze-frame on impact: game time crawls for a few real milliseconds.
+  hitStop(t) {
+    this.hitStopT = Math.max(this.hitStopT || 0, t);
   }
 
   // Aim ray from the camera: nearest of enemies / props / terrain.
@@ -401,8 +418,12 @@ class Game {
   // ─── frame ───
   frame() {
     const now = performance.now();
-    const dt = Math.min(0.05, (now - this.last) / 1000);
+    let dt = Math.min(0.05, (now - this.last) / 1000);
     this.last = now;
+    if (this.hitStopT > 0) {
+      this.hitStopT -= dt;
+      dt *= 0.06;
+    }
     this.update(dt);
     this.render(dt);
   }
@@ -412,9 +433,10 @@ class Game {
     if (input.hit('m')) toggleMute();
     if (input.hit('escape') && this.state === 'pause') this.setPaused(false);
     if (input.hit('p') && this.state === 'play') this.setPaused(true);
+    if (this.state === 'shop' && (input.hit('escape') || input.hit('e'))) this.closeShop();
 
     const playing = this.state === 'play' || this.state === 'dying';
-    if (this.state === 'pause' || this.state === 'dead') dt = 0;
+    if (this.state === 'pause' || this.state === 'dead' || this.state === 'shop') dt = 0;
     this.time += dt;
     this.dt = dt;
 
@@ -445,7 +467,9 @@ class Game {
     if (this.state === 'title') this.titleCam();
     else this.world.update(this.time, dt, this.player.pos);
     this.fx.update(dt);
+    this.gore.update(dt);
     if (this.state !== 'title') this.hud.update(dt);
+    if (this.state === 'shop') this.openShopRef.render();
     input.endFrame();
   }
 

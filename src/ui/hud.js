@@ -262,12 +262,13 @@ export class HUD {
     const now = performance.now();
     if (this.goldEl && now - this.goldT < 350) {
       this.goldSum += n;
-      this.goldEl.textContent = `+${this.goldSum}`;
+      this.goldEl.textContent = this.goldSum >= 0 ? `+${this.goldSum}` : `${this.goldSum}`;
       return;
     }
     const d = document.createElement('div');
     d.className = 'goldpop';
-    d.textContent = `+${n}`;
+    d.textContent = n >= 0 ? `+${n}` : `${n}`;
+    if (n < 0) d.style.color = '#ff8080';
     $('goldpops').appendChild(d);
     this.goldEl = d;
     this.goldSum = n;
@@ -529,6 +530,10 @@ export class HUD {
     }
     for (const it of g.interactables) {
       if (it.used) continue;
+      if (it.kind === 'shop') {
+        glyph(it.pos.x, it.pos.z, '⚖', 17, '#ffd24a', '#ffb000');
+        continue;
+      }
       const [cx, cz] = m(it.pos.x, it.pos.z);
       x.fillStyle = it.kind === 'tin' ? '#a08040' : it.kind === 'shrine' ? '#60e0ff' : it.big ? '#ff5060' : '#ffd060';
       x.fillRect(cx - 3, cz - 3, 6, 6);

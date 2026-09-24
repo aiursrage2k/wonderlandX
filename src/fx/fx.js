@@ -105,7 +105,7 @@ export class FX {
     this.scene = scene;
     this.world = world;
     this.glow = new Pool(scene, glowTex, 5000, true);
-    this.matter = new Pool(scene, glowTex, 2500, false);
+    this.matter = new Pool(scene, glowTex, 4500, false);
     this.rings = [];
     this.beams = [];
     this.ringGeo = new THREE.RingGeometry(0.85, 1, 64);

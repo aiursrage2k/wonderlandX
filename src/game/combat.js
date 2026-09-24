@@ -174,6 +174,8 @@ export class Combat {
     const g = this.game;
     const p = g.player;
     p.kills++;
+    g.hitStop(e.boss ? 0.35 : e.elite ? 0.08 : 0.045);
+    g.camShake(e.boss ? 1.2 : 0.12);
     p.corruption = Math.min(100, p.corruption + (e.elite ? 10 : e.boss ? 40 : 4));
     const gold = Math.round(e.goldValue);
     p.gold += gold;

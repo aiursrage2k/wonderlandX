@@ -266,3 +266,37 @@ button.big:hover { transform: scale(1.04); box-shadow: 0 0 0 3px #0c0710, 0 0 0 
   #items { max-width: 50vw; bottom: 110px; }
   .item { width: 38px; height: 38px; font-size: 20px; }
 }
+
+/* ── shop ── */
+#screen-shop { background: radial-gradient(ellipse at 50% 40%, rgba(30, 10, 24, 0.82), rgba(5, 2, 8, 0.95) 75%); overflow-y: auto; justify-content: flex-start; padding-block: 5vh; }
+.shop-panel { width: min(1060px, 100%); display: flex; flex-direction: column; gap: 16px; align-items: stretch; }
+.shop-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; text-align: left; border-bottom: 1px solid rgba(201, 164, 90, 0.5); padding-bottom: 10px; }
+.shop-head h2 { font-size: clamp(26px, 4vw, 40px); letter-spacing: 0.06em; text-wrap: balance; }
+.shop-purse { font-size: 28px; color: var(--gold-hi); font-variant-numeric: tabular-nums; text-shadow: 0 0 12px rgba(255, 200, 80, 0.4); }
+.shop-purse::before { content: 'Your purse'; display: block; font-size: 11px; letter-spacing: 0.2em; color: #b8a890; text-transform: uppercase; }
+#shop-items { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.ware {
+  pointer-events: auto; position: relative; display: flex; flex-direction: column; gap: 6px; padding: 14px 12px 12px; text-align: center;
+  background: linear-gradient(180deg, rgba(40, 20, 30, 0.95), rgba(12, 6, 14, 0.95));
+  border: 1px solid var(--rc); box-shadow: inset 0 0 24px rgba(0, 0, 0, 0.8), 0 0 14px color-mix(in srgb, var(--rc) 25%, transparent);
+}
+.ware-icon { font-size: 44px; line-height: 1.1; font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif; filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.8)); }
+.ware-rarity { font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--rc); }
+.ware-name { font-size: 16px; color: #fff3dc; }
+.ware-desc { font-family: var(--fell); font-size: 14px; line-height: 1.35; color: #d8cce0; flex: 1; }
+.ware-buy, .svc {
+  pointer-events: auto; cursor: pointer; font-family: var(--serif); color: #fff3dc; font-size: 15px; letter-spacing: 0.06em;
+  background: linear-gradient(180deg, #5a1020, #2a0610); border: 1px solid var(--gold); padding: 8px 10px;
+}
+.ware-buy:hover:not(:disabled), .svc:hover:not(:disabled) { box-shadow: 0 0 16px rgba(255, 60, 90, 0.5); }
+.ware-buy:disabled, .svc:disabled { cursor: default; filter: grayscale(0.7) brightness(0.6); }
+.ware.sold { opacity: 0.45; }
+.ware.sold .ware-icon { filter: grayscale(1); }
+.shop-services { display: flex; gap: 12px; flex-wrap: wrap; }
+.svc { flex: 1 1 240px; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 10px 14px; }
+.svc small { font-family: var(--fell); font-size: 13px; color: #d8cce0; letter-spacing: 0; }
+.svc b { font-weight: 600; color: var(--gold-hi); }
+#shop-msg { min-height: 22px; font-family: var(--fell); font-style: italic; font-size: 17px; color: #f2d792; }
+#shop-msg.pop { animation: bannerIn 0.3s ease-out; }
+#btn-shop-close { align-self: center; }
+#btn-shop-close small { font-size: 12px; opacity: 0.7; }
