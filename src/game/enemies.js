@@ -37,9 +37,11 @@ export class Enemy {
     this.yaw = rand() * TAU;
     this.level = o.level;
     this.tier = o.boss ? 0 : tierFor(o.level);
-    const hpMult = (1 + 0.25 * (o.level - 1)) * (o.elite ? 3 : 1) * (1 + 0.25 * this.tier);
+    // bosses scale health more gently so late fights don't drag
+    const perLevel = o.boss ? 0.1 : 0.18;
+    const hpMult = (1 + perLevel * (o.level - 1)) * (o.elite ? 3 : 1) * (1 + 0.2 * this.tier);
     this.maxHp = this.hp = o.hp * hpMult;
-    this.dmgMult = (1 + 0.2 * (o.level - 1)) * (o.elite ? 1.8 : 1);
+    this.dmgMult = (1 + 0.14 * (o.level - 1)) * (o.elite ? 1.8 : 1);
     this.goldValue = o.gold * (1 + 0.25 * (o.level - 1)) * (o.elite ? 3 : 1);
     this.elite = o.elite || null;
     this.xpValue = o.xp || 10;
@@ -825,7 +827,7 @@ export class WhiteRabbit extends Enemy {
         if (this.t > 1.0 && !this.didHit) {
           this.didHit = true;
           sfx('bell');
-          for (const sp of this.summonSpots) g.director.spawn(g.world.theme.summon || 'guard', sp.x, sp.z, null);
+          for (const sp of this.summonSpots.slice(0, g.director.addRoom())) g.director.spawn(g.world.theme.summon || 'guard', sp.x, sp.z, null);
           this.summonT = 22;
         }
         if (this.t > 1.6) this.endAttack(0.8);
@@ -1084,7 +1086,7 @@ export class QueenOfHearts extends Enemy {
           this.didHit = true;
           sfx('bell');
           g.hud.banner('“Guards! Seize her!”', '', '#ff3048', '♠');
-          for (let i = 0; i < 4; i++) {
+          for (let i = 0; i < Math.min(4, g.director.addRoom()); i++) {
             const a = (i / 4) * TAU;
             g.director.spawn('guard', this.pos.x + Math.cos(a) * 5, this.pos.z + Math.sin(a) * 5, i === 0 && g.depth > 2 ? ELITES[0] : null);
           }
@@ -1179,6 +1181,7 @@ export class QueenOfHearts extends Enemy {
 // Enemy types register here so stage packs (e.g. clockenemies.js) can add
 // their own without a circular import.
 export const REGISTRY = {};
+export const BOSS_ADDS = 4; // during a boss fight, at most this many other enemies
 export const CARDS = {
   guard: { cost: 12, weight: 5, min: 0 },
   teacup: { cost: 15, weight: 3, min: 0 },
@@ -1216,6 +1219,12 @@ export class Director {
     return e;
   }
 
+  // How many more non-boss enemies may join while a boss is up.
+  addRoom() {
+    const alive = this.game.enemies.filter((e) => e.alive && !e.boss).length;
+    return Math.max(0, BOSS_ADDS - alive);
+  }
+
   update(dt) {
     const g = this.game;
     const coeff = g.difficulty();
@@ -1225,6 +1234,8 @@ export class Director {
     if (this.timer > 0) return;
     this.timer = 1.6 + rand() * 2.2;
     const alive = g.enemies.filter((e) => e.alive && !e.boss).length;
+    const bossUp = g.enemies.some((e) => e.boss && e.alive);
+    if (bossUp && alive >= BOSS_ADDS) return;
     const minutes = g.runTime / 60;
     // the crowd cap starts small and grows with time and depth
     if (alive >= Math.min(32, 12 + Math.floor(minutes * 2.5) + (g.depth - 1) * 3)) return;
@@ -1245,7 +1256,9 @@ export class Director {
     const cost = card.cost * (elite ? 4 : 1);
     if (this.credits < cost) return;
     const n = clamp(Math.floor(this.credits / cost), 1, elite ? 1 : Math.min(6, 3 + Math.floor(minutes / 3) + (g.depth - 1)));
-    this.credits -= n * cost;
+    const nCap = bossUp ? Math.max(0, BOSS_ADDS - alive) : n;
+    if (nCap <= 0) return;
+    this.credits -= Math.min(n, nCap) * cost;
     // spawn cluster somewhere around the player, not on top of them
     const p = g.player.pos;
     const eliteType = elite ? ELITES[Math.floor(rand() * ELITES.length)] : null;
@@ -1255,7 +1268,7 @@ export class Director {
       const cx = p.x + Math.cos(a) * R;
       const cz = p.z + Math.sin(a) * R;
       if (!g.world.canSpawn(cx, cz)) continue;
-      for (let i = 0; i < n; i++) {
+      for (let i = 0; i < Math.min(n, nCap); i++) {
         let x = cx + (rand() - 0.5) * 5;
         let z = cz + (rand() - 0.5) * 5;
         if (!g.world.canSpawn(x, z)) {

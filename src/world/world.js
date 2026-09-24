@@ -519,7 +519,7 @@ export class World {
       emissive: new THREE.Color('#ff2030'),
       emissiveIntensity: 1.4,
       bumpMap: marble.bump,
-      bumpScale: 3,
+      bumpScale: 1.6,
       roughnessMap: marble.rough,
       roughness: 1,
       metalness: 0.05,

@@ -364,3 +364,30 @@ button.big:hover { transform: scale(1.04); box-shadow: 0 0 0 3px #0c0710, 0 0 0 
 .ls-opts { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; font-size: 13px; color: #d8cce0; }
 .ls-opts label { pointer-events: auto; cursor: pointer; display: flex; gap: 6px; align-items: center; }
 .ls-opts input { accent-color: #c9a45a; }
+
+.skill.small { width: 52px; height: 52px; align-self: flex-end; }
+.skill.small canvas { width: 52px; height: 52px; }
+.skill.small .cd { font-size: 15px; }
+#t-roll { right: 210px; bottom: 30px; }
+
+/* perks in the inventory bar */
+.item.perk-item { --rc: #c9a0ff; background: radial-gradient(circle at 50% 40%, rgba(70, 40, 90, 0.95), rgba(14, 6, 20, 0.95)); border-radius: 50%; }
+.item.perk-item .n {
+  right: -2px; bottom: -2px; min-width: 18px; height: 18px; border-radius: 9px; display: grid; place-items: center; padding: 0 4px;
+  font-size: 11px; color: #1a0e04; background: radial-gradient(circle at 40% 35%, #fff2b8, #e8b040 60%, #8a5a10); text-shadow: none;
+}
+
+/* rabbit-hole transition */
+#transition { position: fixed; inset: 0; z-index: 25; pointer-events: none; }
+#transition canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.tcard { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; padding: 16px; opacity: 0; }
+#t-depth { font-size: 15px; letter-spacing: 0.6em; text-transform: uppercase; color: #d8c0f0; text-shadow: 0 0 12px rgba(160, 80, 255, 0.8); }
+.t-rule { color: rgba(201, 164, 90, 0.85); letter-spacing: 0.1em; font-size: 14px; }
+#t-name {
+  font-size: clamp(32px, 6vw, 72px); font-weight: 800; letter-spacing: 0.06em; line-height: 1.05; text-wrap: balance;
+  background: linear-gradient(180deg, #fff6e0 0%, #e8c880 50%, #8a5a20 100%); -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 4px 0 #1a0a10) drop-shadow(0 0 26px rgba(160, 60, 255, 0.6));
+}
+#t-quote { font-family: var(--fell); font-style: italic; font-size: 19px; color: #e0d0f0; max-width: 640px; text-shadow: 0 2px 6px #000; }
+#t-recap { margin-top: 14px; padding: 8px 18px; font-size: 14px; letter-spacing: 0.08em; color: #e8dcc8; border-top: 1px solid rgba(201, 164, 90, 0.5); border-bottom: 1px solid rgba(201, 164, 90, 0.5); background: rgba(10, 4, 14, 0.5); }
+#t-recap b { color: var(--gold-hi); font-weight: 600; }

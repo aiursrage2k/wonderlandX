@@ -184,6 +184,7 @@ export class PerkChest {
     const before = p.stats.maxHp;
     p.recompute();
     if (p.stats.maxHp > before) p.hp += p.stats.maxHp - before;
+    g.hud.updateItems();
     g.hud.banner(`${perk.name} ${p.perks[perk.id]}/${perk.max}`, `Perk Reliquary: ${perk.per}.`, '#c9a0ff', perk.icon);
     g.fx.burst(this.pos.clone().setY(this.pos.y + 1), 40, '#c070ff', { speed: 7, size: 0.35, life: 0.8 });
     g.fx.beam(this.pos.clone(), this.pos.clone().setY(this.pos.y + 10), { color: '#c070ff', width: 0.6, dur: 0.7, opacity: 0.6 });
@@ -379,6 +380,13 @@ export class LookingGlass {
         }
       }
       g.boss = g.director.spawn(boss, bx, bz, null);
+      // boss fights stay readable: the extra crowd scatters back into the dark
+      const others = g.enemies.filter((e) => e.alive && !e.boss).sort((a, b) => b.distToPlayer() - a.distToPlayer());
+      for (const e of others.slice(0, Math.max(0, others.length - 4))) {
+        e.alive = false;
+        e.deadT = 0.6;
+        g.fx.portal(e.pos.x, e.pos.z, 1.4, '#6020a0', 0.8);
+      }
       this.zoneRing = g.fx.ring(this.pos.x, this.pos.z, { r0: this.radius, r1: this.radius, dur: 1e9, color: '#ff2a5a', pulse: true, opacity: 0.4 });
       this.zoneRing.hold = true;
     } else if (this.state === 'ready') {

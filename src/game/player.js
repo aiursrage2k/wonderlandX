@@ -16,6 +16,7 @@ export const SKILLS = [
   { key: 'RMB', name: 'Teapot Grenade', desc: 'Lob a boiling teapot that bursts for 600% damage and scalds the ground.' },
   { key: 'SHIFT', name: 'Rabbit Hop', desc: 'Dash a short distance. You cannot be hit while dashing.' },
   { key: 'Q', name: 'Down the Rabbit Hole', desc: 'Spend Corruption (50+) to erupt for 500% and enter Madness: faster, homing, violet cards.' },
+  { key: 'C', name: 'Tumble', desc: 'Roll forward. Untouchable for the whole roll.' },
 ];
 
 export class Player {
@@ -47,6 +48,9 @@ export class Player {
     this.teapotT = 0;
     this.dashCd = 0;
     this.dashT = 0;
+    this.rollT = 0;
+    this.rollMax = 0.42;
+    this.rollCd = 0;
     this.dashDir = new THREE.Vector3();
     this.madness = 0;
     this.madnessMax = 1;
@@ -104,7 +108,7 @@ export class Player {
   }
 
   hurt(dmg, from) {
-    if (!this.alive || this.invuln > 0 || this.dashT > 0) return false;
+    if (!this.alive || this.invuln > 0 || this.dashT > 0 || this.rollT > 0) return false;
     const red = 100 / (100 + this.stats.armor);
     const d = dmg * red;
     this.hp -= d;
@@ -187,7 +191,12 @@ export class Player {
     const speed = st.speed * (this.sprinting ? 1.45 : 1) * (this.madness > 0 ? 1.15 : 1) * (this.envSlow || 1);
     this.envSlow = 1;
 
-    if (this.dashT > 0) {
+    if (this.rollT > 0) {
+      this.rollT -= dt;
+      this.vel.x = this.rollDir.x * 15;
+      this.vel.z = this.rollDir.z * 15;
+      if (Math.random() < 0.5) g.fx.spark(this.pos.x, this.pos.y + 0.4, this.pos.z, '#d8c8ff', { speed: 1, g: 0, size: 0.5, life: 0.3, a: 0.5 });
+    } else if (this.dashT > 0) {
       this.dashT -= dt;
       this.vel.x = this.dashDir.x * 36;
       this.vel.z = this.dashDir.z * 36;
@@ -268,17 +277,17 @@ export class Player {
       this.jumpsUsed = Math.min(this.jumpsUsed, 1);
       g.fx.ring(this.pos.x, this.pos.z, { y: this.pos.y, r0: 0.4, r1: 2.5, dur: 0.35, color: '#b090ff' });
       sfx('dash');
-      const watch = this.inv.count('broken_watch');
-      if (watch) {
-        // the cursed watch: time stumbles around you, at a price
-        for (const e of g.enemies) {
-          if (e.alive && e.pos.distanceTo(this.pos) < 14) e.slowT = 1.5 + watch;
-        }
-        this.corruption = Math.min(100, this.corruption + 8);
-        g.fx.ring(this.pos.x, this.pos.z, { y: this.pos.y, r0: 1, r1: 14, dur: 0.5, color: '#b060ff' });
-        g.fx.ring(this.pos.x, this.pos.z, { y: this.pos.y, r0: 14, r1: 14, dur: 0.6, color: '#8040ff', fill: true, opacity: 0.18 });
-        sfx('tick');
-      }
+      this.onDodge();
+    }
+    this.rollCd = Math.max(0, (this.rollCd || 0) - dt);
+    if ((input.hit('c') || input.hit('control') || input.hit('touch5')) && this.rollCd <= 0 && this.rollT <= 0 && this.dashT <= 0) {
+      this.rollCd = 1.2 * cdm;
+      this.rollT = 0.42;
+      this.rollMax = 0.42;
+      this.rollDir = (moving ? wish.clone().normalize() : fwd.clone()).setY(0).normalize();
+      this.yaw = Math.atan2(this.rollDir.x, this.rollDir.z);
+      sfx('dash');
+      this.onDodge();
     }
     if ((input.hit('q') || input.hit('r') || input.hit('touch4')) && this.corruption >= 50 && this.madness <= 0) {
       this.goMad();
@@ -292,7 +301,7 @@ export class Player {
 
     // ── facing ──
     const wantYaw = this.lastShot < 1.0 || !moving ? this.camYaw : Math.atan2(this.vel.x, this.vel.z);
-    if (moving || this.lastShot < 1.0) this.yaw += angleDiff(this.yaw, wantYaw) * (1 - Math.exp(-14 * dt));
+    if ((moving || this.lastShot < 1.0) && this.rollT <= 0) this.yaw += angleDiff(this.yaw, wantYaw) * (1 - Math.exp(-14 * dt));
 
     this.animate(dt, moving, speed);
   }
@@ -374,6 +383,20 @@ export class Player {
     sfx('dash');
   }
 
+  // Dodges (dash or roll) trigger the cursed Broken Pocket Watch.
+  onDodge() {
+    const g = this.game;
+    const watch = this.inv.count('broken_watch');
+    if (!watch) return;
+    for (const e of g.enemies) {
+      if (e.alive && e.pos.distanceTo(this.pos) < 14) e.slowT = 1.5 + watch;
+    }
+    this.corruption = Math.min(100, this.corruption + 8);
+    g.fx.ring(this.pos.x, this.pos.z, { y: this.pos.y, r0: 1, r1: 14, dur: 0.5, color: '#b060ff' });
+    g.fx.ring(this.pos.x, this.pos.z, { y: this.pos.y, r0: 14, r1: 14, dur: 0.6, color: '#8040ff', fill: true, opacity: 0.18 });
+    sfx('tick');
+  }
+
   goMad() {
     const g = this.game;
     this.madnessMax = 3 + (this.corruption / 100) * 6;
@@ -406,11 +429,20 @@ export class Player {
       p.legs[i].rotation.x = lerp(p.legs[i].rotation.x, target, 1 - Math.exp(-20 * dt));
       // knee bends on the recovering leg, tucks in the air
       const phase = Math.sin(this.runPhase + (i ? Math.PI : 0) - 0.9);
-      const kneeT = air ? (i ? 1.3 : 0.5) : Math.max(0, phase) * 1.2 * k + 0.05;
+      const kneeT = this.rollT > 0 ? 1.9 : air ? (i ? 1.3 : 0.5) : Math.max(0, phase) * 1.2 * k + 0.05;
       p.knees[i].rotation.x = lerp(p.knees[i].rotation.x, kneeT, 1 - Math.exp(-20 * dt));
     }
-    p.body.position.y = air ? 0.05 : Math.abs(c) * 0.06 * k;
-    p.body.rotation.x = lerp(p.body.rotation.x, this.dashT > 0 ? 0.5 : k * 0.12, 1 - Math.exp(-10 * dt));
+    if (this.rollT > 0) {
+      const a = (1 - this.rollT / this.rollMax) * Math.PI * 2;
+      const hc = 0.75;
+      p.body.rotation.x = a;
+      p.body.position.set(0, hc - hc * Math.cos(a), -hc * Math.sin(a));
+      this.model.rotation.y = this.yaw;
+    } else {
+      p.body.position.set(0, air ? 0.05 : Math.abs(c) * 0.06 * k, 0);
+      if (p.body.rotation.x > 1) p.body.rotation.x = 0;
+      p.body.rotation.x = lerp(p.body.rotation.x, this.dashT > 0 ? 0.5 : k * 0.12, 1 - Math.exp(-10 * dt));
+    }
     p.skirt.rotation.x = -k * 0.08 + Math.sin(this.runPhase * 2) * 0.03 * k;
     p.skirt.rotation.z = c * 0.04 * k;
 

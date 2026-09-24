@@ -14,7 +14,7 @@ export class Input {
 
     window.addEventListener('keydown', (e) => {
       const k = e.key.toLowerCase();
-      if ([' ', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'tab'].includes(k)) e.preventDefault();
+      if ([' ', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'tab', 'control'].includes(k)) e.preventDefault();
       if (!this.keys.has(k)) this.pressed.add(k);
       this.keys.add(k);
     });
@@ -157,6 +157,7 @@ export class Input {
     btn('t-4', () => this.pressed.add('touch4'));
     btn('t-jump', () => this.pressed.add(' '));
     btn('t-use', () => this.pressed.add('e'));
+    btn('t-roll', () => this.pressed.add('touch5'));
   }
 
   down(k) {

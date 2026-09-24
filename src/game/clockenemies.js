@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { Enemy, REGISTRY, CARDS } from './enemies.js';
 import { buildScissorHatter, buildWatchSpider, buildTeapotCannon, buildMadHatter } from '../gfx/clockmodels.js';
-import { rearrange, CLOCK_R } from '../world/clockworks.js';
+import { rearrange, CLOCK_R, CH_OUT } from '../world/clockworks.js';
 import { rollItem, ITEM_BY_ID } from './items.js';
 import { rand, clamp, lerp, angleDiff, TAU } from '../engine/util.js';
 import { sfx } from '../engine/audio.js';
@@ -382,7 +382,7 @@ export class MadHatter extends Enemy {
         if (this.t > 1.0 && !this.didHit) {
           this.didHit = true;
           sfx('bell');
-          for (const sp of this.summonSpots) g.director.spawn('spider', sp.x, sp.z, null);
+          for (const sp of this.summonSpots.slice(0, g.director.addRoom())) g.director.spawn('spider', sp.x, sp.z, null);
           this.summonT = 20;
         }
         if (this.t > 1.5) this.endAttack(0.8);
@@ -523,7 +523,7 @@ export class MadHatter extends Enemy {
     for (let i = 0; i < Math.min(3, g.depth); i++) drops.push(rollItem(rand, { legendary: 0.02, uncommon: 0.25 }));
     const at = this.pos.clone().setY(this.pos.y + 2);
     // keep the loot over solid floor
-    if (Math.hypot(at.x, at.z) > CLOCK_R - 3 && Math.hypot(at.x, at.z) < 40) at.multiplyScalar(0.8);
+    if (Math.hypot(at.x, at.z) > CLOCK_R - 3 && Math.hypot(at.x, at.z) < CH_OUT + 1) at.multiplyScalar((CLOCK_R - 6) / Math.hypot(at.x, at.z));
     drops.forEach((it, i) => {
       const a = (i / drops.length) * TAU;
       g.spawnPickup(it, at, new THREE.Vector3(Math.cos(a) * 3, 12, Math.sin(a) * 3));

@@ -33,6 +33,7 @@ export function renderPerks(game) {
       const before = p.stats.maxHp;
       p.recompute();
       if (p.stats.maxHp > before) p.hp += p.stats.maxHp - before;
+      game.hud.updateItems();
       game.hud.goldPop(-c);
       sfx('chest');
       const msg = $('perk-msg');

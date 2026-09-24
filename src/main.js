@@ -23,6 +23,7 @@ import { Shop } from './game/shop.js';
 import { RARITY } from './game/items.js';
 import { HUD } from './ui/hud.js';
 import { renderPerks } from './ui/perks.js';
+import { Transition } from './ui/transition.js';
 
 const params = new URLSearchParams(location.search);
 const DEBUG = params.has('debug');
@@ -80,6 +81,7 @@ class Game {
 
     this.input = new Input(this.canvas);
     this.hud = new HUD(this);
+    this.transition = new Transition();
     this.enemies = [];
     this.interactables = [];
     this.pickups = [];
@@ -244,9 +246,14 @@ class Game {
       this.player.placeAt(gp.x + ((sp.x - gp.x) / d) * 11, gp.z + ((sp.z - gp.z) / d) * 11);
       this.player.camYaw = Math.atan2(gp.x - this.player.pos.x, gp.z - this.player.pos.z);
     }
-    this.state = 'play';
+    this.state = 'transition';
     this.hud.show(true);
-    this.fadeIn();
+    this.stageKillBase = 0;
+    this.transition.play({ depth, name: this.world.theme.name, hold: 1.8 }).then(() => {
+      if (this.state === 'transition') this.state = 'play';
+      this.last = performance.now();
+    });
+    if (this.transition.skip) this.state = 'play';
   }
 
   clearStage() {
@@ -364,7 +371,7 @@ class Game {
           vec3 d = normalize(vDir);
           float h = d.y;
           vec3 c = h > 0.0 ? mix(hor, top, smoothstep(0.0, 0.7, h)) * 1.1 : mix(fog * 0.6, fog * 0.15, smoothstep(0.0, -0.4, h));
-          c += moon * 6.0 * pow(max(dot(d, normalize(vec3(0.4, 0.45, -0.8))), 0.0), 60.0);
+          c += moon * 1.4 * pow(max(dot(d, normalize(vec3(0.4, 0.45, -0.8))), 0.0), 12.0);
           float az = atan(d.z, d.x);
           float band = exp(-abs(h - 0.05) * 14.0);
           c += glow * 1.4 * band * pow(0.5 + 0.5 * sin(az * 3.0), 6.0);
@@ -385,13 +392,21 @@ class Game {
   nextStage() {
     this.state = 'transition';
     sfx('door');
-    this.fadeOut(() => {
-      this.loadStage(this.depth + 1);
-      this.player.heal(this.player.stats.maxHp * 0.25);
+    const p = this.player;
+    const t = this.stageTime || 0;
+    const kills = p.kills - (this.stageKillBase || 0);
+    const items = [...p.inv.stacks.values()].reduce((a, b) => a + b, 0);
+    const recap = `Cleared in <b>${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}</b> · Slain <b>${kills}</b> · Level <b>${p.level}</b> · Items <b>${items}</b>`;
+    const next = this.depth + 1;
+    const name = STAGES[(next - 1) % STAGES.length].name;
+    this.transition.play({ depth: next, name, recap, hold: 2.8 }, () => {
+      this.loadStage(next);
+      p.heal(p.stats.maxHp * 0.25);
+      this.stageKillBase = p.kills;
+    }).then(() => {
       this.state = 'play';
-      this.fadeIn();
-      this.hud.banner(this.world.theme.name, `Depth ${String(this.depth).padStart(2, '0')} — it only gets madder.`, '#c9a45a', '🕳️');
-    });
+      this.last = performance.now();
+    });    if (this.transition.skip) this.state = 'play';
   }
 
   fadeOut(cb) {
@@ -426,7 +441,7 @@ class Game {
 
   // ─── helpers used by entities ───
   difficulty() {
-    return (1 + 0.0506 * 2.2 * (this.runTime / 60)) * 1.15 ** (this.depth - 1);
+    return (1 + 0.0506 * 4.4 * (this.runTime / 60)) * 1.25 ** (this.depth - 1);
   }
 
   enemyLevel() {
@@ -539,6 +554,8 @@ class Game {
       this.updateInteract();
     }
 
+    // keep the camera on Alice while a transition card fades over the world
+    if (this.state === 'transition' && this.player) this.player.updateCamera(dt || 1 / 60);
     if (this.state === 'title') this.titleCam();
     else this.world.update(this.time, dt, this.player.pos);
     this.fx.update(dt);
@@ -606,6 +623,7 @@ window.game = game;
 
 // Debug hooks for automated screenshots: ?debug
 if (DEBUG) {
+  game.transition.skip = true; // headless harnesses step the game synchronously
   window.debugStart = () => {
     document.getElementById('screen-title').classList.add('hidden');
     game.startRun();

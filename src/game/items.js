@@ -18,7 +18,7 @@ export const ITEMS = [
   { id: 'turtle', name: 'Mock Turtle Shell', rarity: 'common', icon: '🐢', desc: 'Armor +15.' },
   { id: 'hookah', name: "Caterpillar's Hookah", rarity: 'common', icon: '💨', desc: 'Health regen +1.6/s.' },
   { id: 'sugar', name: 'Sugar Cube', rarity: 'common', icon: '🧊', desc: 'Damage +12%.' },
-  { id: 'top_hat', name: "Hatter's Top Hat", rarity: 'uncommon', icon: '🎩', desc: '+1 extra jump.' },
+  { id: 'top_hat', name: "Hatter's Top Hat", rarity: 'uncommon', icon: '🎩', desc: '+1 extra jump (triple jump!).' },
   { id: 'jubjub', name: 'Jubjub Feather', rarity: 'uncommon', icon: '🪶', desc: '10% chance on hit to loose a homing feather for 300% damage.' },
   { id: 'cheshire', name: 'Cheshire Tooth', rarity: 'uncommon', icon: '😸', desc: '20% chance on hit to arc a grin-bolt to 3 enemies for 80% damage.' },
   { id: 'kettle', name: 'Boiling Kettle', rarity: 'uncommon', icon: '🫖', desc: 'Kills erupt in scalding tea for 150% damage in 4m (+2m per stack).' },
@@ -74,7 +74,7 @@ export class Inventory {
       crit: 0.01 + 0.1 * c('whetstone'),
       damage: 16 * (1 + 0.12 * c('sugar') + 0.6 * c('jabberwock')),
       armor: 15 * c('turtle'),
-      jumps: 1 + c('top_hat'),
+      jumps: 2 + c('top_hat'),
       cdMult: 0.85 ** c('decree'),
       teapotCharges: 1 + c('decree'),
     };

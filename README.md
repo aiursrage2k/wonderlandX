@@ -28,10 +28,11 @@ cursor. Touch devices get a virtual stick and buttons.
 | --- | --- |
 | WASD | Move (sprint automatically when running forward and not firing) |
 | Mouse | Aim |
-| Space | Jump (more with the Hatter's Top Hat) |
+| Space | Jump — double jump by default (more with the Hatter's Top Hat) |
 | LMB | **Razor Deck** — fling razor playing cards |
 | RMB | **Teapot Grenade** — lobbed burst for 600%, scalds the ground |
 | Shift | **Rabbit Hop** — invulnerable dash |
+| C / Ctrl | **Tumble** — quick dodge roll with i-frames (1.2 s cooldown) |
 | Q | **Madness** — spend 50+ Corruption to erupt and enter Madness (faster homing violet cards) |
 | E | Interact |
 | Tab | Perks |
@@ -54,6 +55,10 @@ cursor. Touch devices get a virtual stick and buttons.
 - **The Looking Glass** (the ♥ on the minimap) summons the stage's boss. Kill
   it and the Glass opens to the next depth. Standing near the Glass while you
   fight charges it; a full charge drops a bonus item.
+- **Boss fights stay focused:** at most 4 other enemies share the arena with a boss.
+- **Perks** show in the item bar like items, with an icon and rank number.
+- **Falling between depths** plays a rabbit-hole tunnel with the next stage's
+  title card and a recap of the one just cleared.
 - **Bosses wind up and warn you:** every attack paints its danger zone first
   (cones, lanes, rings) and names itself on screen.
   - The White Rabbit: claw cone, jumpable shockwave, clock-bolt barrage,

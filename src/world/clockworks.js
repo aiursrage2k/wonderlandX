@@ -9,12 +9,14 @@ import { mat } from '../gfx/models.js';
 import { RIM } from '../gfx/rim.js';
 import { sfx } from '../engine/audio.js';
 
-export const HUB = 8;
-export const CLOCK_R = 34;
-const CH_OUT = 39;
-const WALK_OUT = 61;
-const MOAT_OUT = 66;
-const WALL_R = 68;
+export const HUB = 12;
+export const CLOCK_R = 52;
+export const CH_OUT = 58;
+const WALK_OUT = 94;
+const MOAT_OUT = 100;
+const WALL_R = 103;
+const WALL_H = 46;
+const U = CLOCK_R / 34; // clock-face layout was drawn for a 34 m face
 export const TEA_Y = -1.3;
 const BRIDGES = [Math.PI / 4, (3 * Math.PI) / 4, (5 * Math.PI) / 4, (7 * Math.PI) / 4];
 const SECTOR = TAU / 12;
@@ -43,7 +45,7 @@ function clockFloorTextures() {
   const rng = makeRng(1212);
   const C = S / 2;
   const R = S / 2; // texture edge == CLOCK_R
-  const px = (r) => (r / CLOCK_R) * R;
+  const px = (r) => ((r * U) / CLOCK_R) * R; // r in 34-unit face coordinates
   // aged bronze-marble ground
   const g = x.createRadialGradient(C, C, 0, C, C, R);
   g.addColorStop(0, '#6a5438');
@@ -78,7 +80,7 @@ function clockFloorTextures() {
   ring(32.6, 6, '#3a2410');
   ring(26, 10, '#b08840');
   ring(20.5, 4, '#8a6a30');
-  ring(8.3, 14, '#c9a04a', 'rgba(255,150,40,0.6)');
+  ring(HUB / U + 0.3, 14, '#c9a04a', 'rgba(255,150,40,0.6)');
   ring(12, 3, '#8a6a30');
   // sector engravings (the seams where platforms split)
   x.strokeStyle = 'rgba(20,10,4,0.9)';
@@ -86,8 +88,8 @@ function clockFloorTextures() {
   for (let i = 0; i < 12; i++) {
     const a = i * SECTOR;
     x.beginPath();
-    x.moveTo(C + Math.cos(a) * px(HUB), C + Math.sin(a) * px(HUB));
-    x.lineTo(C + Math.cos(a) * px(CLOCK_R), C + Math.sin(a) * px(CLOCK_R));
+    x.moveTo(C + Math.cos(a) * px(HUB / U), C + Math.sin(a) * px(HUB / U));
+    x.lineTo(C + Math.cos(a) * px(34), C + Math.sin(a) * px(34));
     x.stroke();
   }
   // minute ticks
@@ -466,13 +468,14 @@ export function buildClockworks(w) {
     return o;
   };
   const t = w.theme;
-  w.bound = 64.5;
-  w.spawn = { x: 0, z: 52 };
-  w.glassPos = { x: 0, z: -51 };
+  w.bound = MOAT_OUT - 1.5;
+  const midWalk = (CH_OUT + WALK_OUT) / 2;
+  w.spawn = { x: 0, z: midWalk };
+  w.glassPos = { x: 0, z: -midWalk };
   w.plazas = [
-    { x: 0, z: 52, r: 8, h: 0 },
+    { x: 0, z: midWalk, r: 10, h: 0 },
     { x: 0, z: 0, r: CLOCK_R, h: 0 },
-    { x: 0, z: -51, r: 8, h: 0 },
+    { x: 0, z: -midWalk, r: 10, h: 0 },
   ];
   w.castle.visible = false;
   w.cheshire.visible = false;
@@ -577,17 +580,19 @@ export function buildClockworks(w) {
   const brass = mat('#c9a04a', { metalness: 0.9, roughness: 0.28 });
   for (const b of BRIDGES) {
     const g = new THREE.Group();
-    const deck = new THREE.Mesh(new THREE.BoxGeometry(7.5, 0.5, 4.4), grate);
-    deck.position.set(36.5, 0.0, 0);
+    const bl = CH_OUT - CLOCK_R + 3;
+    const bc = (CH_OUT + CLOCK_R) / 2;
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(bl, 0.5, 4.4), grate);
+    deck.position.set(bc, 0.0, 0);
     deck.receiveShadow = deck.castShadow = true;
     g.add(deck);
     for (const s of [-1, 1]) {
-      const rail = new THREE.Mesh(new THREE.BoxGeometry(7.5, 0.1, 0.1), brass);
-      rail.position.set(36.5, 1.1, s * 2.1);
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(bl, 0.1, 0.1), brass);
+      rail.position.set(bc, 1.1, s * 2.1);
       g.add(rail);
       for (let k = 0; k < 4; k++) {
         const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.1, 6), brass);
-        post.position.set(33.5 + k * 2, 0.55, s * 2.1);
+        post.position.set(bc - bl / 2 + 0.5 + (k * (bl - 1)) / 3, 0.55, s * 2.1);
         g.add(post);
       }
     }
@@ -610,7 +615,7 @@ export function buildClockworks(w) {
   };
   const handMat = new THREE.MeshStandardMaterial({ color: '#1a1410', metalness: 0.85, roughness: 0.35, emissive: '#ff5010', emissiveIntensity: 0.0 });
   const edgeMat = brass;
-  for (const [L, W, speed, y] of [[24, 1.3, 0.085, 0.55], [32.5, 0.85, 0.2, 0.9]]) {
+  for (const [L, W, speed, y] of [[CLOCK_R * 0.7, 1.8, 0.07, 0.55], [CLOCK_R * 0.96, 1.2, 0.16, 0.9]]) {
     const pivot = new THREE.Group();
     pivot.position.y = 0;
     const geo = new THREE.ExtrudeGeometry(handShape(L, W), { depth: 0.55, bevelEnabled: true, bevelSize: 0.08, bevelThickness: 0.08, bevelSegments: 2 });
@@ -625,46 +630,46 @@ export function buildClockworks(w) {
     add(pivot);
     clock.hands.push({ pivot, L, W: W * 1.3, speed, angle: rng() * TAU, top: y + 0.25, mesh: m });
   }
-  const cap = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 3, 1.6, 32), brass);
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(3.6, 4.2, 1.8, 40), brass);
   cap.position.y = 0.8;
   cap.castShadow = true;
   add(cap);
-  const capTop = new THREE.Mesh(new THREE.SphereGeometry(1.4, 20, 12, 0, TAU, 0, Math.PI / 2), mat('#ff7a20', { emissive: '#ff5000', emissiveIntensity: 1.2 }));
-  capTop.position.y = 1.6;
+  const capTop = new THREE.Mesh(new THREE.SphereGeometry(2, 24, 12, 0, TAU, 0, Math.PI / 2), mat('#ff7a20', { emissive: '#ff5000', emissiveIntensity: 1.2 }));
+  capTop.position.y = 1.8;
   add(capTop);
-  w.colliders.push({ x: 0, z: 0, r: 2.9, top: 1.6 });
+  w.colliders.push({ x: 0, z: 0, r: 4.1, top: 1.8 });
 
   // ── walls, windows, dome girders ──
   const wallT = wallTexture();
-  wallT.map.repeat.set(10, 1);
-  wallT.emissive.repeat.set(10, 1);
+  wallT.map.repeat.set(15, 1);
+  wallT.emissive.repeat.set(15, 1);
   const wall = new THREE.Mesh(
-    new THREE.CylinderGeometry(WALL_R, WALL_R, 32, 80, 1, true),
+    new THREE.CylinderGeometry(WALL_R, WALL_R, WALL_H, 120, 1, true),
     new THREE.MeshStandardMaterial({ map: wallT.map, emissiveMap: wallT.emissive, emissive: '#ff9a40', emissiveIntensity: 1.3, roughness: 0.9, side: THREE.BackSide }),
   );
-  wall.position.y = 16;
+  wall.position.y = WALL_H / 2;
   add(wall);
   const iron = mat('#1c1612', { metalness: 0.8, roughness: 0.45 });
   for (let k = 0; k < 8; k++) {
-    const arc = new THREE.Mesh(new THREE.TorusGeometry(WALL_R, 0.7, 6, 48, Math.PI), iron);
+    const arc = new THREE.Mesh(new THREE.TorusGeometry(WALL_R, 0.9, 6, 64, Math.PI), iron);
     arc.rotation.y = (k / 8) * Math.PI;
     arc.scale.y = 0.55;
-    arc.position.y = 31;
+    arc.position.y = WALL_H - 1;
     add(arc);
   }
-  for (const [r, y] of [[WALL_R, 31], [WALL_R * 0.72, 31 + WALL_R * 0.55 * 0.69], [WALL_R * 0.4, 31 + WALL_R * 0.55 * 0.92]]) {
-    const ringG = new THREE.Mesh(new THREE.TorusGeometry(r, 0.6, 6, 64), iron);
+  for (const [r, y] of [[WALL_R, WALL_H - 1], [WALL_R * 0.72, WALL_H - 1 + WALL_R * 0.55 * 0.69], [WALL_R * 0.4, WALL_H - 1 + WALL_R * 0.55 * 0.92]]) {
+    const ringG = new THREE.Mesh(new THREE.TorusGeometry(r, 0.8, 6, 96), iron);
     ringG.rotation.x = Math.PI / 2;
     ringG.position.y = y;
     add(ringG);
   }
   // wall pipes
-  for (let i = 0; i < 20; i++) {
-    const a = (i / 20) * TAU + 0.07;
-    const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 30, 10), mat('#6a4a2a', { metalness: 0.8, roughness: 0.35 }));
-    pipe.position.set(Math.cos(a) * (WALL_R - 0.8), 15, Math.sin(a) * (WALL_R - 0.8));
+  for (let i = 0; i < 30; i++) {
+    const a = (i / 30) * TAU + 0.07;
+    const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, WALL_H, 10), mat('#6a4a2a', { metalness: 0.8, roughness: 0.35 }));
+    pipe.position.set(Math.cos(a) * (WALL_R - 0.9), WALL_H / 2, Math.sin(a) * (WALL_R - 0.9));
     add(pipe);
-    for (const y of [4, 12, 20, 28]) {
+    for (const y of [4, 12, 20, 28, 36]) {
       const j = new THREE.Mesh(new THREE.TorusGeometry(0.62, 0.14, 6, 14), brass);
       j.rotation.x = Math.PI / 2;
       j.position.set(pipe.position.x, y, pipe.position.z);
@@ -692,11 +697,11 @@ export function buildClockworks(w) {
     }
     return g;
   };
-  for (let i = 0; i < 7; i++) {
-    const a = (i / 7) * TAU + 0.3;
-    const R = rng.range(3, 6.5);
+  for (let i = 0; i < 11; i++) {
+    const a = (i / 11) * TAU + 0.3;
+    const R = rng.range(4, 9);
     const g = gearGeo(R);
-    g.position.set(Math.cos(a) * (WALL_R - 1.4), rng.range(8, 24), Math.sin(a) * (WALL_R - 1.4));
+    g.position.set(Math.cos(a) * (WALL_R - 1.6), rng.range(12, 34), Math.sin(a) * (WALL_R - 1.6));
     g.lookAt(0, g.position.y, 0);
     const sp = rng.range(0.1, 0.4) * (i % 2 ? 1 : -1);
     w.anim.push((time) => {
@@ -732,16 +737,16 @@ export function buildClockworks(w) {
     const knob = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 6), brass);
     knob.position.y = 2.6;
     pot.add(knob);
-    pot.scale.setScalar(3);
+    pot.scale.setScalar(4);
     const r = WALL_R + 2.2; // set into the wall so the spout overhangs the moat
-    pot.position.set(gx * r, 13, gz * r);
-    pot.lookAt(0, 13, 0);
+    pot.position.set(gx * r, 18, gz * r);
+    pot.lookAt(0, 18, 0);
     pot.rotateX(0.55);
     add(pot);
     // hanging chains
     for (const s of [-1, 1]) {
       const ch = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 18, 4), iron);
-      ch.position.set(gx * r + -gz * s * 2, 24, gz * r + gx * s * 2);
+      ch.position.set(gx * r + -gz * s * 2, 30, gz * r + gx * s * 2);
       add(ch);
     }
     // the pouring stream
@@ -753,10 +758,8 @@ export function buildClockworks(w) {
     add(stream);
     const splashAt = new THREE.Vector3(tip.x, TEA_Y + 0.2, tip.z);
     w.anim.push(() => {
-      if (w.game && Math.random() < 0.5) {
-        w.game.fx.smoke(splashAt, '#c8a898', 1, 1.6);
-        w.game.fx.spark(splashAt.x, splashAt.y, splashAt.z, '#ffb040', { speed: 6, g: 12, size: 0.3, life: 0.6 });
-      }
+      if (w.game && Math.random() < 0.25) w.game.fx.smoke(splashAt, '#5a3a30', 1, 1.4);
+      if (w.game && Math.random() < 0.35) w.game.fx.spark(splashAt.x, splashAt.y, splashAt.z, '#ff9030', { speed: 5, g: 12, size: 0.22, life: 0.5, a: 0.7 });
     });
   }
 
@@ -815,8 +818,8 @@ export function buildClockworks(w) {
   // ── lamp pillars and steam vents on the walkway ──
   const bulbMat = new THREE.MeshBasicMaterial({ color: '#ffb257' });
   const haloMat = new THREE.SpriteMaterial({ map: w.assets.glow, color: '#ff9a40', transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.8 });
-  for (let i = 0; i < 12; i++) {
-    const a = (i / 12) * TAU + SECTOR / 2;
+  for (let i = 0; i < 20; i++) {
+    const a = (i / 20) * TAU + SECTOR / 4;
     const r = WALK_OUT - 3.5;
     if (Math.abs(Math.sin(a)) > 0.93) continue; // keep spawn + glass approaches open
     const x = Math.cos(a) * r;
@@ -840,7 +843,7 @@ export function buildClockworks(w) {
     add(h);
     w.colliders.push({ x, z, r: 0.6, top: 6 });
   }
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 18; i++) {
     const a = rng() * TAU;
     const r = rng.range(CH_OUT + 3, WALK_OUT - 5);
     const x = Math.cos(a) * r;
@@ -858,21 +861,23 @@ export function buildClockworks(w) {
 
   // ── the Hatter, looming over the north wall ──
   const face = new THREE.Mesh(
-    new THREE.PlaneGeometry(110, 110),
+    new THREE.PlaneGeometry(150, 150),
     new THREE.MeshBasicMaterial({ map: hatterFaceTexture(), transparent: true, fog: false, depthWrite: false, color: '#b8a8a0' }),
   );
-  face.position.set(0, 58, -WALL_R - 40);
+  face.position.set(0, 78, -WALL_R - 50);
   face.renderOrder = -7;
   add(face);
   const eye = new THREE.Sprite(new THREE.SpriteMaterial({ map: w.assets.glow, color: '#ff7a10', blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: false }));
-  eye.scale.set(26, 26, 1);
-  eye.position.set(110 * 0.09, 58 + 110 * -0.02, -WALL_R - 39);
+  eye.scale.set(36, 36, 1);
+  eye.position.set(150 * 0.09, 78 + 150 * -0.02, -WALL_R - 49);
   add(eye);
   w.anim.push((time) => {
     eye.material.opacity = 0.6 + Math.sin(time * 2.3) * 0.3;
-    face.position.y = 58 + Math.sin(time * 0.3) * 1.5;
+    face.position.y = 78 + Math.sin(time * 0.3) * 2;
   });
   clock.face = face;
+
+  dressClockworks(w, add, brass, iron, grate);
 
   // ── lights ──
   const hemi = new THREE.HemisphereLight('#ffb880', '#1a0c08', 0.55);
@@ -880,18 +885,18 @@ export function buildClockworks(w) {
   add(new THREE.AmbientLight('#4a3020', 0.25));
   for (let i = 0; i < 6; i++) {
     const a = (i / 6) * TAU + 0.26;
-    const l = new THREE.PointLight('#ff8a30', 70, 30, 1.7);
-    l.position.set(Math.cos(a) * 36.5, 1.8, Math.sin(a) * 36.5);
+    const l = new THREE.PointLight('#ff8a30', 110, 42, 1.7);
+    l.position.set(Math.cos(a) * (CLOCK_R + CH_OUT) / 2, 1.8, Math.sin(a) * (CLOCK_R + CH_OUT) / 2);
     add(l);
     const ph = rng() * 10;
     w.anim.push((time) => {
-      l.intensity = 62 + Math.sin(time * 3 + ph) * 8;
+      l.intensity = 100 + Math.sin(time * 3 + ph) * 12;
     });
   }
   const sun = new THREE.DirectionalLight('#a8b0ff', 1.3);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
-  Object.assign(sun.shadow.camera, { left: -40, right: 40, top: 40, bottom: -40, near: 1, far: 200 });
+  Object.assign(sun.shadow.camera, { left: -45, right: 45, top: 45, bottom: -45, near: 1, far: 260 });
   sun.shadow.bias = -0.0005;
   sun.shadow.normalBias = 0.04;
   w.scene.add(sun);
@@ -901,6 +906,198 @@ export function buildClockworks(w) {
 
   // ── per-frame: hands, sectors, tea ──
   w.onUpdate = (time, dt) => updateClockworks(w, time, dt);
+}
+
+// Set dressing: light shafts, balcony, machinery, floor gears, chandeliers.
+function dressClockworks(w, add, brass, iron, grate) {
+  const rng = w.rng;
+
+  // ── light shafts slanting in through the windows ──
+  const shaftTex = (() => {
+    const c = makeCanvas(64, 256);
+    const x = c.getContext('2d');
+    const g = x.createLinearGradient(0, 0, 0, 256);
+    g.addColorStop(0, 'rgba(255,190,110,0.9)');
+    g.addColorStop(0.5, 'rgba(255,150,70,0.35)');
+    g.addColorStop(1, 'rgba(255,120,40,0)');
+    x.fillStyle = g;
+    x.fillRect(0, 0, 64, 256);
+    // soften the sides
+    const s2 = x.createLinearGradient(0, 0, 64, 0);
+    s2.addColorStop(0, 'rgba(0,0,0,1)');
+    s2.addColorStop(0.3, 'rgba(0,0,0,0)');
+    s2.addColorStop(0.7, 'rgba(0,0,0,0)');
+    s2.addColorStop(1, 'rgba(0,0,0,1)');
+    x.globalCompositeOperation = 'destination-out';
+    x.fillStyle = s2;
+    x.fillRect(0, 0, 64, 256);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  })();
+  const shaftMat = new THREE.MeshBasicMaterial({ map: shaftTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, opacity: 0.22, fog: false });
+  const shaftGeo = new THREE.PlaneGeometry(6, 40);
+  shaftGeo.translate(0, -20, 0);
+  for (let i = 0; i < 24; i++) {
+    const a = (i / 24) * TAU + 0.12;
+    const m = new THREE.Mesh(shaftGeo, shaftMat);
+    m.position.set(Math.cos(a) * (WALL_R - 1), WALL_H * 0.62, Math.sin(a) * (WALL_R - 1));
+    m.lookAt(0, m.position.y, 0);
+    m.rotateX(-0.75); // lean the shaft down toward the floor
+    m.renderOrder = 5;
+    add(m);
+  }
+
+  // ── mezzanine balcony around the hall ──
+  const balY = 16;
+  const deck = new THREE.Mesh(new THREE.RingGeometry(WALL_R - 6, WALL_R - 0.5, 120, 1).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: '#2a2018', metalness: 0.6, roughness: 0.5, side: THREE.DoubleSide }));
+  deck.position.y = balY;
+  add(deck);
+  const lip = new THREE.Mesh(new THREE.CylinderGeometry(WALL_R - 6, WALL_R - 6, 0.8, 120, 1, true), brass);
+  lip.position.y = balY - 0.4;
+  add(lip);
+  for (const y of [balY + 1.2, balY + 0.6]) {
+    const rail = new THREE.Mesh(new THREE.TorusGeometry(WALL_R - 6, 0.07, 4, 160), brass);
+    rail.rotation.x = Math.PI / 2;
+    rail.position.y = y;
+    add(rail);
+  }
+  const postGeo = new THREE.CylinderGeometry(0.06, 0.06, 1.2, 5);
+  const posts = new THREE.InstancedMesh(postGeo, brass, 160);
+  const bracketGeo = new THREE.BoxGeometry(0.4, 4, 0.4);
+  const brackets = new THREE.InstancedMesh(bracketGeo, iron, 40);
+  const d = new THREE.Object3D();
+  for (let i = 0; i < 160; i++) {
+    const a = (i / 160) * TAU;
+    d.position.set(Math.cos(a) * (WALL_R - 6), balY + 0.6, Math.sin(a) * (WALL_R - 6));
+    d.rotation.set(0, 0, 0);
+    d.updateMatrix();
+    posts.setMatrixAt(i, d.matrix);
+  }
+  for (let i = 0; i < 40; i++) {
+    const a = (i / 40) * TAU;
+    d.position.set(Math.cos(a) * (WALL_R - 3), balY - 2.2, Math.sin(a) * (WALL_R - 3));
+    d.lookAt(0, d.position.y, 0);
+    d.rotateX(0.6);
+    d.updateMatrix();
+    brackets.setMatrixAt(i, d.matrix);
+  }
+  add(posts);
+  add(brackets);
+
+  // ── flywheels with pumping pistons on the walkway ──
+  const wheelGeo = new THREE.TorusGeometry(3.4, 0.45, 8, 36);
+  const spokeGeo = new THREE.BoxGeometry(6.8, 0.3, 0.3);
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * TAU + Math.PI / 4 + 0.35;
+    const r = WALK_OUT - 9;
+    const x = Math.cos(a) * r;
+    const z = Math.sin(a) * r;
+    const base = new THREE.Mesh(new THREE.BoxGeometry(3, 2.2, 2.2), iron);
+    base.position.set(x, 1.1, z);
+    base.castShadow = true;
+    add(base);
+    const wheel = new THREE.Group();
+    wheel.position.set(x, 5.4, z);
+    wheel.lookAt(0, 5.4, 0);
+    wheel.rotateY(Math.PI / 2);
+    const rim = new THREE.Mesh(wheelGeo, brass);
+    rim.castShadow = true;
+    wheel.add(rim);
+    for (let k = 0; k < 4; k++) {
+      const sp = new THREE.Mesh(spokeGeo, iron);
+      sp.rotation.z = (k / 4) * Math.PI;
+      wheel.add(sp);
+    }
+    add(wheel);
+    const piston = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 4, 12), mat('#9a9aa8', { metalness: 1, roughness: 0.2 }));
+    piston.position.set(x, 3, z);
+    add(piston);
+    const sp = rng.range(0.8, 1.4) * (i % 2 ? 1 : -1);
+    w.anim.push((time) => {
+      rim.parent.rotation.z = time * sp;
+      piston.position.y = 3 + Math.sin(time * sp * 2) * 0.8;
+      if (w.game && Math.random() < 0.04) w.game.fx.smoke(new THREE.Vector3(x, 2.4, z), '#b8b0b8', 2, 0.8);
+    });
+    w.colliders.push({ x, z, r: 2.4, top: 9 });
+  }
+
+  // ── brass gears inlaid in the walkway, slowly turning ──
+  const inlay = new THREE.MeshStandardMaterial({ color: '#d0a050', metalness: 0.6, roughness: 0.45, emissive: '#3a2008', emissiveIntensity: 0.6 });
+  for (let i = 0; i < 10; i++) {
+    const a = rng() * TAU;
+    const r = rng.range(CH_OUT + 5, WALK_OUT - 8);
+    const R = rng.range(1.6, 3.2);
+    const g = new THREE.Group();
+    const ringM = new THREE.Mesh(new THREE.RingGeometry(R * 0.55, R, 32).rotateX(-Math.PI / 2), inlay);
+    g.add(ringM);
+    const teeth = Math.round(R * 6);
+    for (let k = 0; k < teeth; k++) {
+      const ta = (k / teeth) * TAU;
+      const t = new THREE.Mesh(new THREE.BoxGeometry(R * 0.2, 0.05, R * 0.22), inlay);
+      t.position.set(Math.cos(ta) * R * 1.05, 0, Math.sin(ta) * R * 1.05);
+      t.rotation.y = -ta;
+      g.add(t);
+    }
+    g.position.set(Math.cos(a) * r, 0.03, Math.sin(a) * r);
+    add(g);
+    const sp = rng.range(0.2, 0.5) * (i % 2 ? 1 : -1);
+    w.anim.push((time) => {
+      g.rotation.y = time * sp;
+    });
+  }
+
+  // ── candle-ring chandeliers hanging from the dome ──
+  const flame = new THREE.MeshBasicMaterial({ color: '#ffc070' });
+  const halo = new THREE.SpriteMaterial({ map: w.assets.glow, color: '#ff9a40', transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.7 });
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * TAU + 0.6;
+    const r = i === 0 ? 0 : CLOCK_R * 0.8;
+    const x = Math.cos(a) * r;
+    const z = Math.sin(a) * r;
+    const y = i === 0 ? 30 : 24;
+    const ch = new THREE.Group();
+    ch.position.set(x, y, z);
+    const ringR = i === 0 ? 5 : 3;
+    const ringM = new THREE.Mesh(new THREE.TorusGeometry(ringR, 0.15, 6, 32), brass);
+    ringM.rotation.x = Math.PI / 2;
+    ch.add(ringM);
+    const chain = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 60, 4), iron);
+    chain.position.y = 30;
+    ch.add(chain);
+    for (let k = 0; k < (i === 0 ? 16 : 10); k++) {
+      const ca = (k / (i === 0 ? 16 : 10)) * TAU;
+      const cand = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.5, 6), mat('#efe6d0'));
+      cand.position.set(Math.cos(ca) * ringR, 0.3, Math.sin(ca) * ringR);
+      ch.add(cand);
+      const f = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 4), flame);
+      f.position.set(Math.cos(ca) * ringR, 0.62, Math.sin(ca) * ringR);
+      ch.add(f);
+      if (k % 2 === 0) {
+        const h = new THREE.Sprite(halo);
+        h.scale.set(1.8, 1.8, 1);
+        h.position.copy(f.position);
+        ch.add(h);
+      }
+    }
+    add(ch);
+    const ph = rng() * 10;
+    w.anim.push((time) => {
+      ch.rotation.y = Math.sin(time * 0.2 + ph) * 0.15;
+    });
+  }
+
+  // ── embers rising off the boiling tea ──
+  w.anim.push(() => {
+    const g = w.game;
+    if (!g) return;
+    for (let k = 0; k < 3; k++) {
+      const a = Math.random() * TAU;
+      const inRing = Math.random() < 0.6;
+      const r = inRing ? CLOCK_R + Math.random() * (CH_OUT - CLOCK_R) : WALK_OUT + Math.random() * (MOAT_OUT - WALK_OUT);
+      g.fx.spark(Math.cos(a) * r, TEA_Y + 0.2, Math.sin(a) * r, Math.random() < 0.7 ? '#ff8a30' : '#ffd070', { speed: 0.6, g: -2.5, size: 0.18, life: 2.2, drag: 0.3 });
+    }
+  });
 }
 
 // The Hatter calls this: sink some hours into tea, raise others.
@@ -963,7 +1160,7 @@ function updateClockworks(w, time, dt) {
       if (ent === p && !p.alive) continue;
       const rad = ent === p ? 0.4 : ent.radius;
       const along = ent.pos.x * c + ent.pos.z * sn;
-      if (along < 2.5 || along > h.L) continue;
+      if (along < 3.8 || along > h.L) continue;
       if (ent.pos.y > h.top) continue; // jumped over, or standing on a raised hour
       const perp = -ent.pos.x * sn + ent.pos.z * c;
       const reach = h.W + rad;

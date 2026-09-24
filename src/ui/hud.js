@@ -1,7 +1,7 @@
 // DOM HUD: bars, minimap, skills, items, floating numbers, banners.
 
 import * as THREE from 'three';
-import { ITEM_BY_ID, RARITY, xpToNext } from '../game/items.js';
+import { ITEM_BY_ID, RARITY, xpToNext, PERKS } from '../game/items.js';
 import { SKILLS } from '../game/player.js';
 import { TAU } from '../engine/util.js';
 import { TIERS } from '../game/enemies.js';
@@ -209,6 +209,24 @@ const SKILL_ICONS = [
       x.fill();
     }
   },
+  (x, W) => {
+    frameBg(x, W, '#4a3a70', '#0c0816');
+    x.strokeStyle = '#e8dcff';
+    x.lineWidth = 7;
+    x.lineCap = 'round';
+    x.beginPath();
+    x.arc(W / 2, W / 2, W * 0.26, -0.3, Math.PI * 1.55);
+    x.stroke();
+    x.fillStyle = '#e8dcff';
+    x.beginPath();
+    x.moveTo(W * 0.78, W * 0.33);
+    x.lineTo(W * 0.9, W * 0.52);
+    x.lineTo(W * 0.66, W * 0.5);
+    x.fill();
+    x.beginPath();
+    x.arc(W / 2, W / 2, W * 0.08, 0, TAU);
+    x.fill();
+  }
 ];
 
 export class HUD {
@@ -329,10 +347,20 @@ export class HUD {
     return d;
   }
 
-  updateItems(inv) {
+  perkEl(perk, rank) {
+    const d = document.createElement('div');
+    d.className = 'item perk-item';
+    d.innerHTML = `${perk.icon}<span class="n">${rank}</span><div class="tip"><b>${perk.name} — rank ${rank}/${perk.max}</b>${perk.per} per rank.</div>`;
+    return d;
+  }
+
+  // Items first, then perks, RoR2-style: icon plus a count / rank badge.
+  updateItems(inv = this.game.player.inv) {
+    const perks = this.game.player?.perks || {};
     for (const host of [$('items'), $('pause-items')]) {
       host.innerHTML = '';
       for (const id of inv.order) host.appendChild(this.itemEl(id, inv.count(id)));
+      for (const perk of PERKS) if (perks[perk.id]) host.appendChild(this.perkEl(perk, perks[perk.id]));
     }
   }
 
@@ -383,9 +411,10 @@ export class HUD {
     this.setText('timer', `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(Math.floor(t % 60)).padStart(2, '0')}`);
     const d = g.difficulty();
     const names = ['Curious', 'Curiouser', 'Peculiar', 'Mad', 'Mad as a Hatter', 'Off With Her Head', 'Unbirthday'];
-    const di = Math.min(names.length - 1, Math.floor((d - 1) / 0.75));
+    const di = Math.min(names.length - 1, Math.floor((d - 1) / 0.5));
     this.setText('diff-name', names[di]);
-    $('diff-fill').style.width = `${Math.min(100, ((d - 1) / 5) * 100)}%`;
+    // the bar fills toward the next difficulty name
+    $('diff-fill').style.width = `${Math.min(100, (((d - 1) / 0.5) % 1) * 100)}%`;
 
     // skills
     const st = p.stats;
@@ -394,6 +423,7 @@ export class HUD {
       { k: p.teapotCharges > 0 ? 1 : p.teapotT / (5 * st.cdMult), txt: p.teapotCharges > 0 ? '' : Math.ceil(5 * st.cdMult - p.teapotT), charges: st.teapotCharges > 1 ? p.teapotCharges : '' },
       { k: 1 - p.dashCd / (4.5 * st.cdMult), txt: p.dashCd > 0 ? Math.ceil(p.dashCd) : '' },
       { k: p.madness > 0 ? p.madness / p.madnessMax : Math.min(1, p.corruption / 50), txt: p.madness > 0 ? '' : p.corruption >= 50 ? '' : `${Math.floor(p.corruption)}%` },
+      { k: 1 - (p.rollCd || 0) / (1.2 * st.cdMult), txt: p.rollCd > 0 ? (p.rollCd).toFixed(1) : '' },
     ];
     cds.forEach((c, i) => {
       const s = this.skills[i];

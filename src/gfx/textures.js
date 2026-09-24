@@ -146,9 +146,9 @@ export function marbleChecker(seed = 7) {
     const cy = rng() * S;
     const r = (30 + rng() * 110) * k;
     const g = rx.createRadialGradient(cx, cy, 0, cx, cy, r);
-    g.addColorStop(0, 'rgba(8,8,8,1)');
-    g.addColorStop(0.7, 'rgba(8,8,8,0.8)');
-    g.addColorStop(1, 'rgba(8,8,8,0)');
+    g.addColorStop(0, 'rgba(42,42,42,1)');
+    g.addColorStop(0.7, 'rgba(42,42,42,0.8)');
+    g.addColorStop(1, 'rgba(42,42,42,0)');
     rx.fillStyle = g;
     rx.beginPath();
     rx.ellipse(cx, cy, r, r * (0.5 + rng() * 0.5), rng() * 3, 0, TAU);
@@ -201,7 +201,7 @@ export function marbleChecker(seed = 7) {
     const cy = rng() * S;
     const r = (6 + rng() * 26) * k;
     x.fillStyle = `rgba(${90 + rng() * 50},5,12,${0.5 + rng() * 0.35})`;
-    rx.fillStyle = 'rgb(20,20,20)';
+    rx.fillStyle = 'rgb(48,48,48)';
     for (const ctx of [x, rx]) {
       ctx.beginPath();
       ctx.ellipse(cx, cy, r, r * 0.7, rng() * 3, 0, TAU);
@@ -221,7 +221,16 @@ export function marbleChecker(seed = 7) {
     x.ellipse(rng() * S, rng() * S, 5 * k, 3 * k, rng() * 3, 0, TAU);
     x.fill();
   }
-  return { map: tex(c, true), emissive: tex(e, true), bump: tex(hb, true, false), rough: tex(rb, true, false) };
+  // Blur the height + roughness maps: hard-edged bumps catch lights as
+  // pinpoint glints that crawl across the floor as the camera moves.
+  const soften = (src, px) => {
+    const out = makeCanvas(S, S);
+    const o = out.getContext('2d');
+    o.filter = `blur(${px}px)`;
+    o.drawImage(src, 0, 0);
+    return out;
+  };
+  return { map: tex(c, true), emissive: tex(e, true), bump: tex(soften(hb, 3 * k), true, false), rough: tex(soften(rb, 6 * k), true, false) };
 }
 
 export function groundTexture(seed = 3) {
