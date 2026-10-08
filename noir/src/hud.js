@@ -15,7 +15,7 @@ export function createHud() {
     bleed: $('bleed-fill'), bleedPct: $('bleed-pct'), bleedBar: document.querySelector('.bar.bleed'),
     captions: $('captions'), hint: $('hint'), floaters: $('floaters'), pointers: $('pointers'),
     sally: $('sally-fill'), sallyState: $('sally-state'), ptMack: $('pt-mack'), ptSally: $('pt-sally'),
-    stomach: $('stomach'), boost: $('boost-fill'),
+    stomach: $('stomach'), boost: $('boost-fill'), waveinfo: $('waveinfo'), score: $('score'), mult: $('mult'), combo: $('combo-fill'),
     ammo: $('ammo'), pillsN: $('pills-n'), colorWarn: $('color-warn'), focus: $('focus-fill'),
     vigHurt: $('vig-hurt'), vigFocus: $('vig-focus'), mini: $('minimap'), stamp: $('stamp'),
   };
@@ -78,6 +78,22 @@ export function createHud() {
     el.sallyState.textContent = s.sallyDown ? '· AT THE BAR' : '';
     el.ptSally.classList.toggle('down', !!s.sallyDown);
     el.carRow.classList.toggle('hidden', !s.inCar);
+    if (s.score !== undefined) {
+      el.score.textContent = Math.round(s.score).toLocaleString();
+      el.mult.textContent = `×${s.mult.toFixed(2).replace(/\.?0+$/, '')}`;
+      el.mult.classList.toggle('hot', s.mult >= 4);
+      el.combo.style.transform = `scaleX(${Math.max(0, s.combo || 0)})`;
+    }
+    const W = s.wave;
+    el.waveinfo.classList.toggle('hidden', !W);
+    if (W) {
+      el.waveinfo.className = W.state === 'cleared' || W.state === 'done' ? 'cleared' : '';
+      const portals = `${W.open} PORTAL${W.open === 1 ? '' : 'S'} OPEN`;
+      el.waveinfo.innerHTML = W.state === 'incoming' ? `WAVE 1 OF ${W.total} · <b>INCOMING</b>`
+        : W.state === 'live' ? `WAVE ${W.n} OF ${W.total} · <b>${portals}</b>`
+        : W.state === 'cleared' ? `WAVE ${W.n} OF ${W.total} CLEARED · NEXT IN ${W.next}s`
+        : `ALL ${W.total} WAVES CLEARED`;
+    }
     el.car.style.transform = `scaleX(${s.carHp})`;
     el.boost.style.transform = `scaleX(${s.boost ?? 1})`;
     el.bleed.style.transform = `scaleX(${s.bleed})`;
@@ -254,7 +270,8 @@ export function createHud() {
     bg(ps);
     ps.fillStyle = '#d0102a'; ps.beginPath(); ps.moveTo(14, 96); ps.quadraticCurveTo(48, 64, 82, 96); ps.fill(); // red dress
     ps.fillStyle = '#d8cfc6'; ps.beginPath(); ps.ellipse(48, 52, 15, 19, 0, 0, 7); ps.fill();
-    ps.fillStyle = '#0a0a0a'; ps.beginPath(); ps.ellipse(48, 44, 22, 20, 0, Math.PI, 0); ps.fill(); ps.fillRect(26, 44, 9, 24); ps.fillRect(61, 44, 9, 24); // bob
+    ps.fillStyle = '#e2b64a'; ps.beginPath(); ps.ellipse(48, 44, 22, 20, 0, Math.PI, 0); ps.fill(); ps.fillRect(26, 44, 9, 24); ps.fillRect(61, 44, 9, 24); // golden bob
+    ps.fillStyle = 'rgba(255,240,180,0.6)'; ps.fillRect(34, 30, 10, 3);
     ps.fillStyle = '#d0102a'; ps.fillRect(42, 62, 12, 4); // lips
     ps.beginPath(); ps.arc(66, 32, 6, 0, 7); ps.fill(); // flower
     ps.fillStyle = '#111'; ps.fillRect(39, 50, 6, 3); ps.fillRect(52, 50, 6, 3);

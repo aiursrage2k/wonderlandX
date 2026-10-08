@@ -145,6 +145,15 @@ button.btn:disabled { opacity: 0.35; cursor: default; }
 #hud-top { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); text-align: center; width: min(640px, 60vw); }
 #case-no { font: 15px var(--bebas); letter-spacing: 4px; color: var(--grey); }
 #case-title { font: 700 26px var(--serif); font-style: italic; text-shadow: 0 2px 8px #000; }
+#waveinfo { margin: 4px auto 2px; display: inline-block; font: 24px var(--bebas); letter-spacing: 4px; padding: 2px 14px; background: rgba(0, 0, 0, 0.6); border: 1px solid rgba(233, 228, 216, 0.35); }
+#waveinfo b { color: #ff2d95; font-weight: normal; }
+#waveinfo.cleared { border-color: #9fe08a; }
+#scorebox { text-align: right; margin-bottom: 8px; }
+#score { font: 34px var(--bebas); letter-spacing: 2px; text-shadow: 0 2px 6px #000; }
+#mult { font: 26px var(--bebas); color: #ffe11a; margin-left: 8px; text-shadow: 0 0 10px rgba(255, 225, 26, 0.5); }
+#mult.hot { color: #ff2d95; animation: blink 0.4s infinite; }
+.combobar { height: 4px; }
+.combobar > div { background: linear-gradient(90deg, #ffe11a, #ff2d95); }
 #obj { margin-top: 6px; font-size: 16px; background: rgba(0, 0, 0, 0.55); display: inline-block; padding: 4px 12px; border-left: 3px solid var(--red); }
 #obj-prog { color: var(--red-hi); margin-left: 6px; }
 #bossbar { margin-top: 10px; }
@@ -207,3 +216,7 @@ body.playing, body.playing canvas#c { cursor: none; }
   #hud-tr { width: 130px; } #minimap { width: 130px; height: 130px; }
   #hud-tl { width: 170px; }
 }
+
+/* layering: world tags under the HUD panels and captions */
+#civtags, #ebars, #floaters { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+#hud-tl, #hud-tr, #hud-top, #captions, #hint, #wanted { z-index: 3; }

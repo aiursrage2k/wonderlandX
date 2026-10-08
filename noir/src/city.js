@@ -273,6 +273,8 @@ function textTex(text, { w = 512, h = 128, font = 'bold 80px Georgia', fg = '#ff
 
 // ------------------------------------------------------------ build
 export const lamps = [];
+// street furniture that can be knocked flying: lamps plus props along the sidewalks
+export const knock = { lamps: null, props: [], types: {} };
 export const vents = [];
 export const cops = [];
 export const copCars = [];
@@ -529,6 +531,51 @@ export function buildCity(scene) {
     streaks.setMatrixAt(i, s);
   });
   for (const m of [poles, arms, heads, streaks]) scene.add(m);
+  knock.lamps = { poles, arms, heads, streaks, orig: lamps.map((l, i) => { const a = new THREE.Matrix4(), b = new THREE.Matrix4(), c = new THREE.Matrix4(), d = new THREE.Matrix4(); poles.getMatrixAt(i, a); arms.getMatrixAt(i, b); heads.getMatrixAt(i, c); streaks.getMatrixAt(i, d); return [a, b, c, d]; }) };
+
+  // ---- street furniture: hydrants, trash cans, newspaper boxes, mailboxes, parking meters
+  const steel = nmat(0x4a4c50, { kind: 'std', rough: 0.4, metal: 0.6 });
+  const darkP = nmat(0x2a2a2c, { kind: 'std', rough: 0.5, metal: 0.3 });
+  const hydrantGeo = new THREE.CylinderGeometry(0.28, 0.34, 1.0, 10); hydrantGeo.translate(0, 0.5, 0);
+  const canGeo = new THREE.CylinderGeometry(0.42, 0.36, 1.1, 12); canGeo.translate(0, 0.55, 0);
+  const boxGeo = new THREE.BoxGeometry(0.6, 1.1, 0.5); boxGeo.translate(0, 0.55, 0);
+  const mailGeo = new THREE.BoxGeometry(0.7, 1.3, 0.7); mailGeo.translate(0, 0.65, 0);
+  const meterGeo = new THREE.CylinderGeometry(0.06, 0.06, 1.3, 6); meterGeo.translate(0, 0.65, 0);
+  const typeDefs = {
+    hydrant: { geo: hydrantGeo, mat: nmat(0x9a9a98, { kind: 'std', rough: 0.4, metal: 0.4 }) },
+    trash: { geo: canGeo, mat: steel },
+    news: { geo: boxGeo, mat: nmat(0x6a6a66, { kind: 'std', rough: 0.5 }) },
+    mail: { geo: mailGeo, mat: darkP },
+    meter: { geo: meterGeo, mat: steel },
+  };
+  const placed = { hydrant: [], trash: [], news: [], mail: [], meter: [] };
+  const prnd = mulberry32(77);
+  for (let bx = 0; bx < C.N; bx++) for (let bz = 0; bz < C.N; bz++) {
+    const x0 = blockMin(bx), z0 = blockMin(bz), x1 = x0 + 56, z1 = z0 + 56;
+    for (let k = 0; k < 5; k++) {
+      const side = Math.floor(prnd() * 4), t = 6 + prnd() * 44;
+      const x = side === 0 ? x0 + t : side === 1 ? x1 - t : side === 2 ? x0 + 0.9 : x1 - 0.9;
+      const z = side === 0 ? z0 + 0.9 : side === 1 ? z1 - 0.9 : side === 2 ? z0 + t : z1 - t;
+      const type = ['hydrant', 'trash', 'news', 'mail', 'meter', 'meter', 'trash'][Math.floor(prnd() * 7)];
+      placed[type].push({ x, z, ry: prnd() * 6 });
+    }
+  }
+  for (const type in placed) {
+    const list = placed[type], d = typeDefs[type];
+    const im = new THREE.InstancedMesh(d.geo, d.mat, list.length);
+    im.castShadow = true;
+    list.forEach((p, i) => {
+      const m = new THREE.Matrix4().compose(new THREE.Vector3(p.x, 0.3, p.z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), p.ry), new THREE.Vector3(1, 1, 1));
+      im.setMatrixAt(i, m);
+      knock.props.push({ type, x: p.x, z: p.z, ry: p.ry, mesh: im, i, orig: m.clone(), down: false });
+    });
+    scene.add(im);
+    knock.types[type] = im;
+  }
+  // meter heads ride on the meter poles
+  const heads2 = new THREE.InstancedMesh(new THREE.BoxGeometry(0.28, 0.4, 0.2).translate(0, 1.45, 0), steel, placed.meter.length);
+  placed.meter.forEach((p, i) => heads2.setMatrixAt(i, new THREE.Matrix4().makeTranslation(p.x, 0.3, p.z)));
+  scene.add(heads2); knock.meterHeads = heads2;
   poles.castShadow = true;
 
   // ---- puddles

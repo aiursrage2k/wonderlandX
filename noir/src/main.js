@@ -219,7 +219,7 @@ mapCanvas.addEventListener('click', (e) => {
 });
 
 function gradeOf(c, score) {
-  const r = score / (4000 + c.id * 1500);
+  const r = score / (9000 + c.id * 3500);
   return r >= 1.6 ? 'S' : r >= 1.3 ? 'A' : r >= 1 ? 'B' : r >= 0.7 ? 'C' : 'D';
 }
 function renderBoard() {
@@ -288,7 +288,10 @@ function onEnd(r) {
   const c = currentCase;
   if (r.win) {
     const s = r.stats;
-    const score = Math.round(s.kills * 100 + s.portals * 400 + 2500 + Math.max(0, 4000 - s.time * 6) + (1 - Math.min(1, s.peak)) * 2500 + s.hp * 800 + (c.stages.some((x) => x.boss) ? 3000 : 0));
+    // the live score from the streets, plus bonuses for a clean, quick, healthy close
+    const bonus = Math.round(2500 + Math.max(0, 4000 - s.time * 6) + (1 - Math.min(1, s.peak)) * 2500 + s.hp * 800);
+    const score = Math.round((s.score || 0) + bonus);
+    s.bonus = bonus;
     const grade = gradeOf(c, score);
     const prev = save.best[c.id];
     const newBest = !prev || score > prev.score;
@@ -336,6 +339,7 @@ function showResult(win, s) {
   $('res-sub').innerHTML = win ? `${c.title} — ${c.dame.name} can sleep tonight. Nobody else in Rain City can.` : s.reason === 'bleed' ? 'The city went Technicolor. Mack Malone took one look at a turquoise sky, lost his lunch in the gutter, and gave up. Somewhere a saxophone turned pink and wept.' : `Mack Malone, face down in a puddle. The rain didn't care. The rain never does.<br><br><span class="who-sally">Crazy Sally:</span> ${pick(['Well. That\'s that. I\'m going to the Last Drop to get drunk. Somebody scrape him up and bring him by.', 'Get up, Mack. ...No? Fine. I\'ll be at the bar. Getting drunk. Very drunk. In your honor.', 'Gus! GUS! Pour me everything! Mack\'s taking a nap in a puddle again!'])}`;
   const row = (a, b) => `<div><span>${a}</span><span>${b}</span></div>`;
   $('res-stats').innerHTML = (win ? `<div class="grade">GRADE ${s.grade} · ${s.score.toLocaleString()}${s.newBest ? ' ★ NEW BEST' : ''}</div>` : '') +
+    (win ? row('Score on the streets', Math.round(s.score || 0).toLocaleString()) + row('Clean-close bonus', (s.bonus || 0).toLocaleString()) : '') +
     row('Syndicate put down', s.kills) + (s.evidenceTotal ? row('Evidence found', `${s.evidence} / ${s.evidenceTotal}`) : '') + row('Portals closed', s.portals) + row('Rockets Sally fired', s.rockets) + row('Flasks emptied', s.flasks) + row('Peak city color', `${Math.round(s.peak * 100)}%`) + row('Time on the streets', fmtTime(s.time)) +
     (win && s.newBest ? row('Newsreel', 'recorded — find it on the Big Board') : '');
   const btns = $('res-btns');

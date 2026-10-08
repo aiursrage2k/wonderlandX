@@ -98,7 +98,8 @@ export function makeSally() {
   const red = nmat(0xd0102a, { kind: 'std', rough: 0.45, keep: 1, paint: false });
   const redDark = nmat(0x8a0a1c, { keep: 1, paint: false });
   const skin = nmat(0xd8cfc6);
-  const hair = nmat(0x0c0c0c, { kind: 'std', rough: 0.3 });
+  // golden blonde: kept in color like the dress
+  const hair = nmat(0xe2b64a, { kind: 'std', rough: 0.35, metal: 0.05, keep: 1, paint: false, emissive: 0x4a3200, ei: 0.6 });
   const glove = nmat(0x101010);
   const legL = pivot(root, -0.12, 0.85, 0), legR = pivot(root, 0.12, 0.85, 0);
   for (const l of [legL, legR]) {

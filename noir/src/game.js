@@ -2,7 +2,7 @@
 // Technicolor Syndicate painting the town, portals, bosses and the case logic.
 import * as THREE from 'three';
 import { NU, splat, stroke, wash, fadeAll, clearPaint, flushPaint, coverage } from './paint.js';
-import { buildCity, L, C, DISTRICTS, roadC, nodeIndex, pushOut, rayDist, clearLine, roadPoint, lamps, vents, cops, copCars, flaskSpots, signs } from './city.js';
+import { buildCity, knock, L, C, DISTRICTS, roadC, nodeIndex, pushOut, rayDist, clearLine, roadPoint, lamps, vents, cops, copCars, flaskSpots, signs } from './city.js';
 import { rainbowCoat as rainbowMatLocal } from './models.js';
 import { makeDetective, makeSally, makeGangster, makeCar, makePortal, makePrismKing, makeMayor, makeFlask, makeRainbowGoon, makeRoomba, makeTruck, makeCopter, makeMech, makeCultist, makeImp, makeBeast, makeRobot, makeCivilian, setInfected, makeCop, drainModel, GANG_COLORS, gangMat } from './models.js';
 import { makeRain, Particles, Tracers, Flashes, hexToRgb, fx } from './fx.js';
@@ -107,7 +107,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     const red = sallyM.root.children.find((c) => c.isMesh && c.geometry.type === 'CylinderGeometry');
     const torso = new THREE.Mesh(new THREE.SphereGeometry(0.42, 12, 10), red.material);
     torso.position.set(0.55, 1.35, -0.2); sallyInCar.add(torso);
-    const hair = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 10), new THREE.MeshStandardMaterial({ color: 0x0c0c0c }));
+    const hair = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 10), new THREE.MeshStandardMaterial({ color: 0xe2b64a, roughness: 0.35, emissive: 0x4a3200 }));
     hair.position.set(0.55, 1.85, -0.2); sallyInCar.add(hair);
     const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 1.4, 10), new THREE.MeshStandardMaterial({ color: 0x3c3f3a }));
     tube.rotation.x = Math.PI / 2; tube.position.set(1.15, 1.6, 0.2); sallyInCar.add(tube);
@@ -375,10 +375,112 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     if (hp < 0.25 && Math.random() < dt * 25) parts.spawn(hx + rand(-0.4, 0.4), 1.3, hz + rand(-0.4, 0.4), rand(-0.3, 0.3), rand(2, 4), rand(-0.3, 0.3), { life: 0.4, size: rand(0.6, 1.1), color: [1, 0.55, 0.15], kind: 1 });
   }
 
+  // ===================================================================== score
+  // Kills and seals score points times the multiplier; chaining kills builds it,
+  // getting hit or going quiet bleeds it away.
+  const POINTS = { dauber: 100, hood: 150, goon: 250, roller: 300, lowrider: 400, truck: 600, roomba: 700, copter: 700, cultist: 250, imp: 120, demon: 350, beast: 1500, boss: 5000, cop: 0, copcar: 0 };
+  function addScore(base, x, z, label) {
+    const pts = Math.round(base * S.mult);
+    S.score += pts;
+    if (x !== undefined && pts) hud.floater(V(x, 0, z), `${label ? label + ' ' : ''}+${pts}${S.mult > 1 ? ' ×' + S.mult.toFixed(1).replace('.0', '') : ''}`);
+  }
+  function bumpCombo(by = 0.25) { S.mult = Math.min(8, S.mult + by); S.comboT = 5; }
+  function dropCombo(by = 1) { S.mult = Math.max(1, S.mult - by); }
+  function updateCombo(dt) { if (S.comboT > 0) { S.comboT -= dt; if (S.comboT <= 0) S.mult = 1; } }
+
+  // ===================================================================== knocking things over
+  const knockGrid = new Map();
+  const kCell = (x, z) => `${Math.floor(x / 12)},${Math.floor(z / 12)}`;
+  if (knock.lamps) lamps.forEach((l, i) => { const k = kCell(l.x, l.z); if (!knockGrid.has(k)) knockGrid.set(k, []); knockGrid.get(k).push({ lamp: i, x: l.x, z: l.z }); });
+  for (const p of knock.props) { const k = kCell(p.x, p.z); if (!knockGrid.has(k)) knockGrid.set(k, []); knockGrid.get(k).push({ prop: p, x: p.x, z: p.z }); }
+  const _zero = new THREE.Matrix4().makeScale(0, 0, 0);
+  function resetKnocks() {
+    const K = knock.lamps;
+    if (K) lamps.forEach((l, i) => { if (!l.down) return; l.down = false; K.poles.setMatrixAt(i, K.orig[i][0]); K.arms.setMatrixAt(i, K.orig[i][1]); K.heads.setMatrixAt(i, K.orig[i][2]); K.streaks.setMatrixAt(i, K.orig[i][3]); });
+    if (K) for (const m of [K.poles, K.arms, K.heads, K.streaks]) m.instanceMatrix.needsUpdate = true;
+    for (const p of knock.props) if (p.down) { p.down = false; p.mesh.setMatrixAt(p.i, p.orig); p.mesh.instanceMatrix.needsUpdate = true; }
+    if (knock.meterHeads) { let j = 0; for (const p of knock.props) if (p.type === 'meter') knock.meterHeads.setMatrixAt(j++, new THREE.Matrix4().makeTranslation(p.x, 0.3, p.z)); knock.meterHeads.instanceMatrix.needsUpdate = true; }
+  }
+  function knockAt(x, z, r, vx, vz, power) {
+    const cx = Math.floor(x / 12), cz = Math.floor(z / 12);
+    for (let i = cx - 1; i <= cx + 1; i++) for (let k = cz - 1; k <= cz + 1; k++) {
+      const list = knockGrid.get(`${i},${k}`); if (!list) continue;
+      for (const it of list) {
+        if (Math.hypot(it.x - x, it.z - z) > r) continue;
+        if (it.lamp !== undefined) knockLamp(it.lamp, vx, vz, power); else knockProp(it.prop, vx, vz, power);
+      }
+    }
+  }
+  function knockLamp(i, vx, vz, power) {
+    const l = lamps[i], K = knock.lamps;
+    if (l.down) return;
+    l.down = true;
+    for (const m of [K.poles, K.arms, K.heads, K.streaks]) { m.setMatrixAt(i, _zero); m.instanceMatrix.needsUpdate = true; }
+    // the post topples as a single piece: pole, arm and head
+    const g = new THREE.Group();
+    const pole = new THREE.Mesh(K.poles.geometry, K.poles.material); pole.position.y = 4; g.add(pole);
+    const head = new THREE.Mesh(K.heads.geometry, K.heads.material); head.position.set(l.dx * 1.2, 7.75, 0); g.add(head);
+    g.position.set(l.x, 0, l.z);
+    g.traverse((o) => { o.castShadow = true; });
+    scene.add(g);
+    debris.push({ m: g, v: V(vx * 0.4, 2 + power * 0.05, vz * 0.4), w: V(Math.sign(vz || 1) * rand(1.5, 2.5), rand(-0.5, 0.5), -Math.sign(vx || 1) * rand(1.5, 2.5)), rest: false, lamp: true });
+    sparks(l.hx || l.x, 7.6, l.z, 24); sfx.crash(0.7); sfx.glass();
+    addScore(40, l.x, l.z, 'LAMP');
+  }
+  function knockProp(p, vx, vz, power) {
+    if (p.down) return;
+    p.down = true;
+    p.mesh.setMatrixAt(p.i, _zero); p.mesh.instanceMatrix.needsUpdate = true;
+    if (p.type === 'meter' && knock.meterHeads) { let j = 0; for (const q of knock.props) { if (q.type !== 'meter') continue; if (q === p) { knock.meterHeads.setMatrixAt(j, _zero); knock.meterHeads.instanceMatrix.needsUpdate = true; } j++; } }
+    const m = new THREE.Mesh(p.mesh.geometry, p.mesh.material);
+    m.position.set(p.x, 0.3, p.z); m.rotation.y = p.ry; m.castShadow = true;
+    scene.add(m);
+    debris.push({ m, v: V(vx * rand(0.5, 0.9) + rand(-3, 3), rand(4, 9) + power * 0.1, vz * rand(0.5, 0.9) + rand(-3, 3)), w: V(rand(-9, 9), rand(-9, 9), rand(-9, 9)), rest: false });
+    sparks(p.x, 0.8, p.z, 8);
+    if (p.type === 'hydrant') { S.geysers = S.geysers || []; S.geysers.push({ x: p.x, z: p.z, t: 12 }); sfx.splash(); }
+    else if (p.type === 'meter') { for (let k = 0; k < 10; k++) parts.spawn(p.x, 1.3, p.z, rand(-4, 4), rand(3, 7), rand(-4, 4), { life: 0.9, size: 0.25, color: [0.85, 0.85, 0.8], grav: 20 }); sfx.pickup(); }
+    else sfx.crash(0.4);
+    addScore(25, p.x, p.z, '');
+  }
+  function updateKnocks(dt) {
+    if (P.inCar && Math.abs(CAR.speed) > 5) {
+      const fx2 = Math.sin(CAR.ang), fz2 = Math.cos(CAR.ang);
+      knockAt(CAR.pos.x + fx2 * 2, CAR.pos.z + fz2 * 2, 2.4, CAR.vx, CAR.vz, Math.abs(CAR.speed));
+      knockAt(CAR.pos.x - fx2 * 1.5, CAR.pos.z - fz2 * 1.5, 2.2, CAR.vx, CAR.vz, Math.abs(CAR.speed));
+    }
+    if (S.geysers) for (let i = S.geysers.length - 1; i >= 0; i--) {
+      const gz = S.geysers[i]; gz.t -= dt;
+      for (let k = 0; k < 3; k++) parts.spawn(gz.x + rand(-0.2, 0.2), 0.8, gz.z + rand(-0.2, 0.2), rand(-1.5, 1.5), rand(9, 14), rand(-1.5, 1.5), { life: 1.1, size: rand(0.3, 0.6), color: [0.8, 0.85, 0.9], alpha: 0.7, grav: 16 });
+      if (gz.t <= 0) S.geysers.splice(i, 1);
+    }
+  }
+
   // ===================================================================== civilians
   // Rain City's citizens: umbrellas, hats, places to be. They keep clear of portals,
   // but the longer a portal stays open the farther its influence reaches. Kill one
   // and the cops come out of the Holy Glaze for you.
+  // pedestrian network: four sidewalk corners at every intersection.
+  // Walk along a block's sidewalk to the next corner, or cross on the zebra crosswalk.
+  const SW = 13.8;
+  const cornerPos = (n, lane = 0) => ({ x: roadC(n.I) + n.a * (SW + lane), z: roadC(n.K) + n.b * (SW + lane) });
+  function nearestCorner(x, z) {
+    const I = nodeIndex(x), K = nodeIndex(z);
+    return { I, K, a: x >= roadC(I) ? 1 : -1, b: z >= roadC(K) ? 1 : -1 };
+  }
+  function nextCorner(n, prev) {
+    const opts = [];
+    // along the sidewalk to the neighbouring intersection (same block edge)
+    if (n.I + n.a >= 0 && n.I + n.a <= C.N) opts.push([{ I: n.I + n.a, K: n.K, a: -n.a, b: n.b }, 3]);
+    if (n.K + n.b >= 0 && n.K + n.b <= C.N) opts.push([{ I: n.I, K: n.K + n.b, a: n.a, b: -n.b }, 3]);
+    // across the street on a crosswalk
+    opts.push([{ I: n.I, K: n.K, a: -n.a, b: n.b }, 1]);
+    opts.push([{ I: n.I, K: n.K, a: n.a, b: -n.b }, 1]);
+    const ok = opts.filter(([o]) => !prev || !(o.I === prev.I && o.K === prev.K && o.a === prev.a && o.b === prev.b) && Math.abs(roadC(o.I) + o.a * SW) < C.edge && Math.abs(roadC(o.K) + o.b * SW) < C.edge);
+    const list = ok.length ? ok : opts;
+    let tot = list.reduce((s2, o) => s2 + o[1], 0), r = Math.random() * tot;
+    for (const [o, w] of list) { r -= w; if (r <= 0) return o; }
+    return list[0][0];
+  }
   function sidewalkPoint(near, minD, maxD) {
     for (let k = 0; k < 30; k++) {
       const a = Math.random() * 6.28, d = rand(minD, maxD);
@@ -400,7 +502,12 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
         const p = sidewalkPoint(f, 50, 120);
         const model = makeCivilian(Math.random());
         scene.add(model.root);
-        S.civs.push({ model, pos: V(p.x, 0, p.z), face: 0, target: null, infected: false, dead: false, t: 0, hp: 20 });
+        const node = nearestCorner(p.x, p.z), lane = rand(-1.2, 1.2);
+        const np = cornerPos(node, lane);
+        // start partway along the sidewalk toward the next corner
+        const nx = nextCorner(node, null), q = cornerPos(nx, lane), k = Math.random();
+        const sx2 = Math.abs(nx.I - node.I) + Math.abs(nx.K - node.K) ? np.x + (q.x - np.x) * k : np.x, sz2 = Math.abs(nx.I - node.I) + Math.abs(nx.K - node.K) ? np.z + (q.z - np.z) * k : np.z;
+        S.civs.push({ model, pos: V(sx2, 0, sz2), face: 0, node: nx, prev: node, lane, infected: false, dead: false, t: 0, hp: 20 });
       }
     }
     for (let i = S.civs.length - 1; i >= 0; i--) {
@@ -430,9 +537,13 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
           if (d < 9) { const fx2 = Math.sin(CAR.ang), fz2 = Math.cos(CAR.ang); const side = dx * fz2 - dz * fx2 > 0 ? 1 : -1; mx += fz2 * side * 3; mz += -fx2 * side * 3; sp = 9; }
         }
       }
-      if (mx || mz) { const l = Math.hypot(mx, mz); c.pos.x += mx / l * sp * dt; c.pos.z += mz / l * sp * dt; c.face = Math.atan2(mx, mz); c.target = null; }
+      if (mx || mz) { const l = Math.hypot(mx, mz); c.pos.x += mx / l * sp * dt; c.pos.z += mz / l * sp * dt; c.face = Math.atan2(mx, mz); c.lost = true; }
       else {
-        if (!c.target || Math.hypot(c.target.x - c.pos.x, c.target.z - c.pos.z) < 2 || c.t > 25) { c.target = sidewalkPoint(c.pos, 15, 45); c.t = c.dead ? c.t : 0; }
+        // walk the pedestrian network: corner to corner, crossing only at crosswalks
+        if (!c.node || c.lost) { c.node = nearestCorner(c.pos.x, c.pos.z); c.prev = null; c.lost = false; }
+        let tgt = cornerPos(c.node, c.lane || 0);
+        if (Math.hypot(tgt.x - c.pos.x, tgt.z - c.pos.z) < 0.8) { const nx = nextCorner(c.node, c.prev); c.prev = c.node; c.node = nx; tgt = cornerPos(nx, c.lane || 0); }
+        c.target = tgt;
         const dx = c.target.x - c.pos.x, dz = c.target.z - c.pos.z, d = Math.hypot(dx, dz) || 1;
         c.pos.x += dx / d * sp * dt; c.pos.z += dz / d * sp * dt;
         c.face += wrapAngle(Math.atan2(dx, dz) - c.face) * Math.min(1, dt * 5);
@@ -467,6 +578,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     for (let k = 0; k < 14; k++) parts.spawn(c.pos.x, 1.4, c.pos.z, rand(-4, 4), rand(2, 6), rand(-4, 4), { life: 0.6, size: 0.4, color: [0.85, 0.1, 0.12], grav: 18 });
     sfx.hurt();
     S.stats.civilians = (S.stats.civilians || 0) + 1;
+    if (byMack) { S.score = Math.max(0, S.score - 500); S.mult = 1; S.comboT = 0; hud.floater(V(c.pos.x, 0, c.pos.z), 'CIVILIAN −500'); }
     if (byMack) goWanted();
   }
   // ===================================================================== the cops
@@ -643,7 +755,9 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       evidence: [], evidenceLeft: (EVIDENCE[caseDef.id] || []).slice(),
       civs: [], civT: 0, wanted: false, copT: 0, sirenT: 0,
       radio: (RADIO[caseDef.id] || []).slice(), radioT: 32,
+      score: 0, mult: 1, comboT: 0,
     };
+    resetKnocks();
     // unless the case opens with its own errand, the first job is getting to the scene
     const goTo = area ? roadPoint(area, () => 0.5) : { x: L.cityHall.x, z: L.cityHall.z + 40 };
     const dest = area ? { x: roadC(nodeIndex((area.x0 + area.x1) / 2)), z: roadC(nodeIndex((area.z0 + area.z1) / 2)) } : goTo;
@@ -934,6 +1048,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     cureNear(p.pos.x, p.pos.z, 100);
     S.stats.portals++;
     if (p.stage === S.stage) S.stagePortals++;
+    if (!S.over && !S.replay) { addScore(1000, p.pos.x, p.pos.z, 'SEALED'); bumpCombo(1); }
     if (!S.over) quip('MACK', LINES.close, 0.8, 3);
     checkStage();
   }
@@ -958,6 +1073,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       return;
     }
     if (P.roll > 0) return;
+    dropCombo(d >= 15 ? 1 : 0.5);
     P.hp -= d;
     P.lastHurt = S.time;
     hud.hurt();
@@ -1031,6 +1147,8 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     if (e.cop) { sfx.hurt(); quip('MACK', ['Sorry, officer.', 'Nothing personal, flatfoot.', 'Go back to your crullers.'], 0.6, 3); return; }
     sfx.kill();
     S.stats.kills++;
+    addScore(e.type === 'boss' ? POINTS.boss : POINTS[e.type] || 100, e.pos.x, e.pos.z);
+    bumpCombo(e.type === 'boss' ? 2 : e.type === 'beast' || e.type === 'truck' ? 0.75 : 0.25);
     recEvent(['k', r1(e.pos.x), r1(e.pos.z), e.color, e.type === 'boss' ? 'hood' : e.type]);
     S.stageKills++;
     hud.floater(e.pos, e.type === 'boss' ? 'THE COLOR DIES WITH HIM' : e.type === 'roomba' ? 'PAINTBOT SCRAPPED' : '−COLOR');
@@ -1062,6 +1180,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       }
     }
     if (!friendly && !P.inCar && Math.hypot(P.pos.x - x, P.pos.z - z) < r) damagePlayer(25, x, z);
+    knockAt(x, z, r * 0.8, 0, 0, 30);
     if (friendly && dmg > 0) for (const c of S.civs) if (!c.dead && Math.hypot(c.pos.x - x, c.pos.z - z) < r * 0.8) killCiv(c, true);
     if (Math.hypot(x - L.donut.x, z - L.donut.z) < 45 && S.retortT <= 0) { S.retortT = 8; later(() => S && say('COP', pick(['HEY! There\'s crullers in here!', 'Watch it, Malone! That\'s police property!', 'You almost hit the bear claws!']), 2.5), 500); }
   }
@@ -1386,7 +1505,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     if (S.over) {
       S.endT -= rdt;
       if (S.endT <= 0) {
-        const r = { win: S.result === 'win', reason: S.reason, stats: { ...S.stats, time: S.time, peak: S.peak, hp: P.hp / P.maxHp, evidence: S.evidence.length, evidenceTotal: (EVIDENCE[S.caseDef.id] || []).length }, rec: S.rec, evidence: S.evidence.slice() };
+        const r = { win: S.result === 'win', reason: S.reason, stats: { ...S.stats, score: S.score, time: S.time, peak: S.peak, hp: P.hp / P.maxHp, evidence: S.evidence.length, evidenceTotal: (EVIDENCE[S.caseDef.id] || []).length }, rec: S.rec, evidence: S.evidence.slice() };
         S.running = false;
         S.ended = true;
         onEnd(r);
@@ -1398,6 +1517,8 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     updateHell(rdt);
     updateDebris(dt);
     carSmoke(dt);
+    updateKnocks(dt);
+    updateCombo(dt);
     updateCivilians(dt);
     // the radio crackles between the action: news, fake news, and the odd hint
     S.radioT -= rdt;
@@ -1448,6 +1569,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     flushPaint(rdt);
     // HUD
     hud.update({
+      score: S.score, mult: S.mult, combo: S.comboT / 5, wave: waveInfo(),
       boost: CAR.boost, hp: P.hp / P.maxHp, flasks: P.flasks, maxFlasks: P.maxFlasks, bleed: Math.min(1, S.bleed), focus: P.focus > 0 || P.focusHeld, focusMeter: P.focusMeter, pills: P.pills, ammo: P.ammo, reloading: P.reload > 0, seeColor: P.color > 0,
       inCar: P.inCar, carHp: CAR.alive ? CAR.hp / 400 : 0, carAlive: CAR.alive,
       player: focus(), enemies: S.enemies, portals: S.portals, car: CAR, sally: SA, boss: S.boss && !S.boss.dead ? S.boss : null,
@@ -1468,6 +1590,21 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     if (g.type === 'boss' && S.boss && !S.boss.dead) out.push({ x: S.boss.pos.x, z: S.boss.pos.z, c: '#ffe11a', k: 'boss' });
     if (g.type === 'kill') { let best = null, bd = 1e9; for (const e of S.enemies) { const d = Math.hypot(e.pos.x - focus().x, e.pos.z - focus().z); if (d < bd) { bd = d; best = e; } } if (best && bd > 50) out.push({ x: best.pos.x, z: best.pos.z, c: '#ffffff', k: 'kill' }); }
     return out;
+  }
+
+  function waveInfo() {
+    const waves = S.stages.filter((x) => x.stamp && x.stamp.startsWith('WAVE'));
+    if (!waves.length) return null;
+    const total = waves.length;
+    let n = 1, state = 'incoming';
+    for (let i = 0; i <= S.stageIdx && i < S.stages.length; i++) {
+      const st = S.stages[i];
+      if (st.stamp && st.stamp.startsWith('WAVE')) { n = waves.indexOf(st) + 1; state = 'live'; }
+      if (st.goal.type === 'breather' && i === S.stageIdx) state = 'cleared';
+    }
+    if (S.stageIdx < S.stages.indexOf(waves[0])) { n = 1; state = 'incoming'; }
+    if (S.over && S.result === 'win') state = 'done';
+    return { n, total, open: S.portals.length, state, next: Math.max(0, Math.ceil(S.breathT || 0)) };
   }
 
   function currentHint() {
@@ -2436,6 +2573,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     // lamp pool: light the 8 lamps nearest the camera focus
     const near = [];
     for (const l of lamps) {
+      if (l.down) continue;
       const d = Math.abs(l.x - f.x) + Math.abs(l.z - (f.z - 8));
       if (d < 120) near.push([d, l]);
     }

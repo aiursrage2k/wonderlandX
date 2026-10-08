@@ -149,6 +149,14 @@ export const sfx = {
     noise(t, 0.5, { type: 'bandpass', freq: 1800, q: 1.5, gain: 0.12, attack: 0.02 });
     tone(t + 0.45, 1000, 0.06, { type: 'sine', gain: 0.05 });
   },
+  glass() {
+    if (!ctx) return; const t = at();
+    for (let i = 0; i < 6; i++) tone(t + i * 0.03, 2500 + Math.random() * 3000, 0.12, { type: 'triangle', gain: 0.05 });
+  },
+  splash() {
+    if (!ctx) return; const t = at();
+    noise(t, 1.2, { type: 'highpass', freq: 1500, gain: 0.25, attack: 0.05 });
+  },
   siren() {
     if (!ctx) return; const t = at();
     tone(t, 740, 0.55, { type: 'square', gain: 0.035, attack: 0.05 });

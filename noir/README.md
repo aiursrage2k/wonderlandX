@@ -78,6 +78,14 @@ npx http-server -c-1 .     # then visit http://localhost:8080/noir/
   Mack broods, Gus reads the evidence, Sally orders another round. After that
   it's just a quick toast. Walk out the door to skip either one; the full scene
   can be rewatched from the results screen.
+- **Score and multiplier.** Kills and portal seals score points times your
+  multiplier, which climbs as you chain kills (up to ×8) and drops when you get
+  hit or go quiet. Shooting a civilian costs 500 and resets it. The final score
+  is your street score plus a clean-close bonus.
+- **Knock it over.** Lamp posts topple (and their light goes out); hydrants,
+  trash cans, newspaper boxes, mailboxes and parking meters go flying when you
+  hit them with the Packard or catch them in an explosion. Hydrants geyser.
+- **Pedestrians** stick to the sidewalks and cross only at the crosswalks.
 - **Wayfinding.** "Go to" objectives (start with *meet Big Pork at the Holy
   Glaze*) paint red chevrons on the road that re-route in real time, plus a
   beacon at the destination. The radar shows every objective, with an arrow on
