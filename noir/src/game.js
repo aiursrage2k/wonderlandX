@@ -590,6 +590,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
   function summonCar() {
     if (!CAR.alive || P.inCar) return;
     if (P.pos.distanceTo(CAR.pos) < 9) return;
+    CAR.intro = null;
     CAR.auto = { path: route(CAR.pos.x, CAR.pos.z, P.pos.x, P.pos.z), i: 1, t: 0, stuck: 0, rev: 0 };
     sfx.horn();
     say('MACK', pick(['*whistles* Come to papa.', 'Here, girl. *whistle*', 'The Packard knows the way. Mostly.']), 2.2);
@@ -655,11 +656,14 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     P.inCar = false; P.focus = 0; P.roll = 0; P.focusMeter = 0.6; P.pills = 2; P.color = 0; P.ammo = 6; P.reload = 0; P.focusOn = false; P.aiming = false; NU.seeColor.value = 0;
     SA.pos.set(sx - 7, 0, sz - 9); SA.inCar = false; SA.cd = 2; SA.hp = SA.maxHp; SA.down = false; SA.downT = 0;
     sallyM.root.rotation.set(0, 0, 0);
-    CAR.pos.set(sx + 2, 0, sz - 7); CAR.ang = Math.PI / 2; CAR.auto = null; CAR.vx = CAR.vz = 0; CAR.hp = 400; CAR.alive = true; CAR.respawn = 0;
+    // Sally brings the car round: it comes tearing down the block and skids up beside Mack
+    CAR.pos.set(sx - 75, 0, sz - 7); CAR.ang = Math.PI / 2; CAR.auto = null;
+    CAR.intro = { x: sx + 2, z: sz - 7, wait: 0 };
+    SA.inCar = true; CAR.vx = CAR.vz = 0; CAR.hp = 400; CAR.alive = true; CAR.respawn = 0;
     carM.root.visible = true; carM.root.traverse((o) => { if (o.userData.origMat) o.material = o.userData.origMat; });
     restoreCar();
     while (debris.length) scene.remove(debris.pop().m);
-    mack.root.visible = true; sallyM.root.visible = true;
+    mack.root.visible = true; sallyM.root.visible = false;
     // flask pickups scattered around
     const spots = flaskSpots.filter((p) => !area || (p.x > area.x0 - 40 && p.x < area.x1 + 40 && p.z > area.z0 - 40 && p.z < area.z1 + 40));
     (spots.length ? spots : flaskSpots).slice(0, 10).forEach((p, i) => addPickup(p.x, p.z, i % 3 === 2 ? 'pills' : 'flask'));
@@ -1188,6 +1192,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
   function enterCar() {
     P.inCar = true;
     CAR.auto = null;
+    if (CAR.intro) { CAR.intro = null; say('SALLY', pick(['Scoot over? No. YOU drive. I shoot.', 'Took you long enough. Shotgun!']), 2.4); }
     SA.inCar = !SA.down;
     mack.root.visible = false;
     sallyM.root.visible = false;
@@ -1230,6 +1235,43 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       CAR.wasBoosting = CAR.boosting;
       vf = clamp(vf, -16, CAR.boosting ? 78 : 50);
       CAR.drift = Math.abs(vr);
+    } else if (CAR.intro && !S.over) {
+      const I = CAR.intro;
+      const d = (I.x - CAR.pos.x) * Math.sin(CAR.ang) + (I.z - CAR.pos.z) * Math.cos(CAR.ang);
+      if (!I.arrived) {
+        const want = Math.max(0, Math.min(34, d * 1.6));
+        vf += clamp(want - vf, -70 * dt, 40 * dt);
+        vr *= Math.exp(-9 * dt);
+        setEngine(true, vf);
+        if (d < 14 && vf > 6) {
+          // hard on the brakes: smoke, rubber and a squeal
+          const nfX0 = Math.sin(CAR.ang), nfZ0 = Math.cos(CAR.ang), nrX0 = Math.cos(CAR.ang), nrZ0 = -Math.sin(CAR.ang);
+          for (const side of [1, -1]) {
+            const wx = CAR.pos.x - nfX0 * 1.98 + nrX0 * side, wz = CAR.pos.z - nfZ0 * 1.98 + nrZ0 * side;
+            skidMark(wx, wz, CAR.ang, vf * dt * 1.2);
+            if (Math.random() < 0.6) parts.spawn(wx, 0.4, wz, rand(-1, 1), rand(0.5, 2), rand(-1, 1), { life: 1.2, size: 2, grow: 3, color: [0.82, 0.83, 0.86], alpha: 0.45, drag: 1.5, kind: 1 });
+          }
+          CAR.screechT -= dt;
+          if (CAR.screechT <= 0) { CAR.screechT = 0.18; sfx.screech(1); }
+        }
+        if (d < 0.6 || (vf < 0.5 && d < 4)) {
+          I.arrived = true; vf = 0; CAR.vx = CAR.vz = 0;
+          setEngine(false);
+          sfx.horn();
+          say('SALLY', pick(['Get in, loser! We\'re solving crimes!', 'Get in, loser! The city\'s turning colors!', 'GET IN, LOSER! I already loaded the rockets!']), 3.2);
+        }
+      } else {
+        vf = 0; vr = 0;
+        I.wait += dt;
+        // ignored? she climbs out and follows on foot, complaining
+        if (I.wait > 12 && SA.inCar && Math.hypot(P.pos.x - CAR.pos.x, P.pos.z - CAR.pos.z) > 25) {
+          const s = Math.sin(CAR.ang), c = Math.cos(CAR.ang);
+          SA.inCar = false; SA.pos.set(CAR.pos.x + c * 2.4, 0, CAR.pos.z - s * 2.4); sallyM.root.visible = true;
+          sfx.door();
+          say('SALLY', pick(['Fine! I\'ll WALK! In HEELS!', 'Rude! Wait up, Mack!', 'You walk, I walk. That\'s the rule. I just made it up.']), 2.6);
+          CAR.intro = null;
+        }
+      }
     } else if (CAR.auto && !S.over) {
       const c = autopilot(dt, vf);
       if (c.thr > 0) vf += 26 * dt; else if (c.thr < 0) vf -= 40 * dt;
