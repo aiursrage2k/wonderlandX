@@ -1909,6 +1909,28 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
         animWalk(e.model, 12, dt);
         continue;
       }
+      if (e.guard) {
+        const gp = e.guard;
+        if (!S.portals.includes(gp)) { e.guard = null; e.scatterT = rand(1.5, 3); e.scattered = true; e.emergeDir = Math.random() * 6.28; }
+        else {
+          const pd = Math.hypot(f.x - gp.pos.x, f.z - gp.pos.z);
+          const ld = Math.hypot(e.pos.x - gp.pos.x, e.pos.z - gp.pos.z);
+          if (pd > 34 || ld > 22) {
+            // walk the beat around the portal (or hurry back to it)
+            e.patrolA += dt * 0.35;
+            const tx = gp.pos.x + Math.cos(e.patrolA) * 11, tz = gp.pos.z + Math.sin(e.patrolA) * 11;
+            const sp = ld > 22 ? e.speed : e.speed * 0.45;
+            nav(e, tx, tz, dt, sp);
+            e.face = e.moveFace ?? e.face;
+            pushOut(e.pos, e.r);
+            const m = e.model;
+            m.root.position.set(e.pos.x, 0, e.pos.z); m.root.rotation.y = e.face;
+            animWalk(m, sp, dt);
+            if (e.type === 'goon') { m.root.rotation.order = 'XYZ'; m.armR.rotation.x = -1.45; }
+            continue;
+          }
+        }
+      }
       if (e.type === 'lowrider' || e.type === 'truck') { updateLowrider(e, dt, dp); continue; }
       if (e.type === 'roomba') { updateRoomba(e, dt, dp); continue; }
       if (e.type === 'copter') { updateCopter(e, dt, dp); continue; }
@@ -2372,11 +2394,21 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       // each tear in the sky keeps spitting goons until it's sealed; they scatter and go paint the town
       const cap = st.perPortal * Math.max(1, S.portals.length) + 2;
       for (const p of S.portals) {
+        // an opening burst of goons, then a slow trickle: one every 5 seconds until it's sealed
+        if (p.burst === undefined) { p.burst = st.perPortal; p.spawnCd = 0.8; }
         p.spawnCd -= dt;
         if (p.spawnCd > 0 || p.cracked) continue;
-        p.spawnCd = st.interval * rand(0.8, 1.2);
+        p.spawnCd = p.burst > 0 ? 0.5 : (st.trickle || 5);
         const mine = S.enemies.filter((e) => e.src === p).length;
-        if (mine >= st.perPortal || S.enemies.filter((e) => !e.cop && e.type !== 'boss').length >= cap) continue;
+        if (mine >= st.perPortal + 4 || S.enemies.filter((e) => !e.cop && e.type !== 'boss').length >= cap + 4) continue;
+        if (p.burst > 0) p.burst--;
+        // the first few stay behind and guard the portal; the rest go paint the town
+        const guards = S.enemies.filter((e) => e.guard === p).length;
+        if (guards < (st.guards || 0)) {
+          const g2 = addEnemy(st.guardType || 'hood', p.pos.x, p.pos.z);
+          g2.src = p; g2.guard = p; g2.emerge = 0.7; g2.emergeDir = Math.random() * 6.28; g2.patrolA = Math.random() * 6.28;
+          continue;
+        }
         const type = weighted(st.mix);
         const e2 = addEnemy(type, p.pos.x, p.pos.z);
         e2.src = p; e2.emerge = 0.7; e2.emergeDir = Math.random() * 6.28; e2.scatterT = rand(1.5, 3); e2.scattered = true;
