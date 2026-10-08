@@ -332,6 +332,17 @@ export function buildOffice() {
   return {
     scene, camera, board, flasks, smokeOrigin, cut,
     setView(v) { view = v; },
+    // episode close-ups: frame an actor's face from the direction they're looking
+    shot(who, dist = 2.6) {
+      const m = who === 'MACK' ? mack : who === 'SALLY' ? sally : who === 'DOTTIE' ? dottie : who === 'DAME' ? dame : null;
+      if (!m || !m.root.visible) { view = 'wide'; return; }
+      const p = new THREE.Vector3(); m.root.getWorldPosition(p);
+      const yaw = m.root.rotation.y, head = who === 'MACK' && sleep ? 1.3 : who === 'DOTTIE' ? 1.9 : 1.75;
+      const tgt = p.clone().add(new THREE.Vector3(0, head, 0));
+      const fwd = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw)), rgt = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
+      views.shot = { pos: tgt.clone().addScaledVector(fwd, dist).addScaledVector(rgt, dist * 0.28).add(new THREE.Vector3(0, 0.15, 0)), look: tgt };
+      view = 'shot';
+    },
     flash(a = 1) { flash = a; },
     swig() { swig = 2.2; },
     update(dt) {
@@ -485,14 +496,28 @@ export function buildBar() {
 
   const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
   const pos = new THREE.Vector3(-5.2, 2.4, 3.6).add(OFF), look = new THREE.Vector3(0.2, 1.5, -2.2).add(OFF);
+  const home = { pos: pos.clone(), look: look.clone() };
+  const curP = pos.clone(), curL = look.clone();
   let time = 0;
   return {
     scene, camera,
     smokeOrigin: new THREE.Vector3(-1.4, 1.2, -1.8).add(OFF),
+    shot(who, dist = 2.4) {
+      if (who === 'wide' || !who) { pos.copy(home.pos); look.copy(home.look); return; }
+      const m = who === 'MACK' ? mack.root : who === 'SALLY' ? sally.root : who === 'GUS' ? gus : null;
+      if (!m) { pos.copy(home.pos); look.copy(home.look); return; }
+      const p = new THREE.Vector3(); m.getWorldPosition(p);
+      const yaw = m.rotation.y, tgt = p.clone().add(new THREE.Vector3(0, who === 'GUS' ? 2.3 : 1.55, 0));
+      const fwd = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw)), rgt = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
+      pos.copy(tgt).addScaledVector(fwd, dist).addScaledVector(rgt, dist * 0.3).add(new THREE.Vector3(0, 0.2, 0));
+      look.copy(tgt);
+    },
     update(dt) {
       time += dt;
-      camera.position.copy(pos).add(new THREE.Vector3(Math.sin(time * 0.2) * 0.15, Math.sin(time * 0.15) * 0.05, 0));
-      camera.lookAt(look);
+      const k = 1 - Math.exp(-dt * 3);
+      curP.lerp(pos, k); curL.lerp(look, k);
+      camera.position.copy(curP).add(new THREE.Vector3(Math.sin(time * 0.2) * 0.08, Math.sin(time * 0.15) * 0.04, 0));
+      camera.lookAt(curL);
       gusArm.rotation.z = Math.sin(time * 3) * 0.35; // polishing a glass
       gusHead.rotation.y = Math.sin(time * 0.5) * 0.4;
       player.armL.rotation.x = -1.1 + Math.sin(time * 9) * 0.12;
