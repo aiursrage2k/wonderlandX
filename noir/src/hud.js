@@ -279,9 +279,11 @@ export function createHud() {
 
   return {
     show, say, stamp, floater, update,
-    wasted(on, sub = '') {
+    wasted(on, sub = '', word = 'WASTED') {
       const w = document.getElementById('wasted');
       document.getElementById('wasted-sub').textContent = sub;
+      w.querySelector('.w-word').textContent = word;
+      w.classList.toggle('painted', word !== 'WASTED');
       w.classList.toggle('hidden', !on);
       if (on) { w.style.animation = 'none'; void w.offsetWidth; w.style.animation = ''; }
     },

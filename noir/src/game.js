@@ -726,7 +726,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     A.t -= dt;
     if (A.t <= 0) { A.t = 1; A.path = route(CAR.pos.x, CAR.pos.z, P.pos.x, P.pos.z); A.i = 1; }
     const dp = Math.hypot(P.pos.x - CAR.pos.x, P.pos.z - CAR.pos.z);
-    if (dp < 8) { CAR.auto = null; sfx.horn(); return { thr: -1, st: 0 }; }
+    if (dp < 8) { CAR.auto = null; sfx.horn(); if (SA.driving) SA.parkT = 6; return { thr: -1, st: 0 }; }
     let w = A.path[Math.min(A.i, A.path.length - 1)];
     // keep right: offset waypoints into the right-hand lane of travel
     if (Math.hypot(w.x - CAR.pos.x, w.z - CAR.pos.z) < 8 && A.i < A.path.length - 1) { A.i++; w = A.path[A.i]; }
@@ -739,6 +739,60 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     if (A.rev > 0) { A.rev -= dt; return { thr: -1, st: -st }; }
     if (A.stuck > 0 && A.t > 0.95 && Math.random() < 0.002) { const p = roadPoint(null); CAR.pos.set(p.x, 0, p.z); }
     return { thr: vf < target ? 1 : vf > target + 4 ? -1 : 0, st };
+  }
+
+  // Sally at the wheel: run down every foot thug near Mack, never Mack, then park beside him
+  const NO_RAM = new Set(['lowrider', 'roomba', 'truck', 'copter', 'demon', 'beast', 'boss', 'copcar']);
+  function sallyDrive(dt, vf) {
+    const D = SA.drv;
+    const dm = Math.hypot(P.pos.x - CAR.pos.x, P.pos.z - CAR.pos.z);
+    if (SA.parkT > 0) { SA.parkT -= dt; return { thr: vf > 0.5 ? -1 : vf < -0.5 ? 1 : 0, st: 0, top: 0 }; }
+    SA.huntT -= dt;
+    if (SA.huntT <= 0 || (SA.prey && (SA.prey.dead || !S.enemies.includes(SA.prey)))) {
+      SA.huntT = 0.4; SA.prey = null;
+      let bd = 1e9;
+      for (const e of S.enemies) {
+        if (e.dead || e.emerge > 0 || NO_RAM.has(e.type) || (e.cop && !S.wanted)) continue;
+        if (Math.hypot(e.pos.x - P.pos.x, e.pos.z - P.pos.z) > 34) continue;
+        const d = Math.hypot(e.pos.x - CAR.pos.x, e.pos.z - CAR.pos.z);
+        if (d < bd && d < 70) { bd = d; SA.prey = e; }
+      }
+    }
+    let gx, gz, top, boost = false, zig = 0;
+    if (SA.prey) { gx = SA.prey.pos.x; gz = SA.prey.pos.z; top = 26; D.joy = null; }
+    else {
+      // nothing to hit: joyride laps around Mack, zig-zagging, stamping on the rocket boost in bursts
+      D.joyT = (D.joyT || 0) - dt;
+      if (!D.joy || D.joyT <= 0 || Math.hypot(D.joy.x - CAR.pos.x, D.joy.z - CAR.pos.z) < 10 || Math.hypot(D.joy.x - P.pos.x, D.joy.z - P.pos.z) > 50) {
+        const a = Math.random() * Math.PI * 2, rr = rand(18, 40);
+        const q = { x: P.pos.x + Math.cos(a) * rr, z: P.pos.z + Math.sin(a) * rr }; pushOut(q, 3);
+        D.joy = q; D.joyT = 5;
+      }
+      gx = D.joy.x; gz = D.joy.z;
+      D.bT = (D.bT || 0) - dt;
+      if (D.bT <= 0) { D.boost = !D.boost; D.bT = D.boost ? rand(1.0, 1.8) : rand(0.6, 1.4); }
+      boost = D.boost; top = boost ? 60 : 30;
+      zig = Math.sin(S.time * 4.2) * 0.55;
+    }
+    // through the streets if the line is blocked
+    if (!clearLine(CAR.pos.x, CAR.pos.z, gx, gz)) {
+      D.pathT -= dt;
+      if (D.pathT <= 0 || !D.path) { D.pathT = 1; D.path = route(CAR.pos.x, CAR.pos.z, gx, gz); D.i = 1; }
+      let w = D.path[Math.min(D.i, D.path.length - 1)];
+      if (Math.hypot(w.x - CAR.pos.x, w.z - CAR.pos.z) < 8 && D.i < D.path.length - 1) { D.i++; w = D.path[D.i]; }
+      gx = w.x; gz = w.z;
+    }
+    const diff = wrapAngle(Math.atan2(gx - CAR.pos.x, gz - CAR.pos.z) - CAR.ang);
+    let st = clamp(diff * 2.4 + (Math.abs(diff) < 0.5 ? zig : 0), -1, 1);
+    if (Math.abs(diff) > 0.7) { top = Math.min(top, 11); boost = false; }
+    // Mack in front of the grille: stand on the brakes
+    const fx2 = Math.sin(CAR.ang), fz2 = Math.cos(CAR.ang);
+    const mx = P.pos.x - CAR.pos.x, mz = P.pos.z - CAR.pos.z, ahead = mx * fx2 + mz * fz2, side = Math.abs(mx * fz2 - mz * fx2);
+    if (ahead > 1.8 && ahead < 4.5 + Math.max(0, vf) * 0.45 && side < 2.4) return { thr: vf > 0 ? -1 : 0, st: side < 1.2 ? (mx * fz2 - mz * fx2 > 0 ? -1 : 1) : st, top: 0 };
+    if (Math.abs(vf) < 2) D.stuck += dt; else D.stuck = 0;
+    if (D.stuck > 1.0) { D.rev = 0.8; D.stuck = 0; }
+    if (D.rev > 0) { D.rev -= dt; return { thr: -1, st: -st, top: 10 }; }
+    return { thr: vf < top ? 1 : vf > top + 4 ? -1 : 0, st, top, boost };
   }
 
   // Sally can get hurt. If she drops she's out for the rest of the case.
@@ -782,7 +836,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     const sx = L.office.x, sz = L.office.z + 40;
     P.pos.set(sx - 4, 0, sz - 9); P.hp = P.maxHp; P.flasks = Math.min(P.maxFlasks, 3 + (S.fx.has('extraFlask') ? 2 : 0) + (opts.bonusFlasks || 0));
     P.inCar = false; P.focus = 0; P.roll = 0; P.focusMeter = 0.6; P.pills = 2; P.color = 0; P.ammo = 6; P.reload = 0; P.focusOn = false; P.aiming = false; NU.seeColor.value = 0;
-    SA.pos.set(sx - 7, 0, sz - 9); SA.inCar = false; SA.cd = 2; SA.lock = null; SA.lockT = 0; SA.hp = SA.maxHp; SA.down = false; SA.downT = 0;
+    SA.pos.set(sx - 7, 0, sz - 9); SA.inCar = false; SA.cd = 2; SA.lock = null; SA.lockT = 0; SA.driving = false; sallyInCar.position.x = 0; SA.hp = SA.maxHp; SA.down = false; SA.downT = 0;
     sallyM.root.rotation.set(0, 0, 0);
     // Sally brings the car round: it comes tearing down the block and skids up beside Mack
     CAR.pos.set(sx - 75, 0, sz - 7); CAR.ang = Math.PI / 2; CAR.auto = null;
@@ -916,6 +970,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       if (P.inCar) exitCar();
       say('MACK', pick(['Too much... color... I\'m gonna be sick.', 'Everything\'s... turquoise... *hurk*', 'I can see... MAUVE... *blaaargh*']), 4);
       later(() => S && say('SALLY', 'Ew! Mack! On the SHOES?!', 3), 2600);
+      later(() => { if (!S) return; sfx.wasted(); hud.wasted(true, pick(['The Technicolor Syndicate wins. Rain City is a rainbow now. Mack is a puddle.', 'Every street, every lamp post, every cop. Turquoise.', 'Somewhere a saxophone turned pink and wept.']), 'PAINTED THE TOWN'); }, 1400);
     }
     if (reason === 'dead') {
       // you go down: slow motion, Mack hits the wet street, big red WASTED
@@ -1127,6 +1182,11 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     explode(CAR.pos.x, 1.2, CAR.pos.z, 8, 0, false);
     carM.root.traverse((o) => { if (o.isMesh) { o.userData.origMat = o.userData.origMat || o.material; o.material = new THREE.MeshLambertMaterial({ color: 0x151515 }); } });
     if (P.inCar) exitCar(true);
+    if (SA.driving) {
+      SA.driving = false; SA.inCar = false; sallyInCar.position.x = 0;
+      SA.pos.set(CAR.pos.x + Math.cos(CAR.ang) * 2.6, 0, CAR.pos.z - Math.sin(CAR.ang) * 2.6); pushOut(SA.pos, 0.7);
+      sallyM.root.visible = true;
+    }
     say('MACK', pick(LINES.carDead), 2.5);
     later(() => S && say('SALLY', pick(LINES.sallyCarDead), 3), 1800);
     CAR.respawn = 14;
@@ -1352,6 +1412,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
   function enterCar() {
     P.inCar = true;
     CAR.auto = null;
+    if (SA.driving) { SA.driving = false; sallyInCar.position.x = 0; quip('SALLY', ['Fine, you drive. I\'ll shoot.', 'Back to the rockets!', 'Did you SEE that? Tell me you saw that.'], 1, 2); }
     if (CAR.intro) { CAR.intro = null; say('SALLY', pick(['Scoot over? No. YOU drive. I shoot.', 'Took you long enough. Shotgun!']), 2.4); }
     SA.inCar = !SA.down;
     mack.root.visible = false;
@@ -1359,11 +1420,22 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     sfx.door();
     quip('SALLY', LINES.carIn, 0.8, 3);
   }
-  function exitCar(forced = false) {
+  function exitCar(forced = false, sallyDrives = false) {
     aimLine.visible = false;
     P.inCar = false;
     const s = Math.sin(CAR.ang), c = Math.cos(CAR.ang);
     P.pos.set(CAR.pos.x - c * 2.4, 0, CAR.pos.z + s * 2.4);
+    if (sallyDrives && !forced && !SA.down && CAR.alive && !S.over) {
+      // Mack hops out; Sally slides over to the wheel and goes hunting
+      pushOut(P.pos, 0.7);
+      mack.root.visible = true;
+      SA.inCar = true; SA.driving = true; SA.huntT = 0; SA.parkT = 0.6; SA.drv = { stuck: 0, rev: 0, path: null, pathT: 0 };
+      sallyInCar.position.x = -1.1; // driver's seat
+      sallyM.root.visible = false;
+      sfx.door();
+      quip('SALLY', ['Scoot! My turn to drive!', 'Go seal it, handsome. I\'ll mow the lawn.', 'Ooh, the wheel! Watch THIS!', 'I got the thugs. You got the hole in the sky.'], 1, 2);
+      return;
+    }
     if (!SA.down) SA.pos.set(CAR.pos.x + c * 2.4, 0, CAR.pos.z - s * 2.4);
     pushOut(P.pos, 0.7); pushOut(SA.pos, 0.7);
     mack.root.visible = true;
@@ -1379,6 +1451,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     const rgtX = Math.cos(CAR.ang), rgtZ = -Math.sin(CAR.ang);
     let vf = CAR.vx * fwdX + CAR.vz * fwdZ;
     let vr = CAR.vx * rgtX + CAR.vz * rgtZ;
+    if (!P.inCar) CAR.boosting = false; // only Mack's foot or Sally's sets it below
     if (P.inCar && !S.over) {
       const thr = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
       const st = (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0) - (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0);
@@ -1432,6 +1505,17 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
           CAR.intro = null;
         }
       }
+    } else if (SA.driving && !CAR.auto && !S.over) {
+      const c = sallyDrive(dt, vf);
+      if (c.thr > 0) vf += 30 * dt; else if (c.thr < 0) vf -= 45 * dt;
+      CAR.boosting = !!c.boost && c.thr >= 0;
+      if (CAR.boosting) { vf += 60 * dt; if (!CAR.wasBoosting && Math.hypot(P.pos.x - CAR.pos.x, P.pos.z - CAR.pos.z) < 60) sfx.boost(); }
+      CAR.wasBoosting = CAR.boosting;
+      CAR.steer += (c.st - CAR.steer) * Math.min(1, dt * 7);
+      CAR.drift = Math.abs(vr);
+      vr *= Math.exp(-5 * dt);
+      vf = clamp(vf, -12, CAR.boosting ? 62 : 36);
+      setEngine(Math.hypot(P.pos.x - CAR.pos.x, P.pos.z - CAR.pos.z) < 70, vf);
     } else if (CAR.auto && !S.over) {
       const c = autopilot(dt, vf);
       if (c.thr > 0) vf += 26 * dt; else if (c.thr < 0) vf -= 40 * dt;
@@ -1468,7 +1552,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     }
     carM.root.position.set(CAR.pos.x, 0, CAR.pos.z);
     carM.root.rotation.y = CAR.ang;
-    if (P.inCar) {
+    if (P.inCar || SA.driving) {
       const bx = CAR.pos.x - nfX * 3.3, bz = CAR.pos.z - nfZ * 3.3;
       if (CAR.boosting) for (let k = 0; k < 4; k++) {
         for (const side of [0.55, -0.55]) {
@@ -1502,7 +1586,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     // run the Syndicate over
     if (Math.abs(vf) > 8 && P.inCar) for (const c of S.civs) if (!c.dead && Math.hypot(c.pos.x - CAR.pos.x, c.pos.z - CAR.pos.z) < 2.6) killCiv(c, true);
     // foot thugs never stop the Packard: anything faster than a crawl goes straight through them
-    if (Math.abs(vf) > 3 && P.inCar) {
+    if (Math.abs(vf) > 3 && (P.inCar || SA.driving)) {
       for (const e of S.enemies.slice()) {
         if (e.dead) continue;
         if (e.type === 'lowrider' || e.type === 'roomba' || e.type === 'truck' || e.type === 'copter' || e.type === 'demon') continue;
@@ -1598,7 +1682,8 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     S.bleedT -= rdt;
     if (S.bleedT <= 0) {
       S.bleedT = 0.5;
-      fadeAll(0.001);
+      // between waves the rain gets a chance: the color washes back a little (about a quarter over a breather)
+      fadeAll(S.stage && S.stage.goal.type === 'breather' ? 0.007 : 0.001);
       S.bleed = clamp(coverage(S.area) / (S.caseDef.bleedCap * BLEED_SCALE), 0, 1.2);
       S.peak = Math.max(S.peak, S.bleed);
       NU.paintH.value = 6 + S.bleed * 24;
@@ -1662,8 +1747,9 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
   function handleInput(rdt, pdt) {
     if (pressed.has('KeyZ')) summonCar();
     if (pressed.has('KeyE') && !(!P.inCar && nearestCracked())) {
-      if (P.inCar) exitCar();
-      else if (CAR.alive && P.pos.distanceTo(CAR.pos) < 5) enterCar();
+      if (P.inCar) exitCar(false, true);
+      else if (CAR.alive && P.pos.distanceTo(CAR.pos) < (SA.driving ? 7 : 5)) enterCar();
+      else if (SA.driving && CAR.alive) summonCar(); // Sally, come get me
       else if (!S.barUsed && L.bar.door && Math.hypot(P.pos.x - L.bar.door.x, P.pos.z - L.bar.door.z) < 5) {
         S.barUsed = true;
         P.hp = P.maxHp; P.flasks = P.maxFlasks;
@@ -1927,8 +2013,8 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     }
     if (S.time - SA.lastHurt > 6 && SA.hp < SA.maxHp) SA.hp = Math.min(SA.maxHp, SA.hp + 4 * dt);
     if (SA.inCar) {
-      // auto-fire from the passenger window when Mack isn't pointing
-      if (!mouse.down && !S.over) {
+      // auto-fire from the passenger window when Mack isn't pointing (not while she's got the wheel)
+      if (!mouse.down && !S.over && !SA.driving) {
         SA.cd -= dt;
         if (SA.cd <= 0) {
           const t = SA.lock;

@@ -228,3 +228,8 @@ body.playing, body.playing canvas#c { cursor: none; }
 @keyframes wasted-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes wasted-slam { from { opacity: 0; transform: rotate(-4deg) scale(2.6); } to { opacity: 1; transform: rotate(-4deg) scale(1); } }
 @keyframes wasted-fade { to { opacity: 1; } }
+
+/* the color wins: PAINTED THE TOWN, in every color Mack hates */
+#wasted.painted { background: radial-gradient(ellipse at center, rgba(255, 40, 160, 0.12), rgba(0, 0, 0, 0.7)); }
+#wasted.painted .w-word { font-size: clamp(54px, 11vw, 150px); text-align: center; line-height: 0.95; padding: 0 16px; color: transparent; background: linear-gradient(90deg, #ff2d95, #ff7a12, #ffe11a, #62ff2e, #18e0ff, #a64bff, #ff2d95); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; text-shadow: none; filter: drop-shadow(4px 4px 0 #000) drop-shadow(0 0 30px rgba(255, 60, 200, 0.5)); animation: wasted-slam 0.5s cubic-bezier(0.2, 1.6, 0.4, 1) 0.5s both, painted-flow 3s linear infinite; }
+@keyframes painted-flow { to { background-position: 200% 0; } }

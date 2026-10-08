@@ -91,6 +91,7 @@ function setMode(m) {
   mode = m;
   for (const id of ['title', 'board', 'barui', 'pause', 'result']) $(id).classList.add('hidden');
   hud.show(m === 'play' || m === 'pause' || m === 'reel');
+  if (m !== 'play' && m !== 'pause') $('wasted').classList.add('hidden');
   $('newsreel-tag').classList.toggle('hidden', m !== 'reel');
   document.body.classList.toggle('playing', m === 'play');
   $('cross').style.display = m === 'play' ? 'block' : 'none';

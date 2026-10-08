@@ -81,6 +81,14 @@ npx http-server -c-1 .     # then visit http://localhost:8080/noir/
   the target, re-acquiring if it dies. The blast hits everything nearby, throws
   survivors back, and bursts goons into their paint, with a red shockwave
   across the street.
+- **Sally takes the wheel.** Hop out with E (to seal a portal, say) and Sally
+  slides over and runs down every foot thug within about 30m of Mack, braking
+  for Mack. With nothing to hit she does zig-zag laps around him with rocket
+  boost bursts. Press E (or Z) to call her over, then E again to climb in.
+- **PAINTED THE TOWN.** Lose to the color and a rainbow card slams down over
+  Mack's puke scene, before the result screen.
+- **Breathers wash the city.** Between waves the rain gets a chance: City
+  Color drifts down by about a quarter over a breather.
 - **The Packard vs. thugs.** Foot thugs never stop the car: at anything faster
   than a crawl you drive straight through them and they burst. Between waves there's a breather with a countdown, and any
   leftover goons run for it.
