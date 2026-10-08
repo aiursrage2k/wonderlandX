@@ -67,6 +67,9 @@ npx http-server -c-1 .     # then visit http://localhost:8080/noir/
   headlights and the hood ornament tear off, then the engine smokes and burns.
 - **Goon Trucks** dump their riders the first time you hit them, and the riders
   scatter and paint.
+- **WRNC radio.** Chet Ballantine, "the Voice of the Rain," crackles in between
+  the action with city news, fake news, ads, and hints: the Mayor's shady deals,
+  cult flyers turning up early, all pointing at case 13.
 - **Wayfinding.** "Go to" objectives (start with *meet Big Pork at the Holy
   Glaze*) paint red chevrons on the road that re-route in real time, plus a
   beacon at the destination. The radar shows every objective, with an arrow on
@@ -133,7 +136,7 @@ The revolver holds six rounds. Holster it for a moment and Mack reloads.
 | `src/paint.js` | The color system: grey shading patch for every material plus the paint canvas the Syndicate draws on |
 | `src/models.js` | Mack, Sally, Dottie, the dames, goons, Paintbots, trucks, the Packard, cop cars, the Mayor, the Prism King |
 | `src/interiors.js` | The office (with the cutscene actors) and the Last Drop |
-| `src/story.js` | The nine cases, the cast, every line of dialogue |
+| `src/story.js` | The thirteen cases, the cast, monologues, evidence, radio bulletins, every line of dialogue |
 | `src/audio.js` | Rain, guns, rockets and the generative jazz combo |
 | `src/fx.js` | Rain, particles, tracers, explosion flashes |
 | `src/hud.js` | HUD, portraits, radar and pointers |

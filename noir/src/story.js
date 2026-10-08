@@ -10,6 +10,7 @@ export const CAST = {
   GUS: { name: 'Gus', cls: 'gus' },
   COP: { name: 'Cop', cls: 'cop' },
   PORK: { name: 'Big Pork', cls: 'cop' },
+  RADIO: { name: '📻 WRNC · Chet Ballantine', cls: 'radio' },
   NARR: { name: '', cls: 'narr' },
 };
 
@@ -142,7 +143,7 @@ export const CASES = [
       ['stamp', 'MACK', 'Holes in the sky. Fine. A hole\'s just a door nobody asked for. Let\'s go close some doors.'],
     ],
     stages: [
-      { text: 'Close the portals tearing open over Old Town', goal: { type: 'portals', n: 3 }, portals: 3, mix: { dauber: 0.5, hood: 0.4, roller: 0.1 }, max: 8, interval: 2.6, line: ['MACK', 'Those things spit out Syndicate like a slot machine. Shoot the ring till it closes. Sally — anything that hums, rocket it.'] },
+      { text: 'Close the portals tearing open over Old Town', goal: { type: 'portals', n: 3 }, portals: 3, mix: { dauber: 0.5, hood: 0.4, roller: 0.1 }, max: 8, interval: 2.6, line: ['MACK', 'Those things spit out Syndicate like a slot machine. Shoot the ring till it cracks, then walk up and jam my flask of grey in it. Sally — anything that hums, rocket it.'] },
       { text: 'More holes — and Paintbots rolling out of them. Close the holes', goal: { type: 'portals', n: 2 }, portals: 2, roombas: 2, mix: { hood: 0.3, goon: 0.3, roller: 0.2, dauber: 0.2 }, max: 10, interval: 2.0, line: ['SALLY', 'Two MORE? Mack, the sky is just a big Swiss cheese now. Grey Swiss cheese. With holes. That\'s just Swiss cheese, Mack.'] },
     ],
     bleedCap: 0.25,
@@ -154,7 +155,7 @@ export const CASES = [
       ['MACK', 'And under the show tunes, way down deep, a choir. Singing in a color I didn\'t have a name for.'],
     ],
     clue: { text: 'Those holes in the sky? Professor came in after you left. Said the rings are brittle — they crack at half the beating you\'d think.', effects: ['portalWeak'] },
-    gus: 'Portals keep spitting goons till they\'re closed. Ignore the small fry and shoot the ring.',
+    gus: 'Portals keep spitting goons till they\'re sealed. Shoot the ring till it cracks, then get close and hold E — jam that flask of grey in there. Three seconds. Make Sally earn her keep.',
   },
   {
     id: 5, title: 'Snake Eyes on the Strip', district: 'The Strip', music: 'high',
@@ -181,7 +182,7 @@ export const CASES = [
       { text: 'Close the portals feeding the Prism Palace', goal: { type: 'portals', n: 2 }, portals: 2, mix: { hood: 0.4, goon: 0.2, lowrider: 0.3, dauber: 0.1 }, max: 10, interval: 1.8 },
       { text: 'Chartreuse Charlie — end his lucky streak', goal: { type: 'boss' }, boss: 'charlie', mix: { lowrider: 0.5, hood: 0.5 }, max: 5, interval: 3, line: ['SALLY', 'He\'s GREEN, Mack! Like, really green! Like a frog ate a lime!'] },
     ],
-    bleedCap: 0.22,
+    bleedCap: 0.28,
     outro: [
       ['MACK', 'Chartreuse Charlie crapped out. The Prism Palace folded up like a bad hand and blew away down the boulevard.'],
       ['SALLY', 'The cops showed up after. Well. One cop. To ask if anybody had seen a cruller.'],
@@ -289,7 +290,7 @@ export const CASES = [
       { text: 'Krane\'s paint copters are bombing the Civic Center — shoot them down', goal: { type: 'kill', n: 10 }, copters: 3, mix: { goon: 0.4, hood: 0.4, copter: 0.2 }, max: 9, interval: 1.6, line: ['SALLY', 'HELICOPTERS, Mack! Helicopters dumping PAINT! He bought an AIR FORCE with the parking tickets!'] },
       { text: 'The Mayor climbed into a forty-foot paint mech. Impeach him', goal: { type: 'boss' }, boss: 'krane', copters: 1, mix: { hood: 0.5, goon: 0.5 }, max: 6, interval: 2.4, line: ['MACK', 'Mister Mayor. You\'re under arrest for selling the color of my city. And for the robot. And the sash.'] },
     ],
-    bleedCap: 0.36,
+    bleedCap: 0.58,
     outro: [
       ['MACK', 'The Re-Election Machine fell over like a filibuster. Horace Krane went down on his own marble steps. The gold drained out of his suit and the sequins fell off his sash one by one, like a slow applause.'],
       ['SALLY', 'Before he went grey he laughed. He said "You think I\'m the top, Malone? I just signed the papers. The buyer\'s coming through tonight."'],
@@ -429,7 +430,7 @@ export const CASES = [
       { text: 'The Chromancer\'s choir is tearing open the sky — close it', goal: { type: 'portals', n: 3 }, portals: 3, copters: 2, mix: { imp: 0.3, demon: 0.2, cultist: 0.25, truck: 0.15, copter: 0.1 }, max: 13, interval: 1.2 },
       { text: 'The High Chromancer, conducting the end of the world', goal: { type: 'boss' }, boss: 'chromancer', mix: { imp: 0.6, cultist: 0.4 }, max: 10, interval: 1.8, line: ['MACK', 'Tall. Robed. A halo that hums. The High Chromancer, the man who wants to paint the inside of the world.'] },
     ],
-    bleedCap: 0.38,
+    bleedCap: 0.45,
     outro: [
       ['MACK', 'The High Chromancer came apart like a choir that forgot the words. His halo rolled into the crack and fell for a long, long time.'],
       ['SALLY', 'Is it over? Mack, I need it to be over. My dress has demon on it.'],
@@ -502,7 +503,7 @@ export const BOSSES = {
   vic: { name: 'Vic Vermilion', sub: 'Owner of the Kaleidoscope Club', color: '#ff5a1f', hp: 900, scale: 1.6, speed: 6.5, at: 'club', attack: 'shotgun', summon: 'hood' },
   charlie: { name: 'Chartreuse Charlie', sub: 'King of the Lowriders', color: '#9dff1a', hp: 1400, scale: 1.7, speed: 7, at: 'palace', attack: 'drum', summon: 'lowrider' },
   cruller: { name: 'Commissioner Cruller', sub: 'Formerly Commissioner Hogg', color: '#ff7ac8', hp: 1900, scale: 3.0, speed: 4.2, at: 'donut', attack: 'donuts', summon: 'dauber' },
-  krane: { name: 'Mayor Krane & the Re-Election Machine', sub: 'Paid For By The People Of Rain City', color: '#ffd35a', hp: 3600, scale: 3.0, speed: 4.5, at: 'plaza', attack: 'mech', summon: 'goon' },
+  krane: { name: 'Mayor Krane & the Re-Election Machine', sub: 'Paid For By The People Of Rain City', color: '#ffd35a', hp: 3000, scale: 3.0, speed: 4.5, at: 'plaza', attack: 'mech', summon: 'goon' },
   magenta: { name: 'Madame Magenta', sub: 'The Double-Cross', color: '#ff2d95', hp: 2200, scale: 1.9, speed: 7.5, at: 'rail', attack: 'bombs', summon: 'roller' },
   king: { name: 'The Prism King', sub: 'He Wants You Beautiful', color: '#ffffff', hp: 4200, scale: 2.6, speed: 5.5, at: 'cityHall', attack: 'beam', summon: 'portal' },
 };
@@ -629,3 +630,31 @@ export const EVIDENCE = {
   13: [{ name: 'A feather from the Saint', read: 'It was every color when it fell. Now it\'s grey. Plain, soft, beautiful grey.', gus: 'Frame it, Mack. Hang it behind the bar. Under the clock that stopped.' }, { name: 'A wet card', read: 'From Miss Grey. One word: "Thanks." The ink ran.', gus: 'She wrote you a card? She never writes ME a card.' }],
   0: [{ name: 'A Syndicate matchbook', read: 'A matchbook from the Prism Palace. Inside: "We\'ll be back."', gus: 'They\'re always coming back, Mack. That\'s why I never close.' }],
 };
+
+// WRNC, "the Voice of the Rain": Chet Ballantine reads the news between songs.
+// Half of it is true. The other half is foreshadowing.
+export const RADIO = {
+  1: ['Good evening, Rain City, this is Chet Ballantine on WRNC. Forecast: rain. Extended forecast: rain. In other news, a dockworker on Pier 9 has been arrested for describing the ocean as "festive."', 'Mayor Horace Krane today unveiled his new slogan, "A Brighter City." Critics asked brighter than what. The Mayor did not answer, but he did wave at his statue.', 'A word from our sponsor: Holy Glaze Donuts. A dozen for a dime. Cops eat free. Cops eat a lot.'],
+  2: ['WRNC news. The Kaleidoscope Club reports record crowds after its torch singer\'s notes began appearing in color. The Musicians\' Union has filed a complaint. The complaint is lavender.', 'City Hall has denied rumors that the Mayor\'s office purchased forty pounds of an unidentified substance labelled "PRISM." A spokesman said, quote, "It was for the gift shop."', 'Odd one, folks: a stack of pamphlets turned up on the steps of Old Town Library. Titled "Seven Colors, Seven Nights." The library does not know who left them. Neither does God.'],
+  3: ['Breaking on WRNC: both banks on Ledger Street were hit tonight. The First Grey Bank reports a rainbow in its vault. The rainbow has not made a statement but appears smug.', 'The Mayor\'s office today awarded a forty-million-dollar contract for "sky repair" to a company nobody has heard of. The company\'s address is a hole in the ground.', 'Chet here with a public service announcement: if you hear a choir and there is no church, do not follow the choir.'],
+  4: ['WRNC weather: rain, with a chance of holes. Residents of Old Town report portals in the sky playing selections from popular musicals. City Hall says to keep your windows closed and your hums to yourself.', 'A citizen asks: "Chet, is the sky supposed to have doors?" No, ma\'am. No it is not.', 'An Old Town pawnshop closed its doors this week. A cathedral has filed for the same address. Construction to begin "soon, or perhaps it already has."'],
+  5: ['The Strip tonight: the Silver Dollar Casino is paying out in jellybeans. Gaming Commission officials say jellybeans are legal tender "if you believe hard enough."', 'The new Prism Palace has no doors, folks. Patrons simply smile and walk into the wall. Three hundred have entered. None have come out. Reviews are excellent.', 'Sponsor time: Lucky Krane Casino, the only casino owned by a sitting mayor! Lucky Krane — the house always wins, and the house is in office.'],
+  6: ['WRNC news: the Police Commissioner has not left the Holy Glaze in nine days. Reports that he has turned pink are being called "unfrosted rumors" by the Department.', 'City Hall confirms the Holy Glaze\'s frosting supplier was paid from the Mayor\'s discretionary fund. Asked what was discretionary about forty tons of sprinkles, the Mayor said "you\'ll see."', 'Folks, if your sprinkles came with a tiny painted eye on them — don\'t eat them. Chet already did. Chet has been dreaming in seven colors.'],
+  7: ['Chet Ballantine, WRNC. Railway officials at the Union Rail Yard report boxcars that are, quote, "warm, glowing, and humming the national anthem." The freight is listed as "one morning."', 'Weather service warning: a sunrise has been reported in a boxcar. If released, Rain City could see its first dry day in forty years. Stock up on umbrellas anyway. Out of spite.', 'Cult watch: flyers for the "Church of the Holy Spectrum" now appear on every lamppost from Old Town to the docks. Nobody has seen anybody put them up.'],
+  8: ['WRNC exclusive: a City Hall stenographer has gone missing with the Mayor\'s ledger. The Mayor says the ledger "contains only recipes." Recipes for what, Mister Mayor?', 'Krane Plaza\'s gold statue of Mayor Krane went for a walk again last night. It waved at schoolchildren and paid for a sandwich. With city money.', 'The Mayor\'s re-election campaign has purchased a "large mobile podium." Witnesses say the podium has legs. And cannons. Chet does not endorse candidates with cannons.'],
+  9: ['Ladies and gentlemen, there is a man with a prism for a head standing on the steps of City Hall. He says he owns the city. He has a deed. The deed is signed by the Mayor. We\'ll be right back.', 'Every church bell in Old Town rang at midnight. Old Town has one church. It wasn\'t there on Monday.', 'Chet here. My producer just handed me a note that says "THE CHOIR IS COMING." My producer is a dog.'],
+  10: ['WRNC: the Church of the Holy Spectrum held its first public baptism today in Mercy Park. Converts emerged dripping in pastel. The Order of Perpetual Drizzle has called it "a crime against weather."', 'Hymn sales are up nine thousand percent. The number one hymn is "Seven Colors, Seven Nights." The number two hymn is also "Seven Colors, Seven Nights," but louder.', 'A word of caution to household appliances: the Church is recruiting. Stay plugged in. Stay grey.'],
+  11: ['This is Chet Ballantine, coming to you from the WRNC broom closet. Our station has been taken over by a receptionist robot who will not stop preaching. She is very good at it. I may convert.', 'Every Paintbot in the city is driving east toward the Union Rail Yard. Traffic is backed up from Southside to the docks. Bring a book. Bring a rocket.', 'DOTTIE-9, if you can hear this: the coffee machine says he misses you. He said it in drips, but we understood.'],
+  12: ['WRNC emergency bulletin: the ground has opened on Southside. Small rainbow creatures with horns are emerging. Residents are advised not to pet them. They are cute. Do not pet them.', 'The Holy Glaze remains open on the edge of the abyss. Police officers inside say they are "monitoring the situation" and "almost done with this one."', 'A fortune teller on Dock Street says every crystal ball in the city now shows plaid. Chet would like to state, for the record, that he has never trusted plaid.'],
+  13: ['This... this is Chet Ballantine. The sky is red. The ground is open. Something enormous is climbing out of the floor of City Hall. If you can hear me, Rain City... it\'s still raining. Hold on to that.', 'Final bulletin, folks. Rumor has it a detective in a fedora and a lady in a red dress are driving straight at the thing. Chet\'s putting on a record for them. Something grey. Something slow.', 'Our sponsors tonight: everyone. Everyone in the city. Every bar, every donut shop, every soggy umbrella. Go get \'em, Malone.'],
+};
+export const RADIO_FILLER = [
+  'WRNC traffic: a Packard doing ninety through Old Town with a rocket launcher out the window. Police advise you to let it through. Police are eating.',
+  'Lost and found: one umbrella, black, found in a puddle. If it\'s yours, it\'s also everyone\'s. They all look the same.',
+  'Ask Chet: "Is it ever going to stop raining?" Friend, I hope not.',
+  'This hour of jazz is brought to you by the Last Drop. Gus says your tab is due. Gus says that to everyone.',
+  'Reports of a goon in a rainbow trenchcoat stealing hubcaps on Ledger Street. He is easy to spot. He is very easy to spot.',
+  'City Council voted today to rename Mercy Park "Krane Park." The vote was one to zero. The one was the Mayor.',
+  'A reminder from the 13th Precinct: if you see a crime, please call. If nobody answers, they\'re at lunch. They\'re always at lunch.',
+  'Sightings of giant robot vacuums repainting the crosswalks. The city says it did not order them. The robots say they were "called."',
+];

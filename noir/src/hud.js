@@ -108,6 +108,7 @@ export function createHud() {
       if (f.t <= 0) { f.d.remove(); floaters.splice(i, 1); }
     }
     enemyBars(s, w, h);
+    civTags(s, w, h);
     pointers(s, w, h);
     minimap(s);
   }
@@ -131,6 +132,28 @@ export function createHud() {
       d.style.setProperty('--w', `${it[3]}px`);
       d.firstChild.style.width = `${Math.max(0, it[1]) * 100}%`;
     });
+  }
+
+  // civilians wear a little "don't shoot" tag; the infected ones are rainbow
+  const tagEls = [];
+  const civtags = document.getElementById('civtags');
+  const cross = document.getElementById('cross');
+  function civTags(s, w, h) {
+    const list = (s.civs || []).filter((c) => !c.dead && Math.abs(c.pos.x - s.player.x) + Math.abs(c.pos.z - s.player.z) < 90);
+    while (tagEls.length < Math.min(list.length, 24)) { const d = document.createElement('div'); civtags.appendChild(d); tagEls.push(d); }
+    let aimed = false;
+    tagEls.forEach((d, i) => {
+      const c = list[i];
+      if (!c) { d.style.display = 'none'; return; }
+      v.set(c.pos.x, 3.2, c.pos.z).project(s.camera);
+      if (v.z > 1 || Math.abs(v.x) > 1.05 || Math.abs(v.y) > 1.05) { d.style.display = 'none'; return; }
+      d.style.display = 'block';
+      d.style.left = `${(v.x * 0.5 + 0.5) * w}px`; d.style.top = `${(-v.y * 0.5 + 0.5) * h}px`;
+      d.className = c.infected ? 'inf' : '';
+      d.textContent = c.infected ? 'INFECTED · DON\'T SHOOT' : 'CIVILIAN';
+      if (s.aim && Math.hypot(s.aim.x - c.pos.x, s.aim.z - c.pos.z) < 1.6) aimed = true;
+    });
+    cross.classList.toggle('noshoot', aimed);
   }
 
   // arrows at the screen edge for portals and the boss
@@ -255,6 +278,7 @@ export function createHud() {
       caps.splice(0).forEach((c) => c.wrap.remove());
       floaters.splice(0).forEach((f) => f.d.remove());
       barEls.forEach((d) => (d.style.display = 'none'));
+      tagEls.forEach((d) => (d.style.display = 'none'));
       el.bossbar.classList.add('hidden');
       lastFlasks = -1; lastAmmo = -1;
     },

@@ -144,6 +144,11 @@ export const sfx = {
     noise(t, 0.05, { type: 'highpass', freq: 3500, gain: 0.25 });
     noise(t + 0.08, 0.6, { type: 'bandpass', freq: 500, q: 0.7, gain: 0.08, attack: 0.05 }); // echo down the street
   },
+  radio() {
+    if (!ctx) return; const t = at();
+    noise(t, 0.5, { type: 'bandpass', freq: 1800, q: 1.5, gain: 0.12, attack: 0.02 });
+    tone(t + 0.45, 1000, 0.06, { type: 'sine', gain: 0.05 });
+  },
   siren() {
     if (!ctx) return; const t = at();
     tone(t, 740, 0.55, { type: 'square', gain: 0.035, attack: 0.05 });

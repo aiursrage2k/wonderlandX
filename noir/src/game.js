@@ -7,12 +7,12 @@ import { rainbowCoat as rainbowMatLocal } from './models.js';
 import { makeDetective, makeSally, makeGangster, makeCar, makePortal, makePrismKing, makeMayor, makeFlask, makeRainbowGoon, makeRoomba, makeTruck, makeCopter, makeMech, makeCultist, makeImp, makeBeast, makeRobot, makeCivilian, setInfected, makeCop, drainModel, GANG_COLORS, gangMat } from './models.js';
 import { makeRain, Particles, Tracers, Flashes, hexToRgb, fx } from './fx.js';
 import { sfx, setEngine } from './audio.js';
-import { BOSSES, LINES, DONUT_LINES, COP_RETORTS, MONOLOGUES, EVIDENCE } from './story.js';
+import { BOSSES, LINES, DONUT_LINES, COP_RETORTS, MONOLOGUES, EVIDENCE, RADIO, RADIO_FILLER } from './story.js';
 import { clamp, rand, pick, weighted, wrapAngle, Deck } from './util.js';
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 // how much paint each case's bleedCap tolerates; tuned so standing idle loses in ~4 minutes
-const BLEED_SCALE = 0.55;
+const BLEED_SCALE = 0.65;
 const TYPES = {
   dauber: { hp: 30, speed: 6.5, r: 0.8, scale: 1 },
   hood: { hp: 55, speed: 7.2, r: 0.8, scale: 1 },
@@ -176,7 +176,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
   const P = { pos: V(), face: 0, hp: 100, maxHp: 100, flasks: 3, maxFlasks: 5, focus: 0, focusMeter: 1, focusHeld: false, pills: 2, color: 0, ammo: 6, reload: 0, kick: 0, aiming: false, aimT: 0, focusOn: false, holsterT: 0, inCar: false, fireCd: 0, roll: 0, rollCd: 0, rollDir: V(), hurtT: 0, lastHurt: 0, walk: 0 };
   const SA = { pos: V(), face: 0, cd: 2, walk: 0, inCar: false, hp: 120, maxHp: 120, down: false, lastHurt: 0, downT: 0 };
   const CAR = { pos: V(), ang: 0, vx: 0, vz: 0, steer: 0, hp: 400, alive: true, respawn: 0, speed: 0, boost: 1, boosting: false, skidT: 0, screechT: 0 };
-  const killDeck = new Deck(LINES.kill), rocketDeck = new Deck(LINES.sallyRocket), donutDeck = new Deck(DONUT_LINES), copDeck = new Deck(COP_RETORTS);
+  const radioDeck = new Deck(RADIO_FILLER), killDeck = new Deck(LINES.kill), rocketDeck = new Deck(LINES.sallyRocket), donutDeck = new Deck(DONUT_LINES), copDeck = new Deck(COP_RETORTS);
 
   // ===================================================================== newsreel recording
   const r1 = (v) => Math.round(v * 10) / 10;
@@ -422,6 +422,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
           if (d < reach && Math.random() < dt * 0.35) infectCiv(c);
           if (d < 45) { mx += (c.pos.x - p.pos.x) / d; mz += (c.pos.z - p.pos.z) / d; sp = 6; } // run from it
         }
+        for (const o of S.civs) if (o.infected && !o.dead && Math.hypot(c.pos.x - o.pos.x, c.pos.z - o.pos.z) < 3 && Math.random() < dt * 0.25) infectCiv(c);
         for (const e of S.enemies) if (!e.cop && (e.type === 'dauber' || e.type === 'goon' || e.type === 'cultist') && Math.hypot(c.pos.x - e.pos.x, c.pos.z - e.pos.z) < 3.5 && Math.random() < dt * 0.3) infectCiv(c);
         // dive out of the way of a speeding Packard
         if (P.inCar && Math.abs(CAR.speed) > 8) {
@@ -439,7 +440,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       pushOut(c.pos, 0.5);
       if (c.infected) {
         c.paintT = (c.paintT || 0) - dt;
-        if (c.paintT <= 0) { c.paintT = 0.7; splat(c.pos.x, c.pos.z, 0.9, pick(GANG_COLORS), 0.7, 2); }
+        if (c.paintT <= 0) { c.paintT = 1.5; splat(c.pos.x, c.pos.z, 0.8, pick(GANG_COLORS), 0.65, 1); }
       }
       const m = c.model;
       m.root.position.set(c.pos.x, 0, c.pos.z);
@@ -634,6 +635,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       stages: null, routeT: 0, route: null, timers: [],
       evidence: [], evidenceLeft: (EVIDENCE[caseDef.id] || []).slice(),
       civs: [], civT: 0, wanted: false, copT: 0, sirenT: 0,
+      radio: (RADIO[caseDef.id] || []).slice(), radioT: 32,
     };
     // unless the case opens with its own errand, the first job is getting to the scene
     const goTo = area ? roadPoint(area, () => 0.5) : { x: L.cityHall.x, z: L.cityHall.z + 40 };
@@ -1325,6 +1327,14 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     updateDebris(dt);
     carSmoke(dt);
     updateCivilians(dt);
+    // the radio crackles between the action: news, fake news, and the odd hint
+    S.radioT -= rdt;
+    if (S.radioT <= 0 && !S.over) {
+      S.radioT = rand(55, 80);
+      const line = S.radio.length ? S.radio.shift() : radioDeck.draw();
+      sfx.radio();
+      say('RADIO', line, 6.5);
+    }
     updateCops(dt);
     if (CAR.alive) updateCar(P.inCar ? pdt : dt);
     else if (CAR.respawn > 0) {
@@ -1369,7 +1379,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       boost: CAR.boost, hp: P.hp / P.maxHp, flasks: P.flasks, maxFlasks: P.maxFlasks, bleed: Math.min(1, S.bleed), focus: P.focus > 0 || P.focusHeld, focusMeter: P.focusMeter, pills: P.pills, ammo: P.ammo, reloading: P.reload > 0, seeColor: P.color > 0,
       inCar: P.inCar, carHp: CAR.alive ? CAR.hp / 400 : 0, carAlive: CAR.alive,
       player: focus(), enemies: S.enemies, portals: S.portals, car: CAR, sally: SA, boss: S.boss && !S.boss.dead ? S.boss : null,
-      hint: currentHint(), camera, time: S.time, objectives: objectiveMarks(), sallyHp: SA.hp / SA.maxHp, sallyDown: SA.down,
+      civs: S.civs, aim, hint: currentHint(), camera, time: S.time, objectives: objectiveMarks(), sallyHp: SA.hp / SA.maxHp, sallyDown: SA.down,
     });
     recFrame(rdt);
     pressed.clear();
@@ -1923,9 +1933,9 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       e.sweepA += dt * 1.0;
       e.sweepCd = (e.sweepCd || 0) - dt;
       if (e.sweepCd <= 0) {
-        e.sweepCd = 0.05;
+        e.sweepCd = 0.09;
         e.hue = ((e.hue || 0) + 1) % 6;
-        for (const side of [-1, 1]) {
+        for (const side of [e.hue % 2 ? -1 : 1]) {
           const ox = e.pos.x + Math.cos(e.face) * side * 3.5, oz = e.pos.z - Math.sin(e.face) * side * 3.5;
           enemyShot(V(ox, 5, oz), Math.sin(e.sweepA), Math.cos(e.sweepA), GANG_COLORS[e.hue], 30, 5);
         }
