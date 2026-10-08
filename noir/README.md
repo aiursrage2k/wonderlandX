@@ -71,9 +71,10 @@ npx http-server -c-1 .     # then visit http://localhost:8080/noir/
   the action with city news, fake news, ads, and hints: the Mayor's shady deals,
   cult flyers turning up early, all pointing at case 13.
 - **Waves.** Wave cases open portals spread across the whole city, one more
-  each wave. Every portal opens with a burst of 5 goons, then spits one more
-  every 5 seconds until it's sealed. Each portal has at most 5 of its goons
-  alive at a time, and there are never more than 20 on the streets. Foot goons
+  each wave. The moment a portal opens it spits out 5 goons, half a second
+  apart. After that it only refills: while fewer than 5 of its goons are
+  alive, it adds one every 5 seconds until it's sealed. There are never more
+  than 20 on the streets. Foot goons
   leave a thin paint snail trail wherever they walk. Clear a wave and every
   goon still standing goes off like a firecracker, nearest first.
 - **Sally's rockets.** She locks on by herself (red reticle), preferring the

@@ -2608,13 +2608,15 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     if (st.perPortal) {
       // each tear in the sky keeps spitting goons until it's sealed; they scatter and go paint the town
       for (const p of S.portals) {
-        // an opening burst of 5 goons, then one every 5 seconds until it's sealed; 20 on the streets, tops
-        if (p.burst === undefined) { p.burst = PORTAL_BURST; p.spawnCd = 0.8; }
+        // the moment it opens: 5 goons, half a second apart. After that it only refills:
+        // with fewer than 5 of its goons alive, one more every 5 seconds (20 on the streets, tops)
+        if (p.burst === undefined) { p.burst = PORTAL_BURST; p.spawnCd = 0; }
+        if (p.cracked) continue;
+        const full = S.enemies.filter((e) => e.src === p && !e.dead).length >= PORTAL_MAX || S.enemies.filter((e) => !e.cop && e.type !== 'boss' && !e.dead).length >= MAX_GOONS;
+        if (full) { if (p.burst <= 0) p.spawnCd = PORTAL_TRICKLE; continue; } // the refill clock starts when one of them dies
         p.spawnCd -= dt;
-        if (p.spawnCd > 0 || p.cracked) continue;
-        p.spawnCd = p.burst > 0 ? 0.5 : PORTAL_TRICKLE;
-        if (S.enemies.filter((e) => !e.cop && e.type !== 'boss').length >= MAX_GOONS) continue;
-        if (S.enemies.filter((e) => e.src === p && !e.dead).length >= PORTAL_MAX) continue;
+        if (p.spawnCd > 0) continue;
+        p.spawnCd = p.burst > 1 ? 0.5 : PORTAL_TRICKLE;
         if (p.burst > 0) p.burst--;
         // the first few stay behind and guard the portal; the rest go paint the town
         const guards = S.enemies.filter((e) => e.guard === p).length;
