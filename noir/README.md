@@ -1,0 +1,99 @@
+# Grey City Blues
+
+A rain-soaked, black-and-white noir shooter in the browser. Rain City is grey,
+and the Technicolor Syndicate is painting it: goons pour out of portals in the
+sky, giant robot-vacuum Paintbots roll down the avenues laying stripes, and
+Goon Trucks cruise with rocket-men in the back. You are Mack Malone, a grumpy
+hard-boiled private eye with a flask and a big red revolver. Crazy Sally rides
+shotgun in a red dress and fires rockets out of the window of your black '41
+Packard. Every goon you drop washes the color back out of the streets. Let the
+color bleed get too high and Mack pukes in the gutter and gives up.
+
+Built the same way as Wonderland X: three.js plus code. Every model is built
+from primitives, every texture is painted on a canvas, and the sound effects and
+jazz are synthesized live with WebAudio. There are no asset files.
+
+## Play
+
+No build step. Serve the repository root and open `noir/`:
+
+```sh
+npx http-server -c-1 .     # then visit http://localhost:8080/noir/
+```
+
+## How it plays
+
+- **Main menu = the office.** Rain on the window, blinds throwing shadows, flasks
+  on every surface. DOTTIE-9, the drunk robot receptionist, works the front desk.
+- **The Big Board.** A corkboard map of Rain City with nine case files pinned
+  to it. Closing a case unseals the next one. Closed cases stay on the board,
+  so you can replay any case for a better grade.
+- **Every case opens in the office.** Mack is asleep at his desk, a dame checks
+  in with Dottie, Sally kicks the door in, and they take the case. Each case is
+  louder and more absurd than the last. Along the way: a torch singer whose blue
+  note came out actually blue, a rainbow living in a bank vault, holes in the sky
+  humming show tunes, a Police Commissioner turning into a frosted cruller, a
+  sunrise smuggled out in boxcars, the corrupt Mayor Horace Krane and his gold
+  statue, and the Prism King himself.
+- **The city** is a 16×16 grid of 4-lane streets about 1.3 km across, with
+  empty lots, banks, City Hall and Krane Plaza, the Strip and its casinos, the
+  docks, the rail yards, the Last Drop, and the Holy Glaze donut shop. The Holy
+  Glaze lot is full of cop cars, and Mack and Sally call the cops fat pigs every
+  time they drive past.
+- **Sin City color.** The world renders in grey. The only things that keep their
+  color are Sally's dress, Mack's revolver, the cop lights, the donut and a few
+  neon signs, plus whatever the Syndicate has painted.
+- **The Last Drop.** Visit Gus between cases for extra flasks, hints, and
+  case-specific clues that change the fight (double rocket damage on a boss,
+  weaker portals and so on). You can also walk in once per case mid-mission to
+  get patched up.
+- **Wayfinding.** "Go to" objectives (start with *meet Big Pork at the Holy
+  Glaze*) paint red chevrons on the road that re-route in real time, plus a
+  beacon at the destination. The radar shows every objective, with an arrow on
+  the rim when it's out of range.
+- **Newsreels.** Your best run on each case is recorded and can be replayed as
+  a scratchy newsreel from the board. Runs export and import as JSON, so the top
+  scorer's run could be featured in the next episode. A global leaderboard would
+  need a server; everything here is stored locally.
+- **Jazz.** Ten generative tunes (ballads, swing, bossa, a waltz, up-tempo hard
+  bop) in a rotating playlist. Each play composes a fresh head and solos, and
+  `N` skips to the next tune.
+
+## Controls
+
+| Input | Action |
+| --- | --- |
+| WASD | Move / drive |
+| Right mouse (hold) | Draw and aim the big red revolver |
+| Left mouse | Fire (while aiming). In the car, Sally fires a rocket where you point |
+| R / Space | Tuck and roll (on foot) |
+| Space | Handbrake (in the car) |
+| E | Get in or out of the Packard, enter the Last Drop |
+| Z | Whistle: the Packard drives itself to you |
+| F | Focus on or off: time crawls, paid for with the color you've stolen from the Syndicate |
+| Q | Pull from the flask (heal + a moment of focus) |
+| G | Pain pills: full heal, but Mack sees the world in color for a while (he hates it) |
+| Mouse wheel | Zoom |
+| N | Next jazz tune |
+| Esc | Pause |
+
+The revolver holds six rounds. Holster it for a moment and Mack reloads.
+
+## Code map
+
+| File | What's in it |
+| --- | --- |
+| `src/main.js` | Boot, renderer + film grain/vignette/lens-rain post pass, menus, board, cutscenes, bar, scoring, saves, newsreels |
+| `src/game.js` | The streets: player, Sally, the Packard (and its autopilot), the Syndicate, portals, bosses, wayfinding, case logic, recording/replay |
+| `src/city.js` | Rain City generation, landmarks, collision grid, road routing helpers, map drawing |
+| `src/paint.js` | The color system: grey shading patch for every material plus the paint canvas the Syndicate draws on |
+| `src/models.js` | Mack, Sally, Dottie, the dames, goons, Paintbots, trucks, the Packard, cop cars, the Mayor, the Prism King |
+| `src/interiors.js` | The office (with the cutscene actors) and the Last Drop |
+| `src/story.js` | The nine cases, the cast, every line of dialogue |
+| `src/audio.js` | Rain, guns, rockets and the generative jazz combo |
+| `src/fx.js` | Rain, particles, tracers, explosion flashes |
+| `src/hud.js` | HUD, portraits, radar and pointers |
+
+`tools/noir-shot.mjs` is a headless Playwright harness. Load the page with
+`?debug` and `window.__noir.step(seconds)` fast-forwards the game without
+rendering, which is handy for scripted playthroughs.

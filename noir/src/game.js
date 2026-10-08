@@ -1,0 +1,1755 @@
+// The streets: Mack on foot or behind the wheel, Sally on rockets, the
+// Technicolor Syndicate painting the town, portals, bosses and the case logic.
+import * as THREE from 'three';
+import { NU, splat, stroke, wash, fadeAll, clearPaint, flushPaint, coverage } from './paint.js';
+import { buildCity, L, C, DISTRICTS, roadC, nodeIndex, pushOut, rayDist, clearLine, roadPoint, lamps, vents, cops, copCars, flaskSpots, signs } from './city.js';
+import { makeDetective, makeSally, makeGangster, makeCar, makePortal, makePrismKing, makeMayor, makeFlask, makeRainbowGoon, makeRoomba, makeTruck, drainModel, GANG_COLORS, gangMat } from './models.js';
+import { makeRain, Particles, Tracers, Flashes, hexToRgb, fx } from './fx.js';
+import { sfx, setEngine } from './audio.js';
+import { BOSSES, LINES, DONUT_LINES, COP_RETORTS } from './story.js';
+import { clamp, rand, pick, weighted, wrapAngle, Deck } from './util.js';
+
+const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
+const TYPES = {
+  dauber: { hp: 30, speed: 6.5, r: 0.8, scale: 1 },
+  hood: { hp: 55, speed: 7.2, r: 0.8, scale: 1 },
+  roller: { hp: 210, speed: 4.3, r: 1.2, scale: 1.4 },
+  lowrider: { hp: 170, speed: 19, r: 2.6, scale: 1 },
+  goon: { hp: 95, speed: 7.6, r: 0.8, scale: 1.05 },
+  roomba: { hp: 380, speed: 7.5, r: 3.6, scale: 1 },
+  truck: { hp: 340, speed: 15, r: 3.2, scale: 1 },
+};
+
+export function createGame({ renderer, hud, onEnd, onBar }) {
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x24272c);
+  scene.fog = new THREE.FogExp2(0x24272c, 0.0058);
+  const camera = new THREE.PerspectiveCamera(50, 1, 0.5, 900);
+
+  // environment for wet reflections: a dim city glow
+  const envScene = new THREE.Scene();
+  envScene.background = new THREE.Color(0x0b0c0e);
+  for (let i = 0; i < 26; i++) {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(4 + Math.random() * 10, 2 + Math.random() * 10), new THREE.MeshBasicMaterial({ color: new THREE.Color().setScalar(0.4 + Math.random() * 1.6), side: THREE.DoubleSide }));
+    const a = Math.random() * Math.PI * 2;
+    m.position.set(Math.cos(a) * 40, Math.random() * 20 - 2, Math.sin(a) * 40);
+    m.lookAt(0, 0, 0);
+    envScene.add(m);
+  }
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(envScene, 0.02).texture;
+  scene.environmentIntensity = 0.7;
+
+  const hemi = new THREE.HemisphereLight(0x9aa6b8, 0x2a2a2e, 1.15);
+  scene.add(hemi);
+  const moon = new THREE.DirectionalLight(0xc8d4e6, 1.5);
+  moon.castShadow = true;
+  moon.shadow.mapSize.set(2048, 2048);
+  Object.assign(moon.shadow.camera, { left: -70, right: 70, top: 70, bottom: -70, near: 10, far: 220 });
+  moon.shadow.bias = -0.0008;
+  scene.add(moon, moon.target);
+  // a hard pool of light that follows Mack, like every noir hero gets
+  const heroSpot = new THREE.SpotLight(0xfff4e6, 2600, 70, 0.42, 0.75, 1.4);
+  heroSpot.castShadow = true;
+  heroSpot.shadow.mapSize.set(1024, 1024);
+  heroSpot.shadow.bias = -0.0006;
+  scene.add(heroSpot, heroSpot.target);
+  const lampPool = [];
+  for (let i = 0; i < 8; i++) { const l = new THREE.PointLight(0xfff1d8, 0, 34, 1.6); scene.add(l); lampPool.push(l); }
+
+  const city = buildCity(scene);
+  const rain = makeRain(24000);
+  scene.add(rain);
+  const parts = new Particles(6000);
+  scene.add(parts.mesh);
+  const tracers = new Tracers(300);
+  scene.add(tracers.mesh);
+  const flashes = new Flashes(scene, 5);
+
+  // headlights for Mack's car
+  const headL = new THREE.SpotLight(0xffffff, 0, 60, 0.45, 0.5, 1.2);
+  const headR = headL.clone();
+  scene.add(headL, headR, headL.target, headR.target);
+
+  // ---- persistent actors
+  const mack = makeDetective();
+  scene.add(mack.root);
+  const sallyM = makeSally();
+  scene.add(sallyM.root);
+  const carM = makeCar('sedan');
+  scene.add(carM.root);
+  const sallyInCar = new THREE.Group(); // Sally's red dress through the passenger window
+  {
+    const red = sallyM.root.children.find((c) => c.isMesh && c.geometry.type === 'CylinderGeometry');
+    const torso = new THREE.Mesh(new THREE.SphereGeometry(0.42, 12, 10), red.material);
+    torso.position.set(0.55, 1.35, -0.2); sallyInCar.add(torso);
+    const hair = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 10), new THREE.MeshStandardMaterial({ color: 0x0c0c0c }));
+    hair.position.set(0.55, 1.85, -0.2); sallyInCar.add(hair);
+    const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 1.4, 10), new THREE.MeshStandardMaterial({ color: 0x3c3f3a }));
+    tube.rotation.x = Math.PI / 2; tube.position.set(1.15, 1.6, 0.2); sallyInCar.add(tube);
+    sallyInCar.userData.tube = tube;
+    carM.body.add(sallyInCar);
+  }
+  const rocketGeo = new THREE.CylinderGeometry(0.16, 0.16, 1.0, 8);
+  rocketGeo.rotateX(Math.PI / 2);
+  const rocketMat = new THREE.MeshBasicMaterial({ color: 0xff1a2a });
+  const ballGeo = new THREE.SphereGeometry(0.32, 10, 8);
+  const donutGeo = new THREE.TorusGeometry(1.1, 0.5, 10, 18);
+  const pillMat = new THREE.MeshStandardMaterial({ color: 0xff8a1a, roughness: 0.3, emissive: 0x552200 });
+  const pillCap = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 });
+  const pillPickupModel = () => {
+    const g = new THREE.Group();
+    const b = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 1.0, 14), pillMat); b.position.y = 0.5; g.add(b);
+    const c = new THREE.Mesh(new THREE.CylinderGeometry(0.46, 0.46, 0.25, 14), pillCap); c.position.y = 1.1; g.add(c);
+    const l = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.45, 0.02), pillCap); l.position.set(0, 0.5, 0.42); g.add(l);
+    return g;
+  };
+  const flaskPickupModel = () => { const f = makeFlask(1.4); f.traverse((o) => { if (o.isMesh) o.castShadow = false; }); return f; };
+
+  // beam for the Prism King
+  const beamMat = new THREE.ShaderMaterial({
+    uniforms: { t: { value: 0 } }, transparent: true, depthWrite: false,
+    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+    fragmentShader: 'uniform float t; varying vec2 vUv; void main(){ vec3 c = 0.6 + 0.5 * cos(6.2831 * (vec3(0.0,0.33,0.67) + vUv.y * 3.0 - t)); gl_FragColor = vec4(c * 1.4, 0.85); }',
+  });
+  const aimLine = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 1), new THREE.MeshBasicMaterial({ color: 0xff2030, transparent: true, opacity: 0.45, depthWrite: false }));
+  aimLine.visible = false;
+  scene.add(aimLine);
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 1, 10, 1, true), beamMat);
+  beam.visible = false;
+  scene.add(beam);
+
+  // ---- input
+  const keys = new Set();
+  const mouse = { x: 0, y: 0, down: false, right: false };
+  const aim = V();
+  const ray = new THREE.Raycaster();
+  const plane = new THREE.Plane(V(0, 1, 0), -1.4);
+  const pressed = new Set();
+  addEventListener('keydown', (e) => { if (!keys.has(e.code)) pressed.add(e.code); keys.add(e.code); if (S && S.running && ['Space', 'ArrowUp', 'ArrowDown'].includes(e.code)) e.preventDefault(); });
+  addEventListener('keyup', (e) => keys.delete(e.code));
+  addEventListener('blur', () => { keys.clear(); mouse.down = false; });
+  const canvas = renderer.domElement;
+  canvas.addEventListener('mousemove', (e) => { mouse.x = (e.clientX / innerWidth) * 2 - 1; mouse.y = -(e.clientY / innerHeight) * 2 + 1; });
+  canvas.addEventListener('mousedown', (e) => { if (e.button === 0) mouse.down = true; if (e.button === 2) mouse.right = true; });
+  addEventListener('mouseup', (e) => { if (e.button === 0) mouse.down = false; if (e.button === 2) mouse.right = false; });
+  canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+  let zoom = 1;
+  canvas.addEventListener('wheel', (e) => { zoom = clamp(zoom * (e.deltaY > 0 ? 1.1 : 1 / 1.1), 0.45, 1.9); e.preventDefault(); }, { passive: false });
+
+  // ---- state
+  let S = null;
+  const P = { pos: V(), face: 0, hp: 100, maxHp: 100, flasks: 3, maxFlasks: 5, focus: 0, focusMeter: 1, focusHeld: false, pills: 2, color: 0, ammo: 6, reload: 0, kick: 0, aiming: false, aimT: 0, focusOn: false, holsterT: 0, inCar: false, fireCd: 0, roll: 0, rollCd: 0, rollDir: V(), hurtT: 0, lastHurt: 0, walk: 0 };
+  const SA = { pos: V(), face: 0, cd: 2, walk: 0, inCar: false, hp: 120, maxHp: 120, down: false, lastHurt: 0, downT: 0 };
+  const CAR = { pos: V(), ang: 0, vx: 0, vz: 0, steer: 0, hp: 400, alive: true, respawn: 0, speed: 0 };
+  const killDeck = new Deck(LINES.kill), rocketDeck = new Deck(LINES.sallyRocket), donutDeck = new Deck(DONUT_LINES), copDeck = new Deck(COP_RETORTS);
+
+  // ===================================================================== newsreel recording
+  const r1 = (v) => Math.round(v * 10) / 10;
+  function recEvent(ev) { if (S && !S.replay && S.rec.events.length < 8000) S.rec.events.push([r1(S.time), ...ev]); }
+  function recFrame(rdt) {
+    S.recT -= rdt;
+    if (S.recT > 0 || S.rec.frames.length > 9000) return;
+    S.recT = 0.12;
+    S.rec.frames.push([r1(S.time), r1(P.pos.x), r1(P.pos.z), Math.round(P.face * 100) / 100, P.inCar ? 1 : 0, r1(CAR.pos.x), r1(CAR.pos.z), Math.round(CAR.ang * 100) / 100, r1(SA.pos.x), r1(SA.pos.z), S.firing ? 1 : 0]);
+    S.firing = false;
+  }
+
+  function startReplay(caseDef, rec) {
+    start(caseDef, {});
+    for (const p of S.pickups) scene.remove(p.mesh);
+    S.pickups.length = 0;
+    S.replay = rec; S.ri = 0; S.ei = 0; S.stage = null; S.shotT = 0;
+    hud.objective('From the vaults of the Daily Grey'); hud.progress('');
+  }
+
+  function updateReplay(rdt) {
+    const R = S.replay, F = R.frames;
+    S.time += rdt;
+    while (S.ri < F.length - 2 && F[S.ri + 1][0] <= S.time) S.ri++;
+    const a = F[S.ri], b = F[Math.min(F.length - 1, S.ri + 1)];
+    const k = b[0] > a[0] ? clamp((S.time - a[0]) / (b[0] - a[0]), 0, 1) : 0;
+    const L2 = (i) => a[i] + (b[i] - a[i]) * k;
+    const lastP = P.pos.clone();
+    P.pos.set(L2(1), 0, L2(2)); P.face = a[3] + wrapAngle(b[3] - a[3]) * k;
+    if (!!a[4] !== P.inCar) { P.inCar = !!a[4]; SA.inCar = P.inCar; mack.root.visible = !P.inCar; sallyM.root.visible = !P.inCar; }
+    CAR.pos.set(L2(5), 0, L2(6)); CAR.ang = a[7] + wrapAngle(b[7] - a[7]) * k;
+    const lastS = SA.pos.clone();
+    SA.pos.set(L2(8), 0, L2(9));
+    const pv = P.pos.distanceTo(lastP) / Math.max(rdt, 1e-3);
+    P.moving = pv > 1;
+    CAR.vx = (CAR.pos.x - (carM.root.position.x)) / Math.max(rdt, 1e-3); CAR.vz = (CAR.pos.z - carM.root.position.z) / Math.max(rdt, 1e-3);
+    CAR.speed = Math.hypot(CAR.vx, CAR.vz);
+    carM.root.position.set(CAR.pos.x, 0, CAR.pos.z); carM.root.rotation.y = CAR.ang;
+    carM.wheels.forEach((w) => w.children.forEach((c) => (c.rotation.x += CAR.speed * rdt / 0.42)));
+    sallyInCar.visible = SA.inCar;
+    headL.intensity = headR.intensity = P.inCar ? 160 : 0;
+    aim.set(P.pos.x + Math.sin(P.face) * 10, 1.4, P.pos.z + Math.cos(P.face) * 10);
+    P.aimT = a[10] ? 1 : Math.max(0, P.aimT - rdt * 2);
+    S.shotT -= rdt;
+    if (a[10] && !P.inCar && S.shotT <= 0) {
+      S.shotT = 0.09;
+      const o = V(P.pos.x + Math.sin(P.face) * 1.3, 1.45, P.pos.z + Math.cos(P.face) * 1.3);
+      const d = rayDist(o.x, o.z, Math.sin(P.face), Math.cos(P.face), 60);
+      tracers.add(o, V(o.x + Math.sin(P.face) * d, 1.45, o.z + Math.cos(P.face) * d), [1, 0.95, 0.8]);
+      sfx.tommy(); flashes.light(o.x, o.y, o.z, 120, 0.05);
+    }
+    const E = R.events;
+    while (S.ei < E.length && E[S.ei][0] <= S.time) {
+      const ev = E[S.ei++];
+      if (ev[1] === 'k') { const e = addEnemy(ev[5] === 'lowrider' ? 'hood' : ev[5], ev[2], ev[3], { color: ev[4] }); e.model.root.position.set(ev[2], 0, ev[3]); killEnemy(e); }
+      else if (ev[1] === 'po') openPortal({ x: ev[2], z: ev[3] });
+      else if (ev[1] === 'pc') { const q = S.portals.find((o) => Math.hypot(o.pos.x - ev[2], o.pos.z - ev[3]) < 3); if (q) closePortal(q); }
+      else if (ev[1] === 'r') { const m = new THREE.Mesh(rocketGeo, rocketMat); const dx = ev[4] - ev[2], dz = ev[5] - ev[3], dd = Math.hypot(dx, dz) || 1; m.position.set(ev[2], 1.7, ev[3]); scene.add(m); S.rockets.push({ mesh: m, pos: m.position.clone(), vx: dx / dd * 48, vz: dz / dd * 48, life: Math.min(1.6, dd / 48), target: null }); sfx.rocket(); }
+    }
+    // gangsters keep painting around the hero in the reel
+    if (Math.random() < rdt * 4) { const p = roadPoint(S.area); splat(p.x, p.z, rand(1.5, 3.5), pick(GANG_COLORS), 0.8, 6); }
+    updatePlayerModel(rdt);
+    sallyM.root.position.set(SA.pos.x, 0, SA.pos.z);
+    const sv = SA.pos.distanceTo(lastS) / Math.max(rdt, 1e-3);
+    if (sv > 0.5) sallyM.root.rotation.y = Math.atan2(SA.pos.x - lastS.x, SA.pos.z - lastS.z);
+    animWalk(sallyM, Math.min(13, sv), rdt);
+    updatePortals(rdt); updateRockets(rdt); updateBodies(rdt);
+    world(rdt, rdt); updateCamera(rdt);
+    S.bleedT -= rdt;
+    if (S.bleedT <= 0) { S.bleedT = 0.5; S.bleed = clamp(coverage(S.area) / S.caseDef.bleedCap, 0, 1); NU.paintH.value = 6 + S.bleed * 24; }
+    flushPaint(rdt);
+    hud.update({ hp: 1, flasks: 0, maxFlasks: 0, focusMeter: 1, pills: 0, ammo: 6, bleed: Math.min(1, S.bleed), focus: false, inCar: P.inCar, carHp: 1, carAlive: true, player: focus(), enemies: S.enemies, portals: S.portals, car: CAR, sally: SA, boss: null, hint: '', camera, time: S.time });
+    if (S.time > F[F.length - 1][0] + 1.5 || pressed.has('Escape')) { S.running = false; onEnd({ replay: true }); }
+    pressed.clear();
+  }
+
+  // timers on the game clock (pause-safe, and they run under fast-forward)
+  function later(fn, ms) { if (S) S.timers.push({ t: ms / 1000, fn, s: S }); }
+  function runTimers(dt) {
+    const T = S.timers;
+    for (let i = T.length - 1; i >= 0; i--) {
+      T[i].t -= dt;
+      if (T[i].t <= 0) { const x = T.splice(i, 1)[0]; if (x.s === S) x.fn(); if (!S) return; }
+    }
+  }
+
+  // ===================================================================== wayfinding
+  function gotoPoint(at) {
+    const lm = L[at];
+    const x = lm.door ? lm.door.x : lm.x, z = lm.door ? lm.door.z + 6 : lm.z + 40;
+    return { x, z };
+  }
+  // road-grid route from a to b: along the road you're on, then the cross street
+  function route(ax, az, bx, bz) {
+    const ix = nodeIndex(ax), iz = nodeIndex(az), tx = nodeIndex(bx), tz = nodeIndex(bz);
+    const onV = Math.abs(ax - roadC(ix)) < 12, onH = Math.abs(az - roadC(iz)) < 12;
+    const pts = [{ x: ax, z: az }];
+    if (onV && !onH) { pts.push({ x: roadC(ix), z: roadC(tz) }, { x: roadC(tx), z: roadC(tz) }); }
+    else if (onH && !onV) { pts.push({ x: roadC(tx), z: roadC(iz) }, { x: roadC(tx), z: roadC(tz) }); }
+    else { pts.push({ x: roadC(ix), z: roadC(iz) }, { x: roadC(tx), z: roadC(iz) }, { x: roadC(tx), z: roadC(tz) }); }
+    pts.push({ x: bx, z: bz });
+    return pts.filter((p, i) => i === 0 || Math.hypot(p.x - pts[i - 1].x, p.z - pts[i - 1].z) > 0.5);
+  }
+
+  // glowing red chevrons painted on the road, flowing toward the destination
+  const chevShape = new THREE.Shape();
+  chevShape.moveTo(-1.4, -0.6); chevShape.lineTo(0, 0.9); chevShape.lineTo(1.4, -0.6); chevShape.lineTo(1.4, -1.4); chevShape.lineTo(0, 0.1); chevShape.lineTo(-1.4, -1.4); chevShape.closePath();
+  const chevGeo = new THREE.ShapeGeometry(chevShape);
+  chevGeo.rotateX(-Math.PI / 2);
+  chevGeo.rotateY(Math.PI);
+  const chevMat = new THREE.MeshBasicMaterial({ color: 0xff2a3a, transparent: true, opacity: 0.85, depthWrite: false, blending: THREE.AdditiveBlending });
+  const chevrons = new THREE.InstancedMesh(chevGeo, chevMat, 90);
+  chevrons.frustumCulled = false; chevrons.count = 0;
+  scene.add(chevrons);
+  const beacon = new THREE.Group();
+  const beamM = new THREE.MeshBasicMaterial({ color: 0xff2a3a, transparent: true, opacity: 0.18, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+  const bcol = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.2, 80, 20, 1, true), beamM); bcol.position.y = 40; beacon.add(bcol);
+  const bring = new THREE.Mesh(new THREE.RingGeometry(5, 6, 40), new THREE.MeshBasicMaterial({ color: 0xff2a3a, transparent: true, opacity: 0.7, depthWrite: false, side: THREE.DoubleSide }));
+  bring.rotation.x = -Math.PI / 2; bring.position.y = 0.1; beacon.add(bring);
+  beacon.visible = false;
+  scene.add(beacon);
+  const _cm = new THREE.Matrix4(), _cq = new THREE.Quaternion(), _cs = V(), _cp = V(), _up = V(0, 1, 0);
+  function updateWayfinding(dt) {
+    const g = S.stage && S.stage.goal;
+    if (!g || g.type !== 'goto' || S.over) { chevrons.count = 0; beacon.visible = false; return; }
+    const f = focus();
+    S.routeT -= dt;
+    if (S.routeT <= 0 || !S.route) { S.routeT = 0.25; S.route = route(f.x, f.z, g.x, g.z); S.route[0] = { x: f.x, z: f.z }; }
+    S.route[0] = { x: f.x, z: f.z };
+    beacon.visible = true;
+    beacon.position.set(g.x, 0, g.z);
+    bring.scale.setScalar(1 + Math.sin(S.time * 4) * 0.12);
+    // walk the polyline, dropping a chevron every 7 units, scrolling with time
+    const gap = 7, flow = (S.time * 14) % gap;
+    let n = 0, acc = -flow + 5, total = 0;
+    for (let i = 0; i < S.route.length - 1 && n < 90; i++) {
+      const a = S.route[i], b = S.route[i + 1];
+      const dx = b.x - a.x, dz = b.z - a.z, len = Math.hypot(dx, dz);
+      if (len < 0.01) continue;
+      const yaw = Math.atan2(dx, dz);
+      while (acc < len && n < 90) {
+        if (acc >= 0 && total + acc > 4) {
+          const far = total + acc;
+          _cp.set(a.x + dx / len * acc, 0.09, a.z + dz / len * acc);
+          _cq.setFromAxisAngle(_up, yaw);
+          const sc = far > 220 ? 0 : (far < 10 ? far / 10 : 1) * (1.2 + Math.sin(S.time * 6 - far * 0.3) * 0.15);
+          _cs.set(sc, 1, sc);
+          chevrons.setMatrixAt(n++, _cm.compose(_cp, _cq, _cs));
+        }
+        acc += gap;
+      }
+      acc -= len; total += len;
+    }
+    chevrons.count = n;
+    chevrons.instanceMatrix.needsUpdate = true;
+    chevMat.opacity = 0.7 + Math.sin(S.time * 5) * 0.15;
+    updateObjective();
+    if (Math.hypot(f.x - g.x, f.z - g.z) < (g.r || 20)) checkStage();
+  }
+
+  // Z: whistle for the Packard and it drives itself to you
+  function summonCar() {
+    if (!CAR.alive || P.inCar) return;
+    if (P.pos.distanceTo(CAR.pos) < 9) return;
+    CAR.auto = { path: route(CAR.pos.x, CAR.pos.z, P.pos.x, P.pos.z), i: 1, t: 0, stuck: 0, rev: 0 };
+    sfx.horn();
+    say('MACK', pick(['*whistles* Come to papa.', 'Here, girl. *whistle*', 'The Packard knows the way. Mostly.']), 2.2);
+  }
+  function autopilot(dt, vf) {
+    const A = CAR.auto;
+    A.t -= dt;
+    if (A.t <= 0) { A.t = 1; A.path = route(CAR.pos.x, CAR.pos.z, P.pos.x, P.pos.z); A.i = 1; }
+    const dp = Math.hypot(P.pos.x - CAR.pos.x, P.pos.z - CAR.pos.z);
+    if (dp < 8) { CAR.auto = null; sfx.horn(); return { thr: -1, st: 0 }; }
+    let w = A.path[Math.min(A.i, A.path.length - 1)];
+    // keep right: offset waypoints into the right-hand lane of travel
+    if (Math.hypot(w.x - CAR.pos.x, w.z - CAR.pos.z) < 8 && A.i < A.path.length - 1) { A.i++; w = A.path[A.i]; }
+    const want = Math.atan2(w.x - CAR.pos.x, w.z - CAR.pos.z);
+    const diff = wrapAngle(want - CAR.ang);
+    const st = clamp(diff * 2.2, -1, 1);
+    const target = Math.abs(diff) > 0.6 ? 9 : dp < 25 ? 12 : 30;
+    if (Math.abs(vf) < 2) A.stuck += dt; else A.stuck = 0;
+    if (A.stuck > 1.2) { A.rev = 0.8; A.stuck = 0; }
+    if (A.rev > 0) { A.rev -= dt; return { thr: -1, st: -st }; }
+    if (A.stuck > 0 && A.t > 0.95 && Math.random() < 0.002) { const p = roadPoint(null); CAR.pos.set(p.x, 0, p.z); }
+    return { thr: vf < target ? 1 : vf > target + 4 ? -1 : 0, st };
+  }
+
+  // Sally can get hurt. If she drops she's out for the rest of the case.
+  function damageSally(d) {
+    if (SA.down || SA.inCar || S.over) return;
+    SA.hp -= d;
+    SA.lastHurt = S.time;
+    if (SA.hp <= 0) {
+      SA.hp = 0; SA.down = true; SA.downT = 0;
+      say('SALLY', pick(['Ow! OW! That\'s it, I\'m out! I\'m going to the Last Drop! Don\'t wait up, Mack!', 'They got my DRESS, Mack! I\'m done! Tell Gus to start pouring!', 'Mack... I\'m taking a cab to the bar. Finish it without me. Don\'t you dare finish it without me. Okay finish it.']), 4.5);
+      later(() => S && say('MACK', 'Sally\'s out. Just me and the rain now.', 3), 4200);
+    } else if (Math.random() < 0.15) say('SALLY', pick(['Hey! Not the dress!', 'Ow! Rude!', 'Mack, they\'re shooting at ME now!']), 2);
+  }
+
+  // ===================================================================== mission
+  function start(caseDef, opts = {}) {
+    stop();
+    clearPaint();
+    const area = caseDef.district === 'City' ? null : DISTRICTS[caseDef.district];
+    S = {
+      caseDef, area, stageIdx: -1, stage: null, time: 0, running: true, over: false, endT: 0,
+      enemies: [], portals: [], shots: [], rockets: [], pickups: [], bodies: [], boss: null,
+      stageKills: 0, stagePortals: 0, spawnT: 1.5, bleed: 0, peak: 0, bleedT: 0, quipT: 0, bleedWarn: 0,
+      stats: { kills: 0, rockets: 0, flasks: 0, portals: 0 },
+      fx: new Set(opts.effects || []), barUsed: false, donutIn: false, donutT: 0, retortT: 0, lightningT: 6,
+      rec: { v: 1, caseId: caseDef.id, frames: [], events: [] }, recT: 0, firing: false,
+      stages: null, routeT: 0, route: null, timers: [],
+    };
+    // unless the case opens with its own errand, the first job is getting to the scene
+    const goTo = area ? roadPoint(area, () => 0.5) : { x: L.cityHall.x, z: L.cityHall.z + 40 };
+    const dest = area ? { x: roadC(nodeIndex((area.x0 + area.x1) / 2)), z: roadC(nodeIndex((area.z0 + area.z1) / 2)) } : goTo;
+    S.stages = caseDef.stages.slice();
+    if (!S.stages[0].goal.type.startsWith('goto')) S.stages.unshift({ text: `Get to ${caseDef.district === 'City' ? 'City Hall' : caseDef.district}`, goal: { type: 'goto', x: dest.x, z: dest.z, r: 30, label: caseDef.district === 'City' ? 'CITY HALL' : caseDef.district.toUpperCase() }, mix: { dauber: 0.4, hood: 0.35, goon: caseDef.id > 2 ? 0.25 : 0 }, max: 5, interval: 3, roam: true, line: ['SALLY', pick(['Keys, Mack! Let\'s ride!', 'Follow the red arrows, handsome. Or don\'t, and I\'ll drive.', 'Shotgun! I mean rocket-gun!']) ] });
+    else for (const s2 of S.stages) if (s2.goal.type === 'goto' && s2.goal.at) Object.assign(s2.goal, gotoPoint(s2.goal.at));
+    // every case starts on the sidewalk outside Malone Investigations, the Packard at the curb
+    const sx = L.office.x, sz = L.office.z + 40;
+    P.pos.set(sx - 4, 0, sz - 9); P.hp = P.maxHp; P.flasks = Math.min(P.maxFlasks, 3 + (S.fx.has('extraFlask') ? 2 : 0) + (opts.bonusFlasks || 0));
+    P.inCar = false; P.focus = 0; P.roll = 0; P.focusMeter = 0.6; P.pills = 2; P.color = 0; P.ammo = 6; P.reload = 0; P.focusOn = false; P.aiming = false; NU.seeColor.value = 0;
+    SA.pos.set(sx - 7, 0, sz - 9); SA.inCar = false; SA.cd = 2; SA.hp = SA.maxHp; SA.down = false; SA.downT = 0;
+    sallyM.root.rotation.set(0, 0, 0);
+    CAR.pos.set(sx + 2, 0, sz - 7); CAR.ang = Math.PI / 2; CAR.auto = null; CAR.vx = CAR.vz = 0; CAR.hp = 400; CAR.alive = true; CAR.respawn = 0;
+    carM.root.visible = true; carM.root.traverse((o) => { if (o.userData.origMat) o.material = o.userData.origMat; });
+    mack.root.visible = true; sallyM.root.visible = true;
+    // flask pickups scattered around
+    const spots = flaskSpots.filter((p) => !area || (p.x > area.x0 - 40 && p.x < area.x1 + 40 && p.z > area.z0 - 40 && p.z < area.z1 + 40));
+    (spots.length ? spots : flaskSpots).slice(0, 10).forEach((p, i) => addPickup(p.x, p.z, i % 3 === 2 ? 'pills' : 'flask'));
+    nextStage();
+    hud.caseTitle(caseDef.id ? `Case No. ${caseDef.id}` : 'Off the books', caseDef.title);
+    // a few goons loitering near the office: something to shoot, something to run over
+    for (let i = 0; i < 4; i++) { const a = i * 1.6 + 0.5; addEnemy(i === 3 && caseDef.id > 2 ? 'goon' : pick(['dauber', 'hood']), P.pos.x + Math.cos(a) * 45, P.pos.z + Math.sin(a) * 45 + 10); }
+    // pre-paint a little so the case starts already bleeding
+    for (let i = 0; i < 18; i++) { const p = roadPoint(area); splat(p.x, p.z, 2 + Math.random() * 4, pick(GANG_COLORS), 0.85, 8); }
+    snapCamera();
+  }
+
+  function stop() {
+    if (!S) return;
+    for (const e of S.enemies) removeEnemy(e);
+    for (const b of S.bodies) scene.remove(b.root);
+    for (const p of S.portals) scene.remove(p.g);
+    for (const s of S.shots) scene.remove(s.mesh);
+    for (const r of S.rockets) scene.remove(r.mesh);
+    for (const p of S.pickups) scene.remove(p.mesh);
+    beam.visible = false;
+    setEngine(false);
+    headL.intensity = headR.intensity = 0;
+    S.running = false;
+    S = null;
+  }
+
+  function nextStage() {
+    S.stageIdx++;
+    const st = S.stages[S.stageIdx];
+    if (!st) { win(); return; }
+    S.stage = st; S.stageKills = 0; S.stagePortals = 0; S.stageRoombas = 0; S.spawnT = 2;
+    if (st.roombas) for (let i = 0; i < st.roombas; i++) later(() => { if (S && S.stage === st) { const p = spawnPoint(60, 150); addEnemy('roomba', p.x, p.z); } }, 400 + i * 900);
+    if (st.portals) for (let i = 0; i < st.portals; i++) later(() => S && S.stage === st && openPortal(), 600 + i * 1600);
+    if (st.boss) spawnBoss(st.boss);
+    if (st.line) say(st.line[0], st.line[1], 4.5);
+    hud.objective(st.text, S.stageIdx + 1, S.stages.length);
+    updateObjective();
+  }
+
+  function updateObjective() {
+    const g = S.stage.goal;
+    let prog = '';
+    if (g.type === 'kill') prog = `${Math.min(S.stageKills, g.n)} / ${g.n}`;
+    else if (g.type === 'portals') prog = `${S.stagePortals} / ${g.n} closed`;
+    else if (g.type === 'roombas') prog = `${S.stageRoombas} / ${g.n} scrapped`;
+    else if (g.type === 'goto') prog = `${Math.round(Math.hypot(focus().x - g.x, focus().z - g.z))} m`;
+    else if (g.type === 'boss') prog = S.boss ? `${Math.ceil(S.boss.hp / S.boss.maxHp * 100)}%` : '';
+    hud.progress(prog);
+  }
+
+  function checkStage() {
+    if (!S.stage || S.over) return;
+    const st0 = S.stage, g = S.stage.goal;
+    let done = false;
+    if (g.type === 'goto') done = Math.hypot(focus().x - g.x, focus().z - g.z) < (g.r || 20);
+    if (g.type === 'kill') done = S.stageKills >= g.n;
+    else if (g.type === 'portals') done = S.stagePortals >= g.n;
+    else if (g.type === 'roombas') done = S.stageRoombas >= g.n;
+    else if (g.type === 'boss') done = S.boss && S.boss.dead;
+    updateObjective();
+    if (done) {
+      sfx.stamp();
+      hud.stamp(S.stageIdx + 1 >= S.stages.length ? 'CASE CLOSED' : st0.goal.type === 'goto' ? 'ARRIVED' : 'DONE');
+      if (st0.goal.arrive) st0.goal.arrive.forEach(([w, t], i) => later(() => S && say(w, t, 4), i * 3600));
+      later(() => { if (S && !S.over) nextStage(); }, 1200);
+      S.stage = null;
+    }
+  }
+
+  function win() {
+    S.over = true; S.result = 'win'; S.endT = 3.2;
+    P.focus = 3;
+    for (const e of S.enemies.slice()) killEnemy(e, true);
+    for (const p of S.portals.slice()) closePortal(p);
+    fadeAll(0.6);
+  }
+  function lose(reason) {
+    if (S.over) return;
+    S.over = true; S.result = 'lose'; S.reason = reason; S.endT = 2.6;
+    if (reason === 'bleed') {
+      // too much color: the whole city floods with it, and Mack loses his lunch
+      S.endT = 5; S.puke = 0; P.color = 8;
+      if (P.inCar) exitCar();
+      say('MACK', pick(['Too much... color... I\'m gonna be sick.', 'Everything\'s... turquoise... *hurk*', 'I can see... MAUVE... *blaaargh*']), 4);
+      later(() => S && say('SALLY', 'Ew! Mack! On the SHOES?!', 3), 2600);
+    }
+  }
+
+  // ===================================================================== dialogue
+  function say(who, text, dur = 3.5) { hud.say(who, text, dur); }
+  function quip(who, deck, chance = 1, gap = 5) {
+    if (S.quipT > 0 || Math.random() > chance) return;
+    S.quipT = gap;
+    say(who, Array.isArray(deck) ? pick(deck) : deck.draw(), 2.6);
+  }
+
+  // ===================================================================== spawn
+  function spawnPoint(minD = 45, maxD = 120) {
+    for (let i = 0; i < 40; i++) {
+      const p = roadPoint(S.area);
+      const d = Math.hypot(p.x - focus().x, p.z - focus().z);
+      if (d > minD && d < maxD) return p;
+    }
+    for (let i = 0; i < 40; i++) {
+      const p = roadPoint(null);
+      const d = Math.hypot(p.x - focus().x, p.z - focus().z);
+      if (d > minD && d < maxD) return p;
+    }
+    return roadPoint(S.area);
+  }
+
+  function addEnemy(type, x, z, opts = {}) {
+    const t = TYPES[type];
+    const color = opts.color || pick(GANG_COLORS);
+    let model, car = null;
+    if (type === 'truck') {
+      const tk = makeTruck(color);
+      model = { root: tk.root, car: tk, truck: true };
+    } else if (type === 'lowrider') {
+      car = makeCar('lowrider', color);
+      const driver = makeGangster(color, 'hood', 0.7);
+      driver.root.position.set(-0.5, 0.6, -0.3);
+      car.body.add(driver.root);
+      model = { root: car.root, car, driver };
+    } else if (type === 'goon') model = makeRainbowGoon();
+    else if (type === 'roomba') model = makeRoomba(color);
+    else model = makeGangster(color, type === 'roller' ? 'roller' : type === 'dauber' ? 'dauber' : 'hood', t.scale);
+    scene.add(model.root);
+    const e = {
+      type, model, color, rgb: hexToRgb(color), pos: V(x, 0, z), face: Math.random() * 6, hp: t.hp, maxHp: t.hp, speed: t.speed * rand(0.9, 1.1), r: t.r,
+      cd: rand(1, 2.5), paintCd: 0, wp: null, losT: 0, wander: null, flash: 0, walk: Math.random() * 6, dead: false, last: V(x, 0, z),
+      node: null, prevNode: null, vx: 0, vz: 0, hitCd: 0, stage: S.stage, turnT: rand(3, 7), hue: 0, hueT: 0,
+    };
+    if (type === 'lowrider' || type === 'truck') {
+      if (type === 'lowrider') e.hp = e.maxHp = S.fx.has('lowriderWeak') ? 80 : t.hp;
+      const ix = nodeIndex(x), iz = nodeIndex(z);
+      e.node = [ix, iz]; e.pos.set(roadC(ix), 0, roadC(iz));
+    }
+    model.root.position.copy(e.pos);
+    S.enemies.push(e);
+    return e;
+  }
+
+  function removeEnemy(e) { scene.remove(e.model.root); }
+
+  function spawnBoss(id) {
+    const b = BOSSES[id];
+    const lm = L[b.at];
+    const x = roadC(nodeIndex(lm.x)) + (lm.x > roadC(nodeIndex(lm.x)) ? 14 : -14), z = lm.z + 40;
+    let model;
+    if (id === 'king') model = makePrismKing();
+    else if (id === 'krane') model = makeMayor();
+    else {
+      model = makeGangster(b.color, 'hood', b.scale);
+      if (id === 'cruller') {
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.75, 0.32, 12, 24), gangMat('#ff7ac8'));
+        ring.rotation.x = Math.PI / 2; ring.position.y = 1.2; model.root.add(ring);
+        const sprinkles = gangMat('#62ff2e');
+        for (let i = 0; i < 12; i++) { const s = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.18), sprinkles); const a = i / 12 * Math.PI * 2; s.position.set(Math.cos(a) * 0.75, 1.55, Math.sin(a) * 0.75); s.rotation.y = a * 3; model.root.add(s); }
+      }
+    }
+    scene.add(model.root);
+    const hpMul = S.fx.has('portalWeak') && id === 'king' ? 0.9 : 1;
+    const e = {
+      type: 'boss', id, def: b, model, color: b.color === '#ffffff' ? '#ff2d95' : b.color, rgb: hexToRgb(b.color), pos: V(x, 0, z), anchor: V(x, 0, z), face: 0,
+      hp: b.hp * hpMul, maxHp: b.hp * hpMul, speed: b.speed, r: 0.9 * b.scale, cd: 2, summonCd: 6, paintCd: 0, wp: null, losT: 0, flash: 0, walk: 0, dead: false, burst: 0, beamA: 0, beamT: 0, phase: 0, last: V(x, 0, z), hitCd: 0,
+    };
+    S.enemies.push(e);
+    S.boss = e;
+    hud.boss(b.name, b.sub, 1);
+    flashes.light(x, 10, z, 3000, 0.5);
+    sfx.portal();
+  }
+
+  function openPortal(at) {
+    if (!S) return;
+    let p = at;
+    if (!p) {
+      for (let i = 0; i < 40; i++) {
+        const ix = Math.floor(Math.random() * (C.N + 1)), iz = Math.floor(Math.random() * (C.N + 1));
+        const q = { x: roadC(ix), z: roadC(iz) };
+        if (S.area && !(q.x > S.area.x0 - 15 && q.x < S.area.x1 + 15 && q.z > S.area.z0 - 15 && q.z < S.area.z1 + 15)) continue;
+        const d = Math.hypot(q.x - focus().x, q.z - focus().z);
+        if (d < 50 || d > 200) continue;
+        if (S.portals.some((o) => Math.hypot(o.pos.x - q.x, o.pos.z - q.z) < 70)) continue;
+        p = q; break;
+      }
+      if (!p) p = spawnPoint(50, 160);
+    }
+    const g = makePortal(5);
+    g.position.set(p.x, 6.5, p.z);
+    scene.add(g);
+    const hp = S.fx.has('portalWeak') ? 240 : 450;
+    if (!S.replay) recEvent(['po', r1(p.x), r1(p.z)]);
+    const portal = { g, pos: V(p.x, 0, p.z), hp, maxHp: hp, spawnCd: 3, paintCd: 0, paintR: 4, open: 0, stage: S.stage, color: pick(GANG_COLORS), flash: 0 };
+    S.portals.push(portal);
+    sfx.portal();
+    flashes.light(p.x, 12, p.z, 4000, 0.6);
+    fx.flash = Math.max(fx.flash, 0.35);
+    quip('MACK', LINES.portal, 1, 3);
+    return portal;
+  }
+
+  function closePortal(p) {
+    const i = S.portals.indexOf(p);
+    if (i < 0) return;
+    S.portals.splice(i, 1);
+    scene.remove(p.g);
+    recEvent(['pc', r1(p.pos.x), r1(p.pos.z)]);
+    sfx.close();
+    for (let k = 0; k < 80; k++) {
+      const a = Math.random() * Math.PI * 2;
+      parts.spawn(p.pos.x + Math.cos(a) * 5, 6.5 + Math.sin(a) * 5, p.pos.z, -Math.cos(a) * 12, -Math.sin(a) * 12, 0, { life: 0.5, size: 0.6, color: hexToRgb(pick(GANG_COLORS)), kind: 0 });
+    }
+    flashes.ball(p.pos.x, 6.5, p.pos.z, 8, 0.5);
+    wash(p.pos.x, p.pos.z, 40, 1);
+    fadeAll(0.05);
+    S.stats.portals++;
+    if (p.stage === S.stage) S.stagePortals++;
+    if (!S.over) quip('MACK', LINES.close, 0.8, 3);
+    checkStage();
+  }
+
+  function addPickup(x, z, kind = 'flask') {
+    const mesh = kind === 'pills' ? pillPickupModel() : flaskPickupModel();
+    mesh.position.set(x, 0.6, z);
+    scene.add(mesh);
+    S.pickups.push({ mesh, x, z, kind, t: Math.random() * 6 });
+  }
+
+  // ===================================================================== combat
+  function focus() { return P.inCar ? CAR.pos : P.pos; }
+
+  function damagePlayer(d, fromX, fromZ) {
+    if (S.over) return;
+    if (P.inCar) {
+      CAR.hp -= d * 0.8;
+      if (CAR.hp <= 0 && CAR.alive) destroyCar();
+      return;
+    }
+    if (P.roll > 0) return;
+    P.hp -= d;
+    P.lastHurt = S.time;
+    hud.hurt();
+    sfx.hurt();
+    fx.shake = Math.max(fx.shake, 0.35);
+    if (Math.random() < 0.15) quip('MACK', LINES.hurt, 1, 6);
+    if (P.hp <= 0) { P.hp = 0; lose('dead'); }
+  }
+
+  function destroyCar() {
+    CAR.alive = false;
+    explode(CAR.pos.x, 1.2, CAR.pos.z, 8, 0, false);
+    carM.root.traverse((o) => { if (o.isMesh) { o.userData.origMat = o.userData.origMat || o.material; o.material = new THREE.MeshLambertMaterial({ color: 0x151515 }); } });
+    if (P.inCar) exitCar(true);
+    say('MACK', pick(LINES.carDead), 2.5);
+    later(() => S && say('SALLY', pick(LINES.sallyCarDead), 3), 1800);
+    CAR.respawn = 14;
+  }
+
+  function hitEnemy(e, dmg, kind = 'bullet') {
+    if (e.dead) return;
+    if (e.type === 'boss' && kind === 'rocket' && S.fx.has('rocket2x')) dmg *= 2;
+    e.hp -= dmg;
+    e.flash = 0.08;
+    if (e === S.boss) hud.boss(e.def.name, e.def.sub, Math.max(0, e.hp / e.maxHp));
+    if (e.hp <= 0) killEnemy(e);
+  }
+
+  function killEnemy(e, silent = false) {
+    if (e.dead) return;
+    e.dead = true;
+    S.enemies.splice(S.enemies.indexOf(e), 1);
+    const big = S.fx.has('bigWash') ? 1.6 : 1;
+    wash(e.pos.x, e.pos.z, (e.type === 'boss' ? 60 : e.type === 'roomba' || e.type === 'truck' ? 34 : e.type === 'lowrider' ? 22 : 16) * big, 1);
+    fadeAll(e.type === 'boss' ? 0.3 : 0.018 * big);
+    if (e.type === 'lowrider' || e.type === 'roomba' || e.type === 'truck') explode(e.pos.x, 1, e.pos.z, e.type === 'lowrider' ? 7 : 9, 60, false);
+    if (e.type === 'roomba' && e.stage === S.stage) S.stageRoombas++;
+    for (let k = 0; k < 26; k++) parts.spawn(e.pos.x, 1.5, e.pos.z, rand(-6, 6), rand(3, 9), rand(-6, 6), { life: 0.7, size: 0.5, color: e.rgb, grav: 20, kind: 0 });
+    drainModel(e.model);
+    e.model.root.userData.fall = 0;
+    S.bodies.push({ root: e.model.root, t: 0, car: e.type === 'lowrider' || e.type === 'roomba' || e.type === 'truck' });
+    if (silent) return;
+    sfx.kill();
+    S.stats.kills++;
+    recEvent(['k', r1(e.pos.x), r1(e.pos.z), e.color, e.type === 'boss' ? 'hood' : e.type]);
+    S.stageKills++;
+    hud.floater(e.pos, e.type === 'boss' ? 'THE COLOR DIES WITH HIM' : e.type === 'roomba' ? 'PAINTBOT SCRAPPED' : '−COLOR');
+    if (e.type === 'roomba' && Math.random() < 0.6) later(() => S && say(pick(['MACK', 'SALLY']), pick(['Scrapped. Somebody tell the warranty department.', 'Bad robot! BAD!', 'That\'s one less appliance with ambitions.', 'Dottie\'s gonna be upset. That was her cousin.']), 2.6), 400);
+    if (e.type === 'boss') { beam.visible = false; hud.boss(null); fx.shake = 1; P.focus = Math.max(P.focus, 2.5); }
+    else if (Math.random() < 0.14) addPickup(e.pos.x, e.pos.z, Math.random() < 0.35 ? 'pills' : 'flask');
+    P.focusMeter = Math.min(1, P.focusMeter + (e.type === 'lowrider' ? 0.2 : 0.1));
+    quip('MACK', killDeck, 0.3, 5);
+    checkStage();
+  }
+
+  function explode(x, y, z, r, dmg, friendly = true) {
+    const far = clamp(1 - Math.hypot(x - focus().x, z - focus().z) / 140, 0.1, 1);
+    sfx.boom(far);
+    flashes.light(x, y + 2, z, 2500, 0.25);
+    flashes.ball(x, y, z, r * 0.8, 0.3);
+    fx.shake = Math.max(fx.shake, 0.6 * far);
+    for (let k = 0; k < 30; k++) parts.spawn(x, y, z, rand(-1, 1) * 18, rand(4, 16), rand(-1, 1) * 18, { life: rand(0.3, 0.8), size: rand(0.3, 0.7), color: [1, 0.95, 0.85], grav: 25, kind: 0 });
+    for (let k = 0; k < 16; k++) parts.spawn(x + rand(-2, 2), y + rand(0, 2), z + rand(-2, 2), rand(-3, 3), rand(2, 6), rand(-3, 3), { life: rand(1.2, 2.4), size: rand(3, 6), grow: 4, color: [0.12, 0.12, 0.13], alpha: 0.85, drag: 1.2, kind: 1 });
+    for (let k = 0; k < 6; k++) parts.spawn(x, y, z, rand(-8, 8), rand(2, 8), rand(-8, 8), { life: 0.5, size: 0.4, color: [1, 0.1, 0.15], grav: 18, kind: 0 }); // Sally's red
+    if (dmg > 0) {
+      for (const e of S.enemies.slice()) {
+        const d = Math.hypot(e.pos.x - x, e.pos.z - z);
+        if (d < r + e.r) hitEnemy(e, dmg * (1 - 0.5 * d / (r + e.r)), 'rocket');
+      }
+      for (const p of S.portals.slice()) {
+        if (Math.hypot(p.pos.x - x, p.pos.z - z) < r + 4.5) hitPortal(p, dmg * 0.9);
+      }
+    }
+    if (!friendly && !P.inCar && Math.hypot(P.pos.x - x, P.pos.z - z) < r) damagePlayer(25, x, z);
+    if (Math.hypot(x - L.donut.x, z - L.donut.z) < 45 && S.retortT <= 0) { S.retortT = 8; later(() => S && say('COP', pick(['HEY! There\'s crullers in here!', 'Watch it, Malone! That\'s police property!', 'You almost hit the bear claws!']), 2.5), 500); }
+  }
+
+  function hitPortal(p, dmg) {
+    p.hp -= dmg;
+    p.flash = 0.1;
+    if (p.hp <= 0) closePortal(p);
+  }
+
+  // hitscan from (o) in direction (d): returns hit point
+  const _hp = V();
+  function shoot(o, dx, dz, range, dmg, color, pierce = 1) {
+    const wall = rayDist(o.x, o.z, dx, dz, range);
+    const hits = [];
+    for (const e of S.enemies) {
+      const ex = e.pos.x - o.x, ez = e.pos.z - o.z;
+      const t = ex * dx + ez * dz;
+      if (t < 0 || t > wall) continue;
+      const px = ex - dx * t, pz = ez - dz * t;
+      if (px * px + pz * pz < (e.r + 0.35) * (e.r + 0.35)) hits.push([t, e, null]);
+    }
+    for (const p of S.portals) {
+      const ex = p.pos.x - o.x, ez = p.pos.z - o.z;
+      const t = ex * dx + ez * dz;
+      if (t < 0 || t > wall) continue;
+      const px = ex - dx * t, pz = ez - dz * t;
+      if (px * px + pz * pz < 20) hits.push([t, null, p]);
+    }
+    hits.sort((a, b) => a[0] - b[0]);
+    let end = wall, n = 0;
+    for (const [t, e, p] of hits) {
+      if (n >= pierce) break;
+      n++;
+      end = t;
+      _hp.set(o.x + dx * t, o.y, o.z + dz * t);
+      if (e) {
+        hitEnemy(e, dmg * (n === 1 ? 1 : 0.7));
+        for (let k = 0; k < 6; k++) parts.spawn(_hp.x, _hp.y, _hp.z, dx * 5 + rand(-4, 4), rand(1, 5), dz * 5 + rand(-4, 4), { life: 0.4, size: 0.4, color: e.rgb, grav: 15 });
+      } else {
+        hitPortal(p, dmg);
+        parts.spawn(_hp.x, 4 + Math.random() * 5, _hp.z, rand(-3, 3), rand(-3, 3), 0, { life: 0.3, size: 0.6, color: hexToRgb(p.color) });
+        n = pierce; // portals stop the round
+        break;
+      }
+    }
+    if (n < pierce) end = wall;
+    _hp.set(o.x + dx * end, o.y, o.z + dz * end);
+    tracers.add(o, _hp, color, 0.09);
+    if (!hits.length && wall < range) {
+      for (let k = 0; k < 4; k++) parts.spawn(_hp.x, _hp.y, _hp.z, -dx * rand(2, 6) + rand(-2, 2), rand(1, 4), -dz * rand(2, 6) + rand(-2, 2), { life: 0.3, size: 0.3, color: [0.9, 0.9, 0.9], grav: 12 });
+    }
+    return _hp;
+  }
+
+  function fireRocket(from, tx, tz, target) {
+    const dx = tx - from.x, dz = tz - from.z, d = Math.hypot(dx, dz) || 1;
+    const mesh = new THREE.Mesh(rocketGeo, rocketMat);
+    mesh.position.copy(from);
+    scene.add(mesh);
+    S.rockets.push({ mesh, pos: from.clone(), vx: dx / d * 48, vz: dz / d * 48, life: 1.6, target });
+    recEvent(['r', r1(from.x), r1(from.z), r1(tx), r1(tz)]);
+    S.stats.rockets++;
+    sfx.rocket();
+    flashes.light(from.x, from.y, from.z, 300, 0.08);
+    if (Math.random() < 0.35) quip('SALLY', rocketDeck, 1, 4);
+  }
+
+  function enemyRocket(from, tx, tz, color) {
+    const dx = tx - from.x, dz = tz - from.z, d = Math.hypot(dx, dz) || 1;
+    const mesh = new THREE.Mesh(rocketGeo, gangMat(color));
+    mesh.position.copy(from);
+    scene.add(mesh);
+    S.rockets.push({ mesh, pos: from.clone(), vx: dx / d * 34, vz: dz / d * 34, life: Math.min(2.2, d / 34 + 0.3), target: null, enemy: true, color });
+    sfx.rocket();
+  }
+
+  function enemyShot(from, dx, dz, color, speed = 34, dmg = 7, kind = 'ball') {
+    const big = kind === 'donut' || kind === 'bomb';
+    const mesh = new THREE.Mesh(kind === 'donut' ? donutGeo : ballGeo, gangMat(color));
+    if (kind === 'bomb') mesh.scale.setScalar(2.2);
+    mesh.position.copy(from);
+    scene.add(mesh);
+    S.shots.push({ mesh, pos: from.clone(), vx: dx * speed, vz: dz * speed, vy: big ? 9 : 0, life: big ? 2.4 : 1.8, color, dmg, big, kind });
+    sfx.pop(clamp(1 - Math.hypot(from.x - focus().x, from.z - focus().z) / 90, 0.1, 1));
+  }
+
+  // ===================================================================== car
+  function enterCar() {
+    P.inCar = true;
+    CAR.auto = null;
+    SA.inCar = !SA.down;
+    mack.root.visible = false;
+    sallyM.root.visible = false;
+    sfx.door();
+    quip('SALLY', LINES.carIn, 0.8, 3);
+  }
+  function exitCar(forced = false) {
+    aimLine.visible = false;
+    P.inCar = false;
+    const s = Math.sin(CAR.ang), c = Math.cos(CAR.ang);
+    P.pos.set(CAR.pos.x - c * 2.4, 0, CAR.pos.z + s * 2.4);
+    if (!SA.down) SA.pos.set(CAR.pos.x + c * 2.4, 0, CAR.pos.z - s * 2.4);
+    pushOut(P.pos, 0.7); pushOut(SA.pos, 0.7);
+    mack.root.visible = true;
+    sallyM.root.visible = !SA.down || SA.downT < 3;
+    SA.inCar = false;
+    if (forced) damagePlayer(15);
+    else { sfx.door(); quip('SALLY', LINES.carOut, 0.6, 3); }
+    setEngine(false);
+  }
+
+  function updateCar(dt) {
+    const fwdX = Math.sin(CAR.ang), fwdZ = Math.cos(CAR.ang);
+    const rgtX = Math.cos(CAR.ang), rgtZ = -Math.sin(CAR.ang);
+    let vf = CAR.vx * fwdX + CAR.vz * fwdZ;
+    let vr = CAR.vx * rgtX + CAR.vz * rgtZ;
+    if (P.inCar && !S.over) {
+      const thr = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
+      const st = (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0) - (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0);
+      if (thr > 0) vf += (vf < 0 ? 60 : 30) * dt;
+      else if (thr < 0) vf -= (vf > 0 ? 60 : 18) * dt;
+      CAR.steer += (st - CAR.steer) * Math.min(1, dt * 8);
+      const hb = keys.has('Space');
+      vr *= Math.exp(-(hb ? 1.2 : 9) * dt);
+      if (hb) vf *= Math.exp(-0.8 * dt);
+      vf = clamp(vf, -16, 50);
+    } else if (CAR.auto && !S.over) {
+      const c = autopilot(dt, vf);
+      if (c.thr > 0) vf += 26 * dt; else if (c.thr < 0) vf -= 40 * dt;
+      CAR.steer += (c.st - CAR.steer) * Math.min(1, dt * 6);
+      vr *= Math.exp(-9 * dt);
+      vf = clamp(vf, -10, 32);
+      setEngine(true, vf);
+    } else {
+      CAR.steer *= 0.9;
+      vr *= Math.exp(-9 * dt);
+      vf *= Math.exp(-2.5 * dt);
+    }
+    vf *= Math.exp(-0.25 * dt);
+    const turn = CAR.steer * 2.3 * clamp(vf / 10, -1, 1) * (1 - Math.min(0.45, Math.abs(vf) / 110));
+    CAR.ang += turn * dt;
+    const nfX = Math.sin(CAR.ang), nfZ = Math.cos(CAR.ang), nrX = Math.cos(CAR.ang), nrZ = -Math.sin(CAR.ang);
+    CAR.vx = nfX * vf + nrX * vr;
+    CAR.vz = nfZ * vf + nrZ * vr;
+    CAR.pos.x += CAR.vx * dt;
+    CAR.pos.z += CAR.vz * dt;
+    CAR.speed = vf;
+    // two-circle collision against the city
+    for (const off of [1.5, -1.5]) {
+      const p = { x: CAR.pos.x + nfX * off, z: CAR.pos.z + nfZ * off };
+      const n = pushOut(p, 1.35);
+      if (n) {
+        CAR.pos.x = p.x - nfX * off; CAR.pos.z = p.z - nfZ * off;
+        const vn = CAR.vx * n.x + CAR.vz * n.z;
+        if (vn < 0) {
+          CAR.vx -= vn * n.x * 1.4; CAR.vz -= vn * n.z * 1.4;
+          if (-vn > 14) { sfx.crash(1); fx.shake = 0.5; CAR.hp -= -vn * 0.6; if (CAR.hp <= 0 && CAR.alive) destroyCar(); }
+        }
+      }
+    }
+    carM.root.position.set(CAR.pos.x, 0, CAR.pos.z);
+    carM.root.rotation.y = CAR.ang;
+    carM.body.rotation.z = -CAR.steer * clamp(vf / 40, -1, 1) * 0.06;
+    carM.body.rotation.x = -clamp(vf / 50, -1, 1) * 0.02;
+    carM.wheels.forEach((w, i) => { w.children.forEach((c) => (c.rotation.x += vf * dt / 0.42)); if (i < 2) w.rotation.y = CAR.steer * 0.45; });
+    sallyInCar.visible = SA.inCar;
+    if (P.inCar) setEngine(true, vf);
+    const on = P.inCar ? 160 : 0;
+    headL.intensity = headR.intensity = on;
+    for (const [l, side] of [[headL, 0.8], [headR, -0.8]]) {
+      l.position.set(CAR.pos.x + nfX * 2.6 + nrX * side, 1.0, CAR.pos.z + nfZ * 2.6 + nrZ * side);
+      l.target.position.set(CAR.pos.x + nfX * 22 + nrX * side, 0, CAR.pos.z + nfZ * 22 + nrZ * side);
+    }
+    // run the Syndicate over
+    if (Math.abs(vf) > 8) {
+      for (const e of S.enemies.slice()) {
+        if (e.type === 'lowrider' || e.type === 'roomba' || e.type === 'truck') continue;
+        if (Math.hypot(e.pos.x - CAR.pos.x, e.pos.z - CAR.pos.z) < 2.4 + e.r) {
+          if (e.type === 'boss') { if (e.hitCd <= 0) { hitEnemy(e, 60); e.hitCd = 1; vf *= 0.3; sfx.crash(1); CAR.vx *= 0.3; CAR.vz *= 0.3; } }
+          else { const ex = e.pos.x, ez = e.pos.z; hitEnemy(e, 999); explode(ex, 1.2, ez, 5, 45, true); splat(ex, ez, 3, e.color, 0.5); if (Math.random() < 0.3) quip('SALLY', ['SPLAT!', 'Ten points!', 'Hood ornament!', 'He EXPLODED, Mack! Do it again!'], 1, 3); }
+        }
+      }
+    }
+  }
+
+  // ===================================================================== update
+  function update(rdt) {
+    if (!S) return;
+    runTimers(rdt);
+    if (!S) return;
+    if (S.replay) { updateReplay(rdt); return; }
+    // Focus (F toggles): time crawls, paid for with the color Mack has stolen
+    if (!S.over && pressed.has('KeyF')) {
+      if (P.focusOn) P.focusOn = false;
+      else if (P.focusMeter > 0.05) { P.focusOn = true; sfx.focus(); } else quip('MACK', ['Nothing left in the tank. Go take some color off somebody.'], 1, 2);
+    }
+    if (P.focusOn) { P.focusMeter = Math.max(0, P.focusMeter - rdt * 0.14); if (P.focusMeter <= 0 || S.over) P.focusOn = false; }
+    P.focusHeld = P.focusOn;
+    const slowed = P.focus > 0 || P.focusHeld;
+    const slow = slowed ? 0.3 : 1;
+    const dt = rdt * slow, pdt = rdt * (slowed ? 0.85 : 1);
+    S.time += dt;
+    P.focus = Math.max(0, P.focus - rdt);
+    // pain pills: the world floods with color for a while
+    if (P.color > 0) { P.color = Math.max(0, P.color - rdt); if (P.color === 0) say('MACK', pick(LINES.pillsOff), 2.5); }
+    NU.ntime.value += rdt;
+    NU.seeColor.value += ((P.color > 0 ? Math.min(1, P.color / 1.5) : P.focusOn ? 0.38 : 0) - NU.seeColor.value) * Math.min(1, rdt * 3);
+    S.quipT -= rdt; S.donutT -= rdt; S.retortT -= rdt;
+
+    // aim on the ground plane
+    ray.setFromCamera(new THREE.Vector2(mouse.x, mouse.y), camera);
+    ray.ray.intersectPlane(plane, aim);
+
+    if (S.over) {
+      S.endT -= rdt;
+      if (S.endT <= 0) {
+        const r = { win: S.result === 'win', reason: S.reason, stats: { ...S.stats, time: S.time, peak: S.peak, hp: P.hp / P.maxHp }, rec: S.rec };
+        S.running = false;
+        onEnd(r);
+        return;
+      }
+    } else handleInput(rdt, pdt);
+
+    updateWayfinding(rdt);
+    if (CAR.alive) updateCar(P.inCar ? pdt : dt);
+    else if (CAR.respawn > 0) {
+      CAR.respawn -= dt;
+      if (CAR.respawn <= 0) {
+        const p = spawnPoint(25, 45);
+        CAR.pos.set(p.x, 0, p.z); CAR.vx = CAR.vz = 0; CAR.hp = 400; CAR.alive = true; CAR.ang = Math.random() * 6;
+        carM.root.traverse((o) => { if (o.userData.origMat) o.material = o.userData.origMat; });
+        say('SALLY', 'Got us a new ride, Mack! Don\'t ask whose!', 3);
+      }
+    }
+    updatePlayerModel(pdt);
+    updateSally(dt);
+    updateEnemies(dt);
+    updatePortals(dt);
+    updateShots(dt);
+    updateRockets(dt);
+    updatePickups(dt);
+    updateBodies(dt);
+    spawner(dt);
+    world(rdt, dt);
+    updateCamera(rdt);
+    // bleed
+    S.bleedT -= rdt;
+    if (S.bleedT <= 0) {
+      S.bleedT = 0.5;
+      fadeAll(0.0016);
+      S.bleed = clamp(coverage(S.area) / S.caseDef.bleedCap, 0, 1.2);
+      S.peak = Math.max(S.peak, S.bleed);
+      NU.paintH.value = 6 + S.bleed * 24;
+      if (S.bleed > 0.7 && S.bleedWarn <= 0) { S.bleedWarn = 20; say('MACK', pick(LINES.bleed), 3); }
+      S.bleedWarn -= 0.5;
+      if (S.bleed >= 1 && !S.over) lose('bleed');
+    }
+    flushPaint(rdt);
+    // HUD
+    hud.update({
+      hp: P.hp / P.maxHp, flasks: P.flasks, maxFlasks: P.maxFlasks, bleed: Math.min(1, S.bleed), focus: P.focus > 0 || P.focusHeld, focusMeter: P.focusMeter, pills: P.pills, ammo: P.ammo, reloading: P.reload > 0, seeColor: P.color > 0,
+      inCar: P.inCar, carHp: CAR.alive ? CAR.hp / 400 : 0, carAlive: CAR.alive,
+      player: focus(), enemies: S.enemies, portals: S.portals, car: CAR, sally: SA, boss: S.boss && !S.boss.dead ? S.boss : null,
+      hint: currentHint(), camera, time: S.time, objectives: objectiveMarks(), sallyHp: SA.hp / SA.maxHp, sallyDown: SA.down,
+    });
+    recFrame(rdt);
+    pressed.clear();
+  }
+
+  function objectiveMarks() {
+    const g = S.stage && S.stage.goal, out = [];
+    if (!g) return out;
+    if (g.type === 'goto') out.push({ x: g.x, z: g.z, c: '#ff2a3a', k: 'goto', label: g.label });
+    if (g.type === 'portals') for (const p of S.portals) out.push({ x: p.pos.x, z: p.pos.z, c: '#ff2d95', k: 'portal' });
+    if (g.type === 'roombas' || S.stage.roombas) for (const e of S.enemies) if (e.type === 'roomba') out.push({ x: e.pos.x, z: e.pos.z, c: '#18e0ff', k: 'bot' });
+    if (g.type === 'boss' && S.boss && !S.boss.dead) out.push({ x: S.boss.pos.x, z: S.boss.pos.z, c: '#ffe11a', k: 'boss' });
+    if (g.type === 'kill') { let best = null, bd = 1e9; for (const e of S.enemies) { const d = Math.hypot(e.pos.x - focus().x, e.pos.z - focus().z); if (d < bd) { bd = d; best = e; } } if (best && bd > 50) out.push({ x: best.pos.x, z: best.pos.z, c: '#ffffff', k: 'kill' }); }
+    return out;
+  }
+
+  function currentHint() {
+    if (S.over) return '';
+    if (!P.inCar && CAR.alive && P.pos.distanceTo(CAR.pos) < 5) return 'E — Get in the car';
+    if (P.inCar) return '';
+    if (L.bar.door && Math.hypot(P.pos.x - L.bar.door.x, P.pos.z - L.bar.door.z) < 5) return S.barUsed ? 'The Last Drop — Gus already patched you up' : 'E — Duck into The Last Drop';
+    return '';
+  }
+
+  function handleInput(rdt, pdt) {
+    if (pressed.has('KeyZ')) summonCar();
+    if (pressed.has('KeyE')) {
+      if (P.inCar) exitCar();
+      else if (CAR.alive && P.pos.distanceTo(CAR.pos) < 5) enterCar();
+      else if (!S.barUsed && L.bar.door && Math.hypot(P.pos.x - L.bar.door.x, P.pos.z - L.bar.door.z) < 5) {
+        S.barUsed = true;
+        P.hp = P.maxHp; P.flasks = P.maxFlasks;
+        keys.clear(); mouse.down = false;
+        onBar(S.caseDef);
+      }
+    }
+    if (pressed.has('KeyQ')) {
+      if (P.flasks > 0) {
+        P.flasks--; S.stats.flasks++;
+        P.hp = Math.min(P.maxHp, P.hp + 45);
+        P.focus = 4;
+        sfx.gulp();
+        say('MACK', pick(LINES.flask), 2.2);
+        hud.focus();
+      } else quip('MACK', LINES.noFlask, 1, 2);
+    }
+    if (pressed.has('KeyG')) {
+      if (P.pills > 0) {
+        P.pills--; S.stats.flasks++;
+        P.hp = P.maxHp; P.color = 12;
+        sfx.pickup(); sfx.gulp();
+        say('MACK', pick(LINES.pills), 3.2);
+        hud.floater(P.pos, 'FULL GRIT · EVERYTHING IS IN COLOR');
+      } else quip('MACK', LINES.noPills, 1, 2);
+    }
+    // holster for a moment and Mack thumbs fresh rounds in
+    P.holsterT = P.aiming ? 0 : P.holsterT + pdt;
+    if (!P.inCar && P.holsterT > 0.6 && P.ammo < 6 && P.reload <= 0) { P.reload = 1.0; sfx.reload(); }
+    if (P.reload > 0) { P.reload -= pdt; if (P.reload <= 0) P.ammo = 6; }
+    P.fireCd -= pdt; P.rollCd -= pdt;
+    if (P.inCar) {
+      P.pos.copy(CAR.pos);
+      SA.cd -= pdt;
+      if (mouse.down && SA.cd <= 0) {
+        SA.cd = 0.55;
+        const s = Math.sin(CAR.ang), c = Math.cos(CAR.ang);
+        fireRocket(V(CAR.pos.x - c * 1.2, 1.7, CAR.pos.z + s * 1.2), aim.x, aim.z, nearestTarget(aim.x, aim.z, 10));
+      }
+      return;
+    }
+    // on foot
+    let mx = 0, mz = 0;
+    if (keys.has('KeyW') || keys.has('ArrowUp')) mz -= 1;
+    if (keys.has('KeyS') || keys.has('ArrowDown')) mz += 1;
+    if (keys.has('KeyA') || keys.has('ArrowLeft')) mx -= 1;
+    if (keys.has('KeyD') || keys.has('ArrowRight')) mx += 1;
+    const ml = Math.hypot(mx, mz);
+    if (ml) { mx /= ml; mz /= ml; }
+    if ((pressed.has('KeyR') || pressed.has('Space') || pressed.has('ShiftLeft')) && P.rollCd <= 0) {
+      P.roll = 0.38; P.rollCd = 0.9;
+      P.rollDir.set(ml ? mx : Math.sin(P.face), 0, ml ? mz : Math.cos(P.face));
+      for (let k = 0; k < 8; k++) parts.spawn(P.pos.x, 0.3, P.pos.z, rand(-3, 3), rand(1, 3), rand(-3, 3), { life: 0.4, size: 0.5, color: [0.7, 0.7, 0.75], kind: 0, grav: 10 });
+    }
+    if (P.roll > 0) {
+      P.roll -= pdt;
+      P.pos.x += P.rollDir.x * 22 * pdt; P.pos.z += P.rollDir.z * 22 * pdt;
+    } else {
+      const sp = P.aiming ? 7 : 11;
+      P.pos.x += mx * sp * pdt; P.pos.z += mz * sp * pdt;
+    }
+    P.moving = ml > 0;
+    pushOut(P.pos, 0.7);
+    // right mouse draws the big red revolver; left mouse only fires while aiming
+    P.aiming = mouse.right && P.roll <= 0;
+    P.aimT = clamp(P.aimT + (P.aiming ? pdt : -pdt) * 7, 0, 1);
+    if (P.aiming) P.face = Math.atan2(aim.x - P.pos.x, aim.z - P.pos.z);
+    else if (ml) P.face += wrapAngle(Math.atan2(mx, mz) - P.face) * Math.min(1, pdt * 12);
+    if (mouse.down && !P.aiming && P.roll <= 0 && P.aimT === 0) { if (!P.drawHint) { P.drawHint = 1; say('MACK', 'Right mouse to pull the iron, genius. Then left to talk.', 2.6); } }
+    if (P.aiming && P.aimT > 0.6 && mouse.down && P.fireCd <= 0 && P.roll <= 0 && P.reload <= 0) {
+      if (P.ammo <= 0) { P.reload = 1.0; sfx.reload(); }
+      else {
+        // the big red revolver: heavy, slow, punches through two men
+        P.fireCd = 0.2; P.ammo--;
+        const sp = (Math.random() - 0.5) * 0.03;
+        const a = P.face + sp;
+        const o = V(P.pos.x + Math.sin(P.face) * 2.0 + Math.cos(P.face) * 0.42, 1.8, P.pos.z + Math.cos(P.face) * 2.0 - Math.sin(P.face) * 0.42);
+        shoot(o, Math.sin(a), Math.cos(a), 85, 32, [1, 0.35, 0.3], 2);
+        S.firing = true;
+        sfx.revolver();
+        flashes.light(o.x, o.y, o.z, 260, 0.06);
+        parts.spawn(o.x, o.y, o.z, Math.sin(P.face) * 6, 0.5, Math.cos(P.face) * 6, { life: 0.08, size: 2.6, color: [1, 0.9, 0.8], kind: 1 });
+        for (let k = 0; k < 3; k++) parts.spawn(o.x, o.y, o.z, Math.sin(P.face) * 3 + rand(-1, 1), rand(0.5, 1.5), Math.cos(P.face) * 3 + rand(-1, 1), { life: 0.9, size: 1.2, grow: 2, color: [0.7, 0.7, 0.72], alpha: 0.4, kind: 1 });
+        fx.shake = Math.max(fx.shake, 0.18);
+        P.kick = 1;
+        if (P.ammo === 0) later(() => { if (S && P.ammo === 0 && P.reload <= 0) { P.reload = 1.0; sfx.reload(); } }, 250);
+      }
+    }
+    // regen when out of trouble
+    if (S.time - P.lastHurt > 6 && P.hp < P.maxHp) P.hp = Math.min(P.maxHp, P.hp + 3 * pdt);
+  }
+
+  function nearestTarget(x, z, maxD) {
+    let best = null, bd = maxD;
+    for (const e of S.enemies) { const d = Math.hypot(e.pos.x - x, e.pos.z - z); if (d < bd) { bd = d; best = e; } }
+    if (!best) for (const p of S.portals) { const d = Math.hypot(p.pos.x - x, p.pos.z - z); if (d < bd) { bd = d; best = p; } }
+    return best;
+  }
+
+  function animWalk(m, speed, dt, phaseKey = 'walk') {
+    m[phaseKey] += speed * dt * 0.9;
+    const s = Math.sin(m[phaseKey]) * Math.min(1, speed / 6) * 0.7;
+    m.legL.rotation.x = s; m.legR.rotation.x = -s;
+    m.root.position.y = Math.abs(Math.sin(m[phaseKey])) * 0.08 * Math.min(1, speed / 6);
+  }
+
+  const _ro = V();
+  function updatePlayerModel(dt) {
+    if (P.inCar) return;
+    const m = mack;
+    m.root.rotation.order = 'YXZ';
+    if (S.puke !== undefined) {
+      S.puke += dt;
+      const bend = Math.min(1, S.puke * 2);
+      m.root.position.set(P.pos.x, 0, P.pos.z);
+      m.root.rotation.set(bend * 0.85, P.face, 0);
+      m.legL.rotation.x = m.legR.rotation.x = -bend * 0.4;
+      m.armL.rotation.x = m.armR.rotation.x = -bend * 0.6;
+      aimLine.visible = false;
+      if (S.puke > 0.6 && Math.sin(S.puke * 5) > 0) for (let k = 0; k < 3; k++) {
+        const hx = P.pos.x + Math.sin(P.face) * 1.0, hz = P.pos.z + Math.cos(P.face) * 1.0;
+        parts.spawn(hx, 1.6, hz, Math.sin(P.face) * rand(2, 5) + rand(-1, 1), rand(-1, 1), Math.cos(P.face) * rand(2, 5) + rand(-1, 1), { life: 0.9, size: 0.45, color: hexToRgb(pick(GANG_COLORS)), grav: 16 });
+        if (Math.random() < 0.2) splat(hx + Math.sin(P.face) * 2, hz + Math.cos(P.face) * 2, 0.8, pick(GANG_COLORS), 0.9, 3);
+      }
+      return;
+    }
+    if (P.roll > 0) {
+      // tuck and roll: a full forward somersault around the hips, along the dive
+      const k = 1 - P.roll / 0.38;
+      const th = k * Math.PI * 2;
+      const yaw = Math.atan2(P.rollDir.x, P.rollDir.z);
+      const h = 0.95; // pivot height
+      _ro.set(0, h - h * Math.cos(th), -h * Math.sin(th)).applyAxisAngle(V(0, 1, 0), yaw);
+      m.root.position.set(P.pos.x + _ro.x, _ro.y, P.pos.z + _ro.z);
+      m.root.rotation.set(th, yaw, 0);
+      const tuck = Math.sin(k * Math.PI);
+      m.legL.rotation.x = m.legR.rotation.x = -1.9 * tuck;
+      m.armL.rotation.x = -1.4 - tuck * 0.6; m.armR.rotation.x = -1.45 - tuck * 0.4;
+      m.head.rotation.x = 0.5 * tuck;
+      m.root.scale.set(1, 1 - 0.18 * tuck, 1);
+      if (Math.random() < dt * 40) parts.spawn(P.pos.x, 0.2, P.pos.z, rand(-2, 2), rand(1, 3), rand(-2, 2), { life: 0.45, size: 0.5, color: [0.8, 0.83, 0.88], alpha: 0.6, grav: 9 });
+      return;
+    }
+    m.root.scale.set(1, 1, 1);
+    m.root.rotation.set(0, P.face, 0);
+    m.root.position.set(P.pos.x, 0, P.pos.z);
+    m.head.rotation.x = 0;
+    animWalk(m, P.moving ? 10 : 0, dt);
+    if (!P.moving) { m.legL.rotation.x *= 0.8; m.legR.rotation.x *= 0.8; }
+    // revolver kick and the reload flip
+    P.kick = Math.max(0, P.kick - dt * 8);
+    const up = P.aimT;
+    m.armR.rotation.x = -0.15 - up * 1.3 - P.kick * 0.45 + (P.reload > 0 ? 0.5 : 0);
+    m.gun.position.set(0.42, 1.78 - (1 - up) * 0.75, 0.68 - (1 - up) * 0.5);
+    m.gun.rotation.x = (1 - up) * 1.2 - P.kick * 0.5 + (P.reload > 0 ? 0.8 + Math.sin(P.reload * 18) * 0.2 : 0);
+    m.armL.rotation.x = P.reload > 0 ? -1.2 : -0.25 - up * 0.9;
+    m.armL.rotation.z = -0.15 - up * -0.5;
+    aimLine.visible = up > 0.6;
+    if (aimLine.visible) {
+      const o = V(P.pos.x + Math.sin(P.face) * 2.2 + Math.cos(P.face) * 0.42, 1.8, P.pos.z + Math.cos(P.face) * 2.2 - Math.sin(P.face) * 0.42);
+      const d = Math.min(rayDist(o.x, o.z, Math.sin(P.face), Math.cos(P.face), 60), Math.hypot(aim.x - o.x, aim.z - o.z));
+      aimLine.position.set(o.x + Math.sin(P.face) * d / 2, 1.8, o.z + Math.cos(P.face) * d / 2);
+      aimLine.rotation.set(0, P.face, 0);
+      aimLine.scale.set(1, 1, d);
+    }
+  }
+
+  function updateSally(dt) {
+    if (SA.down) {
+      // she sits down in the rain, then storms off to the bar
+      SA.downT += dt;
+      sallyInCar.visible = false;
+      sallyM.root.rotation.x = -Math.min(1, SA.downT * 2) * 1.2;
+      sallyM.root.position.y = 0.2;
+      if (SA.downT > 3) sallyM.root.visible = false;
+      return;
+    }
+    if (S.time - SA.lastHurt > 6 && SA.hp < SA.maxHp) SA.hp = Math.min(SA.maxHp, SA.hp + 4 * dt);
+    if (SA.inCar) {
+      // auto-fire from the passenger window when Mack isn't pointing
+      if (!mouse.down && !S.over) {
+        SA.cd -= dt;
+        if (SA.cd <= 0) {
+          const t = nearestTarget(CAR.pos.x, CAR.pos.z, 42);
+          if (t && clearLine(CAR.pos.x, CAR.pos.z, t.pos.x, t.pos.z)) {
+            SA.cd = 1.25;
+            const s = Math.sin(CAR.ang), c = Math.cos(CAR.ang);
+            fireRocket(V(CAR.pos.x - c * 1.2, 1.7, CAR.pos.z + s * 1.2), t.pos.x, t.pos.z, t);
+          } else SA.cd = 0.3;
+        }
+      }
+      const tube = sallyInCar.userData.tube;
+      tube.rotation.y = Math.atan2(aim.x - CAR.pos.x, aim.z - CAR.pos.z) - CAR.ang;
+      return;
+    }
+    // follow Mack, keep a little to his side
+    const tx = P.pos.x - Math.sin(P.face) * 3 + Math.cos(P.face) * 2.5, tz = P.pos.z - Math.cos(P.face) * 3 - Math.sin(P.face) * 2.5;
+    const dx = tx - SA.pos.x, dz = tz - SA.pos.z, d = Math.hypot(dx, dz);
+    let sp = 0;
+    if (d > 1.2) { sp = Math.min(13, d * 3); SA.pos.x += dx / d * sp * dt; SA.pos.z += dz / d * sp * dt; }
+    pushOut(SA.pos, 0.6);
+    if (d > 35) SA.pos.set(P.pos.x - Math.sin(P.face) * 3, 0, P.pos.z - Math.cos(P.face) * 3);
+    SA.cd -= dt;
+    const t = nearestTarget(SA.pos.x, SA.pos.z, 38);
+    if (t) SA.face = Math.atan2(t.pos.x - SA.pos.x, t.pos.z - SA.pos.z);
+    else if (sp > 0.5) SA.face = Math.atan2(dx, dz);
+    if (t && SA.cd <= 0 && !S.over && clearLine(SA.pos.x, SA.pos.z, t.pos.x, t.pos.z)) {
+      SA.cd = 2.4;
+      fireRocket(V(SA.pos.x + Math.sin(SA.face) * 1.2, 2.0, SA.pos.z + Math.cos(SA.face) * 1.2), t.pos.x, t.pos.z, t);
+    }
+    sallyM.root.position.set(SA.pos.x, 0, SA.pos.z);
+    sallyM.root.rotation.y = SA.face;
+    animWalk(sallyM, sp, dt);
+  }
+
+  // ---- AI
+  function nav(e, tx, tz, dt, speed) {
+    e.losT -= dt;
+    if (e.losT <= 0) {
+      e.losT = 0.4;
+      e.direct = clearLine(e.pos.x, e.pos.z, tx, tz);
+      if (!e.direct) {
+        const ix = nodeIndex(e.pos.x), iz = nodeIndex(e.pos.z);
+        const nx = roadC(ix), nz = roadC(iz);
+        if (Math.hypot(nx - e.pos.x, nz - e.pos.z) > 4 && (Math.abs(nx - e.pos.x) < 9 || Math.abs(nz - e.pos.z) < 9)) e.wp = { x: nx, z: nz };
+        else {
+          const tix = nodeIndex(tx), tiz = nodeIndex(tz);
+          const ddx = tix - ix, ddz = tiz - iz;
+          let sx = ix, sz = iz;
+          if (Math.abs(ddx) >= Math.abs(ddz) && ddx) sx += Math.sign(ddx); else if (ddz) sz += Math.sign(ddz); else if (ddx) sx += Math.sign(ddx);
+          e.wp = { x: roadC(sx), z: roadC(sz) };
+        }
+      }
+    }
+    const gx = e.direct ? tx : e.wp ? e.wp.x : tx, gz = e.direct ? tz : e.wp ? e.wp.z : tz;
+    const dx = gx - e.pos.x, dz = gz - e.pos.z, d = Math.hypot(dx, dz);
+    if (d > 0.5) {
+      e.pos.x += dx / d * speed * dt; e.pos.z += dz / d * speed * dt;
+      e.moveFace = Math.atan2(dx, dz);
+    }
+    if (d < 2 && !e.direct) e.losT = 0;
+    return d;
+  }
+
+  function wanderTarget(e) {
+    if (!e.wander || Math.hypot(e.wander.x - e.pos.x, e.wander.z - e.pos.z) < 4) {
+      const ix = nodeIndex(e.pos.x) + pick([-1, 0, 1]), iz = nodeIndex(e.pos.z) + pick([-1, 0, 1]);
+      e.wander = { x: roadC(clamp(ix, 0, C.N)) + rand(-8, 8), z: roadC(clamp(iz, 0, C.N)) + rand(-8, 8) };
+      if (S.area && Math.random() < 0.5) { const p = roadPoint(S.area); e.wander = p; }
+    }
+    return e.wander;
+  }
+
+  function updateEnemies(dt) {
+    const f = focus();
+    for (const e of S.enemies.slice()) {
+      if (e.dead) continue;
+      e.cd -= dt; e.paintCd -= dt; e.hitCd -= dt; e.flash -= dt;
+      let dxp = f.x - e.pos.x, dzp = f.z - e.pos.z, dp = Math.hypot(dxp, dzp);
+      e.last.copy(e.pos);
+      if (e.emerge > 0) {
+        e.emerge -= dt;
+        const k = 1 - e.emerge / 0.7;
+        e.pos.x += Math.cos(e.emergeDir) * 9 * dt; e.pos.z += Math.sin(e.emergeDir) * 9 * dt;
+        e.model.root.position.set(e.pos.x, 6.5 * (1 - k) + Math.sin(k * Math.PI) * 2, e.pos.z);
+        e.model.root.rotation.x = (1 - k) * 2;
+        if (e.emerge <= 0) { e.model.root.rotation.x = 0; splat(e.pos.x, e.pos.z, 3, e.color, 0.9, 8); sfx.splat(0.5); }
+        continue;
+      }
+      if (e.type === 'lowrider' || e.type === 'truck') { updateLowrider(e, dt, dp); continue; }
+      if (e.type === 'roomba') { updateRoomba(e, dt, dp); continue; }
+      let speed = 0;
+      if (e.type === 'dauber') {
+        if (dp < 16) { const tx = e.pos.x - dxp, tz = e.pos.z - dzp; nav(e, tx, tz, dt, e.speed * 1.2); speed = e.speed * 1.2; }
+        else { const w = wanderTarget(e); nav(e, w.x, w.z, dt, e.speed); speed = e.speed; }
+        if (e.paintCd <= 0) { e.paintCd = 0.18; splat(e.pos.x + rand(-1, 1), e.pos.z + rand(-1, 1), rand(1.2, 2.6), e.color, 0.8, 3); if (dp < 50 && Math.random() < 0.2) sfx.spray(clamp(1 - dp / 50, 0, 1)); }
+        e.face = e.moveFace ?? e.face;
+      } else if (e.type === 'hood') {
+        if (!SA.down && !SA.inCar && dp < 30 && e.walk % 1 < 0.35) { const sx2 = SA.pos.x - e.pos.x, sz2 = SA.pos.z - e.pos.z, sd = Math.hypot(sx2, sz2); if (sd < dp) { dxp = sx2; dzp = sz2; dp = sd; } }
+        if (dp > 22 || !clearLine(e.pos.x, e.pos.z, f.x, f.z)) { if (dp < 120) nav(e, f.x, f.z, dt, e.speed); else { const w = wanderTarget(e); nav(e, w.x, w.z, dt, e.speed); } speed = e.speed; e.face = e.moveFace ?? e.face; }
+        else {
+          // strafe and shoot
+          const sx = -dzp / dp, sz = dxp / dp, dir = Math.sin(S.time * 0.7 + e.walk) > 0 ? 1 : -1;
+          e.pos.x += sx * dir * 3 * dt; e.pos.z += sz * dir * 3 * dt;
+          speed = 3;
+          e.face = Math.atan2(dxp, dzp);
+          if (e.cd <= 0) {
+            e.cd = rand(1.0, 1.7);
+            const a = e.face + rand(-0.08, 0.08);
+            enemyShot(V(e.pos.x + Math.sin(a) * 1.2, 1.5, e.pos.z + Math.cos(a) * 1.2), Math.sin(a), Math.cos(a), e.color);
+          }
+        }
+        if (e.paintCd <= 0) { e.paintCd = 0.3; splat(e.pos.x + rand(-0.6, 0.6), e.pos.z + rand(-0.6, 0.6), 1.5, e.color, 0.75, 3); }
+      } else if (e.type === 'goon') {
+        // rainbow trenchcoat, three-round burst, leaves a rainbow behind him
+        if (dp > 24 || !clearLine(e.pos.x, e.pos.z, f.x, f.z)) { if (dp < 140) nav(e, f.x, f.z, dt, e.speed); else { const w = wanderTarget(e); nav(e, w.x, w.z, dt, e.speed); } speed = e.speed; e.face = e.moveFace ?? e.face; }
+        else {
+          const sx = -dzp / dp, sz = dxp / dp, dir = Math.sin(S.time * 0.5 + e.walk) > 0 ? 1 : -1;
+          e.pos.x += sx * dir * 4 * dt; e.pos.z += sz * dir * 4 * dt; speed = 4;
+          e.face = Math.atan2(dxp, dzp);
+          if (e.cd <= 0) {
+            e.cd = rand(1.3, 1.9); e.burst = 3;
+          }
+        }
+        if (e.burst > 0 && e.cd < 1.3 - (3 - e.burst) * 0.12) {
+          e.burst--;
+          const a = e.face + rand(-0.06, 0.06);
+          enemyShot(V(e.pos.x + Math.sin(a) * 1.4, 1.6, e.pos.z + Math.cos(a) * 1.4), Math.sin(a), Math.cos(a), GANG_COLORS[e.burst % 6], 38, 7);
+        }
+        if (e.paintCd <= 0) { e.paintCd = 0.25; e.hue = (e.hue + 1) % 6; splat(e.pos.x, e.pos.z, 1.3, GANG_COLORS[e.hue], 0.7, 2); }
+      } else if (e.type === 'roller') {
+        if (dp < 45) { nav(e, f.x, f.z, dt, e.speed * (dp < 12 ? 1.6 : 1)); speed = e.speed; }
+        else { const w = wanderTarget(e); nav(e, w.x, w.z, dt, e.speed); speed = e.speed; }
+        e.face = e.moveFace ?? e.face;
+        if (e.paintCd <= 0) { e.paintCd = 0.1; stroke(e.lastPaint?.x ?? e.pos.x, e.lastPaint?.z ?? e.pos.z, e.pos.x, e.pos.z, 4.2, e.color, 0.85); e.lastPaint = { x: e.pos.x, z: e.pos.z }; }
+        if (dp < 3.2 + (P.inCar ? 1.5 : 0) && e.cd <= 0) { e.cd = 1.3; damagePlayer(P.inCar ? 30 : 20); sfx.splat(1); splat(f.x, f.z, 3, e.color, 0.8); }
+      } else if (e.type === 'boss') { speed = updateBoss(e, dt, dp, dxp, dzp, f); }
+      pushOut(e.pos, e.r);
+      // separation
+      for (const o of S.enemies) {
+        if (o === e || o.type === 'lowrider') continue;
+        const sx = e.pos.x - o.pos.x, sz = e.pos.z - o.pos.z, sd = Math.hypot(sx, sz), rr = e.r + o.r;
+        if (sd > 0.01 && sd < rr) { e.pos.x += sx / sd * (rr - sd) * 0.5; e.pos.z += sz / sd * (rr - sd) * 0.5; }
+      }
+      // step on foot Mack
+      const m = e.model;
+      m.root.position.set(e.pos.x, 0, e.pos.z);
+      m.root.rotation.y = e.face;
+      animWalk(m, speed, dt);
+      m.root.scale.setScalar((e.type === 'boss' ? e.def.scale : TYPES[e.type].scale) * (e.flash > 0 ? 1.08 : 1));
+      if (e.type === 'goon') { m.root.rotation.order = 'XYZ'; m.armR.rotation.x = -1.45; m.gun.rotation.x = 0; }
+      if (m.prism) { m.prism.rotation.y += dt * 2; m.prism.rotation.x = Math.sin(S.time) * 0.3; }
+    }
+  }
+
+  function updateBoss(e, dt, dp, dxp, dzp, f) {
+    const def = e.def;
+    const leash = Math.hypot(e.pos.x - e.anchor.x, e.pos.z - e.anchor.z);
+    let speed = 0;
+    if (dp > 14 && leash < 70) { nav(e, f.x, f.z, dt, e.speed); speed = e.speed; }
+    else if (leash >= 70) { nav(e, e.anchor.x, e.anchor.z, dt, e.speed); speed = e.speed; }
+    else { const a = S.time * 0.6; e.pos.x += Math.cos(a) * 3 * dt; e.pos.z += Math.sin(a) * 3 * dt; speed = 3; }
+    e.face = Math.atan2(dxp, dzp);
+    if (e.paintCd <= 0) { e.paintCd = 0.12; stroke(e.lastPaint?.x ?? e.pos.x, e.lastPaint?.z ?? e.pos.z, e.pos.x, e.pos.z, 3 + def.scale, e.color, 0.7); e.lastPaint = { x: e.pos.x, z: e.pos.z }; }
+    const enraged = e.hp < e.maxHp * 0.4;
+    const mz = V(e.pos.x + Math.sin(e.face) * 1.5 * def.scale, 1.2 * def.scale, e.pos.z + Math.cos(e.face) * 1.5 * def.scale);
+    if (dp < 75 && e.cd <= 0) {
+      if (def.attack === 'shotgun') {
+        e.cd = enraged ? 1.1 : 1.6;
+        for (let k = -3; k <= 3; k++) { const a = e.face + k * 0.09; enemyShot(mz, Math.sin(a), Math.cos(a), e.color, 32, 7); }
+      } else if (def.attack === 'drum') {
+        e.burst = 14; e.cd = enraged ? 2.2 : 3.2;
+      } else if (def.attack === 'donuts') {
+        e.cd = enraged ? 0.9 : 1.4;
+        const k = dp / 26;
+        enemyShot(mz, dxp / dp * k, dzp / dp * k, '#ff7ac8', 18, 18, 'donut');
+      } else if (def.attack === 'bombs') {
+        e.cd = enraged ? 1.0 : 1.5;
+        for (let k = 0; k < (enraged ? 3 : 2); k++) {
+          const tx = f.x + rand(-6, 6), tz = f.z + rand(-6, 6);
+          const ddx = tx - mz.x, ddz = tz - mz.z, dd = Math.hypot(ddx, ddz);
+          enemyShot(mz, ddx / dd * dd / 30, ddz / dd * dd / 30, pick(GANG_COLORS), 18, 16, 'bomb');
+        }
+      } else if (def.attack === 'money') {
+        // hurls bags of painted money and sprays gold
+        e.cd = enraged ? 1.0 : 1.5;
+        for (let k = 0; k < (enraged ? 3 : 2); k++) {
+          const tx = f.x + rand(-5, 5), tz = f.z + rand(-5, 5);
+          const ddx = tx - mz.x, ddz = tz - mz.z, dd = Math.hypot(ddx, ddz);
+          enemyShot(mz, ddx / dd * dd / 30, ddz / dd * dd / 30, pick(['#ffd35a', '#62ff2e']), 18, 15, 'bomb');
+        }
+        for (let k = -2; k <= 2; k++) { const a = e.face + k * 0.12; enemyShot(mz, Math.sin(a), Math.cos(a), '#ffd35a', 30, 6); }
+        if (Math.random() < 0.3) say('NARR', pick(['"A vote for Krane is a vote for COLOR!"', '"Four more years, Malone! FOUR MORE YEARS!"', '"I\'ll have you rezoned!"', '"Do you know how much this sash COST?"']), 2.2);
+      } else if (def.attack === 'beam') {
+        e.cd = enraged ? 3.5 : 5;
+        e.beamT = 2.6; e.beamA = e.face - 1.2;
+        for (let k = 0; k < 10; k++) { const a = e.face + (k - 4.5) * 0.12; enemyShot(mz, Math.sin(a), Math.cos(a), pick(GANG_COLORS), 28, 7); }
+      }
+    }
+    if (e.burst > 0 && e.cd < (enraged ? 2.2 : 3.2) - 0.08 * (14 - e.burst)) {
+      e.burst--;
+      const a = e.face + rand(-0.15, 0.15);
+      enemyShot(mz, Math.sin(a), Math.cos(a), e.color, 36, 6);
+    }
+    if (e.beamT > 0) {
+      e.beamT -= dt;
+      e.beamA += dt * 0.95;
+      const len = 46;
+      const bx = Math.sin(e.beamA), bz = Math.cos(e.beamA);
+      const wd = rayDist(e.pos.x, e.pos.z, bx, bz, len);
+      beam.visible = true;
+      beam.position.set(e.pos.x + bx * wd / 2, 3.2, e.pos.z + bz * wd / 2);
+      beam.scale.set(1, wd, 1);
+      beam.rotation.set(Math.PI / 2, 0, -e.beamA, 'YXZ');
+      beam.rotation.set(0, 0, 0);
+      beam.quaternion.setFromUnitVectors(V(0, 1, 0), V(bx, 0, bz));
+      beamMat.uniforms.t.value = S.time;
+      stroke(e.pos.x, e.pos.z, e.pos.x + bx * wd, e.pos.z + bz * wd, 2.5, pick(GANG_COLORS), 0.25);
+      // on the beam?
+      const px = f.x - e.pos.x, pz = f.z - e.pos.z, t = px * bx + pz * bz;
+      if (t > 0 && t < wd && Math.abs(px * bz - pz * bx) < (P.inCar ? 2.5 : 1.4) && e.hitCd <= 0) { e.hitCd = 0.35; damagePlayer(9); }
+      if (e.beamT <= 0) beam.visible = false;
+    }
+    e.summonCd -= dt;
+    if (e.summonCd <= 0 && dp < 120) {
+      e.summonCd = enraged ? 9 : 13;
+      if (def.summon === 'portal') { if (S.portals.length < 3) openPortal(); }
+      else for (let k = 0; k < 2; k++) { const a = Math.random() * 6; addEnemy(def.summon, e.pos.x + Math.cos(a) * 8, e.pos.z + Math.sin(a) * 8); }
+    }
+    if (def.attack === 'beam' && e.phase === 0 && e.hp < e.maxHp * 0.66) { e.phase = 1; openPortal(); say('SALLY', 'He\'s opening MORE holes! Rude!', 2.5); }
+    if (def.attack === 'beam' && e.phase === 1 && e.hp < e.maxHp * 0.33) { e.phase = 2; openPortal(); }
+    return speed;
+  }
+
+  // Paintbots wander like real robot vacuums: straight lines, bounce off walls, turn at random
+  function updateRoomba(e, dt, dp) {
+    e.turnT -= dt;
+    const sp = e.speed * (e.flash > 0 ? 0.6 : 1);
+    e.pos.x += Math.sin(e.face) * sp * dt; e.pos.z += Math.cos(e.face) * sp * dt;
+    const hit = pushOut(e.pos, e.r);
+    const edge = Math.abs(e.pos.x) > C.edge - 6 || Math.abs(e.pos.z) > C.edge - 6;
+    if (hit || edge || e.turnT <= 0) {
+      e.face += (hit || edge ? Math.PI : 0) + rand(-1.4, 1.4);
+      e.turnT = rand(3, 8);
+      if (S.area && Math.random() < 0.5) { const c = { x: (S.area.x0 + S.area.x1) / 2, z: (S.area.z0 + S.area.z1) / 2 }; if (Math.hypot(c.x - e.pos.x, c.z - e.pos.z) > 160) e.face = Math.atan2(c.x - e.pos.x, c.z - e.pos.z); }
+    }
+    e.hueT -= dt;
+    if (e.hueT <= 0) { e.hueT = 0.6; e.hue = (e.hue + 1) % 6; }
+    if (e.paintCd <= 0) {
+      e.paintCd = 0.06;
+      const bx = e.pos.x - Math.sin(e.face) * 2.6, bz = e.pos.z - Math.cos(e.face) * 2.6;
+      stroke(e.lastPaint?.x ?? bx, e.lastPaint?.z ?? bz, bx, bz, 6.5, GANG_COLORS[e.hue], 0.9);
+      e.lastPaint = { x: bx, z: bz };
+      if (Math.random() < 0.3) splat(e.pos.x + rand(-5, 5), e.pos.z + rand(-5, 5), rand(0.8, 1.8), GANG_COLORS[e.hue], 0.8, 3);
+      if (dp < 60 && Math.random() < 0.08) sfx.spray(clamp(1 - dp / 60, 0, 1));
+    }
+    const f = focus();
+    if (dp < (P.inCar ? 6.2 : 4.3) && e.hitCd <= 0) {
+      e.hitCd = 1;
+      sfx.crash(1); fx.shake = 0.4;
+      if (P.inCar) {
+        const rel = Math.hypot(CAR.vx, CAR.vz);
+        hitEnemy(e, rel * 2.5);
+        const nx = (f.x - e.pos.x) / dp, nz = (f.z - e.pos.z) / dp;
+        CAR.vx = nx * 14; CAR.vz = nz * 14;
+        CAR.hp -= 12;
+      } else { damagePlayer(12); P.pos.x += (f.x - e.pos.x) / dp * 3; P.pos.z += (f.z - e.pos.z) / dp * 3; }
+      e.face += Math.PI + rand(-0.6, 0.6);
+    }
+    e.model.root.position.set(e.pos.x, 0, e.pos.z);
+    e.model.root.rotation.y = e.face;
+    e.model.brush.rotation.y += dt * 14;
+    e.model.eye.rotation.z += dt * 3;
+    e.model.body.position.y = Math.sin(S.time * 9 + e.walk) * 0.05;
+    e.model.root.scale.setScalar(e.flash > 0 ? 1.04 : 1);
+    if (Math.random() < dt * 30) { const a = Math.random() * 6; parts.spawn(e.pos.x + Math.cos(a) * 3.3, 0.4, e.pos.z + Math.sin(a) * 3.3, Math.cos(a) * 4, rand(1, 3), Math.sin(a) * 4, { life: 0.5, size: 0.4, color: hexToRgb(GANG_COLORS[e.hue]), grav: 14 }); }
+  }
+
+  function updateLowrider(e, dt, dp) {
+    // drive the grid on the right-hand lane
+    if (!e.target) {
+      const [ix, iz] = e.node;
+      const opts = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([a, b]) => {
+        const nx = ix + a, nz = iz + b;
+        if (nx < 0 || nz < 0 || nx > C.N || nz > C.N) return false;
+        if (e.prevNode && e.prevNode[0] === nx && e.prevNode[1] === nz) return false;
+        return true;
+      });
+      // when Mack is near, take the turn that closes the distance
+      const f0 = focus();
+      const near = Math.hypot(f0.x - e.pos.x, f0.z - e.pos.z) < (e.type === 'truck' ? 140 : 90);
+      const [a, b] = near && Math.random() < 0.75 ? opts.slice().sort((p, q) => Math.hypot(roadC(ix + p[0]) - f0.x, roadC(iz + p[1]) - f0.z) - Math.hypot(roadC(ix + q[0]) - f0.x, roadC(iz + q[1]) - f0.z))[0] : pick(opts);
+      e.prevNode = e.node;
+      e.node = [ix + a, iz + b];
+      e.dir = [a, b];
+      e.target = { x: roadC(ix + a) + (-b) * 6, z: roadC(iz + b) + a * 6 };
+    }
+    const dx = e.target.x - e.pos.x, dz = e.target.z - e.pos.z, d = Math.hypot(dx, dz);
+    const want = Math.atan2(dx, dz);
+    e.face += wrapAngle(want - e.face) * Math.min(1, dt * 5);
+    const sp = e.speed * (Math.abs(wrapAngle(want - e.face)) > 0.6 ? 0.5 : 1);
+    e.pos.x += Math.sin(e.face) * sp * dt; e.pos.z += Math.cos(e.face) * sp * dt;
+    if (d < 4) e.target = null;
+    if (e.paintCd <= 0) { e.paintCd = 0.08; stroke(e.lastPaint?.x ?? e.pos.x, e.lastPaint?.z ?? e.pos.z, e.pos.x, e.pos.z, 2.6, e.color, 0.8); e.lastPaint = { x: e.pos.x, z: e.pos.z }; }
+    if (e.type === 'truck') {
+      // goons in the back fire rockets
+      if (dp < 60 && e.cd <= 0) {
+        const f2 = focus();
+        if (clearLine(e.pos.x, e.pos.z, f2.x, f2.z)) {
+          e.cd = rand(1.8, 2.6);
+          const g = pick(e.model.car.goons);
+          const wp = V(); g.root.getWorldPosition(wp); wp.y = 2.8;
+          enemyRocket(wp, f2.x + rand(-2, 2), f2.z + rand(-2, 2), e.color);
+        } else e.cd = 0.4;
+      }
+      for (const g of e.model.car.goons) g.root.rotation.y = Math.atan2(focus().x - e.pos.x, focus().z - e.pos.z) - e.face;
+    } else if (dp < 28 && e.cd <= 0) {
+      e.cd = 0.55;
+      const f = focus();
+      const a = Math.atan2(f.x - e.pos.x, f.z - e.pos.z) + rand(-0.1, 0.1);
+      enemyShot(V(e.pos.x + Math.sin(a) * 2, 1.5, e.pos.z + Math.cos(a) * 2), Math.sin(a), Math.cos(a), e.color, 36, 6);
+    }
+    // collisions with Mack / his car
+    const f = focus();
+    if (dp < (P.inCar ? 4.6 : 2.8) + (e.type === 'truck' ? 1.2 : 0) && e.hitCd <= 0) {
+      e.hitCd = 1;
+      sfx.crash(1);
+      fx.shake = 0.5;
+      if (P.inCar) {
+        const rel = Math.hypot(CAR.vx - Math.sin(e.face) * sp, CAR.vz - Math.cos(e.face) * sp);
+        hitEnemy(e, rel * 3.5);
+        damagePlayer(rel * 0.8);
+        const nx = (f.x - e.pos.x) / dp, nz = (f.z - e.pos.z) / dp;
+        CAR.vx += nx * 12; CAR.vz += nz * 12;
+      } else damagePlayer(30);
+    }
+    e.model.root.position.set(e.pos.x, 0, e.pos.z);
+    e.model.root.rotation.y = e.face;
+    // hydraulics bounce
+    e.model.car.body.position.y = e.type === 'truck' ? Math.sin(S.time * 8 + e.walk) * 0.06 : Math.abs(Math.sin(S.time * 6 + e.walk)) * 0.35;
+    e.model.car.wheels.forEach((w) => w.children.forEach((c) => (c.rotation.x += sp * dt / 0.42)));
+  }
+
+  function updatePortals(dt) {
+    for (const p of S.portals.slice()) {
+      p.open = Math.min(1, p.open + dt * 0.7);
+      p.g.userData.uni.t.value = S.time;
+      p.g.userData.uni.open.value = p.open;
+      p.g.scale.setScalar((0.2 + p.open * 0.8) * (p.flash > 0 ? 1.06 : 1));
+      p.flash -= dt;
+      p.g.rotation.y = Math.sin(S.time * 0.3) * 0.2;
+      p.paintCd -= dt;
+      if (p.paintCd <= 0) {
+        p.paintCd = 0.35;
+        p.paintR = Math.min(26, p.paintR + 0.25);
+        const a = Math.random() * Math.PI * 2, r = Math.random() * p.paintR;
+        splat(p.pos.x + Math.cos(a) * r, p.pos.z + Math.sin(a) * r, rand(1.5, 4), pick(GANG_COLORS), 0.8, 6);
+      }
+      if (Math.random() < dt * 20) parts.spawn(p.pos.x + rand(-4, 4), 6.5 + rand(-4, 4), p.pos.z, rand(-2, 2), rand(-1, 3), rand(1, 4), { life: 1, size: 0.5, color: hexToRgb(pick(GANG_COLORS)) });
+      p.spawnCd -= dt;
+    }
+  }
+
+  function spawner(dt) {
+    const st = S.stage;
+    if (!st || S.over) return;
+    S.spawnT -= dt;
+    const alive = S.enemies.filter((e) => e.type !== 'boss').length;
+    // ramp: the longer a stage runs, the faster they come
+    const interval = st.interval * (S.portals.length ? 0.8 : 1);
+    // every fight has at least one tear in the sky spitting goons out
+    if (!st.roam && st.max > 0 && !S.portals.length && !S.ambientOpening) { S.ambientOpening = true; later(() => { S.ambientOpening = false; if (S.stage && !S.portals.length) openPortal(); }, 1500); }
+    if (S.spawnT <= 0 && alive < st.max) {
+      S.spawnT = interval;
+      const type = weighted(st.mix);
+      let p;
+      const portal = S.portals.length && Math.random() < 0.9 ? pick(S.portals) : null;
+      if (portal && type !== 'lowrider' && type !== 'truck' && type !== 'roomba') { const e2 = addEnemy(type, portal.pos.x, portal.pos.z); e2.emerge = 0.7; e2.emergeDir = Math.random() * Math.PI * 2; sfx.pop(0.6); return; }
+      else { const sa = S.area; if (st.roam) S.area = null; p = spawnPoint(40, 110); S.area = sa; }
+      addEnemy(type, p.x, p.z);
+    }
+  }
+
+  function updateShots(dt) {
+    const f = focus();
+    for (let i = S.shots.length - 1; i >= 0; i--) {
+      const s = S.shots[i];
+      s.life -= dt;
+      const nx = s.pos.x + s.vx * dt, nz = s.pos.z + s.vz * dt;
+      let hitWall = false;
+      const sd = Math.hypot(s.vx, s.vz) * dt;
+      if (sd > 0 && rayDist(s.pos.x, s.pos.z, s.vx * dt / sd, s.vz * dt / sd, sd) < sd) hitWall = true;
+      s.pos.x = nx; s.pos.z = nz;
+      if (s.big) { s.vy -= 14 * dt; s.pos.y += s.vy * dt; s.mesh.rotation.x += dt * 5; }
+      s.mesh.position.copy(s.pos);
+      const pr = P.inCar ? 2.6 : 0.9;
+      let hitP = !s.big && Math.hypot(s.pos.x - f.x, s.pos.z - f.z) < pr;
+      const hitS = !s.big && !hitP && !SA.down && !SA.inCar && Math.hypot(s.pos.x - SA.pos.x, s.pos.z - SA.pos.z) < 0.9;
+      const landed = s.big && s.pos.y <= 0.3;
+      if (hitP || hitS || hitWall || s.life <= 0 || landed) {
+        if (hitP) damagePlayer(s.dmg, s.pos.x, s.pos.z);
+        else if (!s.big && !SA.down && !SA.inCar && Math.hypot(s.pos.x - SA.pos.x, s.pos.z - SA.pos.z) < 0.9) damageSally(s.dmg);
+        if (s.big) {
+          splat(s.pos.x, s.pos.z, s.kind === 'bomb' ? 7 : 5, s.color, 0.9, 10);
+          if (Math.hypot(s.pos.x - f.x, s.pos.z - f.z) < (s.kind === 'bomb' ? 6 : 4.5)) damagePlayer(s.dmg);
+          if (Math.hypot(s.pos.x - SA.pos.x, s.pos.z - SA.pos.z) < (s.kind === 'bomb' ? 6 : 4.5)) damageSally(s.dmg * 0.8);
+          sfx.splat(1);
+          for (let k = 0; k < 16; k++) parts.spawn(s.pos.x, 0.8, s.pos.z, rand(-8, 8), rand(3, 9), rand(-8, 8), { life: 0.7, size: 0.6, color: hexToRgb(s.color), grav: 22 });
+        } else splat(s.pos.x, s.pos.z, rand(0.9, 1.6), s.color, 0.8, 3);
+        scene.remove(s.mesh);
+        S.shots.splice(i, 1);
+      }
+    }
+  }
+
+  function updateRockets(dt) {
+    for (let i = S.rockets.length - 1; i >= 0; i--) {
+      const r = S.rockets[i];
+      r.life -= dt;
+      if (r.target && !r.target.dead && (S.enemies.includes(r.target) || S.portals.includes(r.target))) {
+        const dx = r.target.pos.x - r.pos.x, dz = r.target.pos.z - r.pos.z, d = Math.hypot(dx, dz) || 1;
+        r.vx += (dx / d * 48 - r.vx) * Math.min(1, dt * 3);
+        r.vz += (dz / d * 48 - r.vz) * Math.min(1, dt * 3);
+      }
+      const sp = Math.hypot(r.vx, r.vz), st = sp * dt;
+      const wall = rayDist(r.pos.x, r.pos.z, r.vx / sp, r.vz / sp, st);
+      r.pos.x += r.vx * dt; r.pos.z += r.vz * dt;
+      const ty = r.target && S.portals.includes(r.target) ? 6 : 1.3;
+      r.pos.y += (ty - r.pos.y) * Math.min(1, dt * 2.5);
+      r.mesh.position.copy(r.pos);
+      r.mesh.rotation.y = Math.atan2(r.vx, r.vz);
+      parts.spawn(r.pos.x, r.pos.y, r.pos.z, rand(-0.5, 0.5), rand(0.5, 1.5), rand(-0.5, 0.5), { life: 0.9, size: 1.2, grow: 2.5, color: r.enemy ? hexToRgb(r.color) : [0.7, 0.7, 0.72], alpha: 0.5, drag: 2, kind: 1 });
+      let boom = wall < st || r.life <= 0;
+      if (r.enemy) {
+        const f = focus();
+        if (Math.hypot(f.x - r.pos.x, f.z - r.pos.z) < (P.inCar ? 2.8 : 1.3) || (!SA.down && !SA.inCar && Math.hypot(SA.pos.x - r.pos.x, SA.pos.z - r.pos.z) < 1.2)) boom = true;
+        if (boom) {
+          explode(r.pos.x, r.pos.y, r.pos.z, 5, 0, false);
+          splat(r.pos.x, r.pos.z, 5, r.color, 0.9, 8);
+          if (Math.hypot(f.x - r.pos.x, f.z - r.pos.z) < 5.5) damagePlayer(P.inCar ? 30 : 20);
+          if (Math.hypot(SA.pos.x - r.pos.x, SA.pos.z - r.pos.z) < 5) damageSally(18);
+          scene.remove(r.mesh); S.rockets.splice(i, 1);
+        }
+        continue;
+      }
+      if (!boom) for (const e of S.enemies) if (Math.hypot(e.pos.x - r.pos.x, e.pos.z - r.pos.z) < e.r + 1) { boom = true; break; }
+      if (!boom) for (const p of S.portals) if (Math.hypot(p.pos.x - r.pos.x, p.pos.z - r.pos.z) < 4.5) { boom = true; break; }
+      if (boom) {
+        explode(r.pos.x, r.pos.y, r.pos.z, 7, 95);
+        scene.remove(r.mesh);
+        S.rockets.splice(i, 1);
+      }
+    }
+  }
+
+  function updatePickups(dt) {
+    const f = focus();
+    for (let i = S.pickups.length - 1; i >= 0; i--) {
+      const p = S.pickups[i];
+      p.t += dt;
+      p.mesh.position.y = 0.6 + Math.sin(p.t * 3) * 0.2;
+      p.mesh.rotation.y += dt * 2;
+      if (Math.random() < dt * 3) parts.spawn(p.x + rand(-0.6, 0.6), 1.5, p.z + rand(-0.6, 0.6), 0, 1.5, 0, { life: 0.6, size: 0.25, color: [1, 1, 1] });
+      if (Math.hypot(p.x - f.x, p.z - f.z) < (P.inCar ? 3.5 : 2)) {
+        scene.remove(p.mesh); S.pickups.splice(i, 1);
+        sfx.pickup();
+        if (p.kind === 'pills') { if (P.pills < 4) { P.pills++; hud.floater(V(p.x, 0, p.z), '+PAIN PILLS'); } else { P.hp = Math.min(P.maxHp, P.hp + 25); hud.floater(V(p.x, 0, p.z), '+GRIT'); } }
+        else if (P.flasks < P.maxFlasks) { P.flasks++; hud.floater(V(p.x, 0, p.z), '+FLASK'); } else { P.hp = Math.min(P.maxHp, P.hp + 25); hud.floater(V(p.x, 0, p.z), '+GRIT'); }
+      }
+    }
+  }
+
+  function updateBodies(dt) {
+    for (let i = S.bodies.length - 1; i >= 0; i--) {
+      const b = S.bodies[i];
+      b.t += dt;
+      if (!b.car) b.root.rotation.x = -Math.min(1, b.t * 3) * Math.PI / 2;
+      b.root.position.y = b.car ? 0 : 0.3;
+      if (b.t > 8) { b.root.position.y -= (b.t - 8) * 2; }
+      if (b.t > 9.5) { scene.remove(b.root); S.bodies.splice(i, 1); }
+    }
+  }
+
+  // ---- city life: rain, splashes, lamps, cops, the donut shop, lightning
+  const _v = V();
+  function world(rdt, dt) {
+    const f = focus();
+    rain.userData.uni.t.value += dt;
+    rain.userData.uni.center.value.set(f.x, 25, f.z);
+    // splashes
+    const n = Math.floor(rdt * 240 + Math.random());
+    for (let i = 0; i < n; i++) {
+      const x = f.x + rand(-55, 55), z = f.z + rand(-45, 35);
+      parts.spawn(x, 0.12, z, 0, 0, 0, { life: 0.35, size: 0.4, grow: 3, color: [0.85, 0.88, 0.92], alpha: 0.3, kind: 2 });
+    }
+    // steam + barrel fires near the camera
+    for (const v of vents) {
+      if (Math.abs(v.x - f.x) > 70 || Math.abs(v.z - f.z) > 60) continue;
+      if (v.fire) {
+        if (Math.random() < rdt * 14) parts.spawn(v.x + rand(-0.3, 0.3), 1.8, v.z + rand(-0.3, 0.3), rand(-0.3, 0.3), rand(2, 4), rand(-0.3, 0.3), { life: 0.5, size: rand(0.5, 1.1), color: [1, 0.95, 0.85], kind: 1, alpha: 0.9 });
+        if (Math.random() < rdt * 4) parts.spawn(v.x, 2.5, v.z, rand(-0.5, 0.5), 3, rand(-0.5, 0.5), { life: 2, size: 2, grow: 2, color: [0.2, 0.2, 0.22], alpha: 0.5, kind: 1 });
+      } else if (Math.random() < rdt * 6) parts.spawn(v.x + rand(-0.5, 0.5), 0.3, v.z + rand(-0.5, 0.5), rand(-0.4, 0.4) - 1, rand(2, 3.5), rand(-0.4, 0.4), { life: 2.5, size: 2.5, grow: 3, color: [0.75, 0.77, 0.8], alpha: 0.3, drag: 0.5, kind: 1 });
+    }
+    // lamp pool: light the 8 lamps nearest the camera focus
+    const near = [];
+    for (const l of lamps) {
+      const d = Math.abs(l.x - f.x) + Math.abs(l.z - (f.z - 8));
+      if (d < 120) near.push([d, l]);
+    }
+    near.sort((a, b) => a[0] - b[0]);
+    lampPool.forEach((pl, i) => {
+      const l = near[i] && near[i][1];
+      if (l) { pl.position.set(l.hx, 7.4, l.z); pl.intensity = 260; } else pl.intensity = 0;
+    });
+    // cop cars flash red/blue, cops eat
+    const blink = Math.floor(S.time * 6) % 2;
+    for (const c of copCars) { c.lightbar.userData.a.visible = !!blink; c.lightbar.userData.b.visible = !blink; }
+    cops.forEach((c, i) => { c.arm.rotation.x = -1.6 - Math.max(0, Math.sin(S.time * 1.5 + i)) * 0.9; c.root.rotation.z = Math.sin(S.time * 0.8 + i) * 0.03; });
+    for (const s of signs) {
+      if (s.userData.spin) s.rotation.y += rdt * s.userData.spin;
+      if (s.userData.prism && s.material.color) s.material.color.setHSL((S.time * 0.1) % 1, 0.5, 0.7);
+    }
+    // the Holy Glaze: every pass gets a remark
+    const dd = Math.hypot(f.x - L.donut.x, f.z - L.donut.z);
+    const inZone = dd < 50;
+    if (inZone && !S.donutIn && S.donutT <= 0 && !S.over) {
+      S.donutT = 7;
+      const [who, text] = donutDeck.draw();
+      say(who === 'SALLY' && !SA.inCar && Math.hypot(SA.pos.x - L.donut.x, SA.pos.z - L.donut.z) > 70 ? 'MACK' : who, text, 3.6);
+      if (Math.random() < 0.6) later(() => S && say('COP', copDeck.draw(), 2.4), 3400);
+    }
+    S.donutIn = inZone;
+    // lightning
+    S.lightningT -= rdt;
+    if (S.lightningT <= 0) {
+      S.lightningT = rand(8, 22);
+      fx.flash = 1;
+      sfx.thunder(rand(0.3, 1.4));
+    }
+    fx.flash = Math.max(0, fx.flash - rdt * 3);
+    hemi.intensity = 1.15 + fx.flash * 2.5;
+    moon.intensity = 1.5 + fx.flash * 3;
+    rain.userData.uni.flash.value = fx.flash * 0.2;
+    // particles etc
+    parts.update(dt);
+    tracers.update(dt);
+    flashes.update(dt);
+    heroSpot.position.set(f.x - 6, 30, f.z + 10);
+    heroSpot.target.position.set(f.x, 0, f.z);
+    moon.position.set(f.x + 40, 90, f.z + 25);
+    moon.target.position.set(f.x, 0, f.z);
+    _v.copy(f);
+  }
+
+  // ---- camera
+  const camPos = V(), camLook = V();
+  function camTargets() {
+    const f = focus();
+    const lead = P.inCar ? 0.55 : 0;
+    const lx = f.x + CAR.vx * lead * (P.inCar ? 1 : 0), lz = f.z + CAR.vz * lead * (P.inCar ? 1 : 0);
+    const ax = P.inCar ? 0 : (aim.x - f.x) * 0.18, az = P.inCar ? 0 : (aim.z - f.z) * 0.18;
+    const h = (P.inCar ? 46 + Math.min(18, Math.abs(CAR.speed) * 0.35) : 28) * zoom;
+    return { pos: V(lx + ax, h, lz + az + h * 0.62), look: V(lx + ax, 0, lz + az - 2) };
+  }
+  function snapCamera() { const t = camTargets(); camPos.copy(t.pos); camLook.copy(t.look); }
+  function updateCamera(dt) {
+    const t = camTargets();
+    const k = 1 - Math.exp(-dt * 5);
+    camPos.lerp(t.pos, k); camLook.lerp(t.look, k);
+    camera.position.copy(camPos);
+    fx.shake = Math.max(0, fx.shake - dt * 2.5);
+    if (fx.shake > 0) camera.position.add(V(rand(-1, 1), rand(-1, 1), rand(-1, 1)).multiplyScalar(fx.shake * 0.8));
+    camera.lookAt(camLook);
+    // see-through cutaway for buildings between camera and Mack
+    NU.cutA.value.copy(camera.position);
+    NU.cutB.value.set(focus().x, 1.5, focus().z);
+    NU.cutR.value = P.inCar ? 10 : 7;
+  }
+
+  return {
+    scene, camera, start, stop, update, startReplay,
+    get running() { return !!(S && S.running); },
+    get state() { return S; },
+    resumeFromBar() { keys.clear(); },
+    debug: {
+      killAll() { if (!S) return; for (const e of S.enemies.slice()) hitEnemy(e, 99999); for (const p of S.portals.slice()) closePortal(p); },
+      win() { if (S) { S.stageIdx = S.stages.length - 1; S.stage = null; win(); } },
+      player: P, car: CAR, sally: SA, aim, mouse, keys, enterCar, openPortal, summonCar,
+      tp(x, z) { P.pos.set(x, 0, z); if (P.inCar) CAR.pos.set(x, 0, z); snapCamera(); },
+    },
+  };
+}

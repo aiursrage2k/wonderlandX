@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Grey City Blues</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=Bebas+Neue&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/noir.css" />
+  <script type="importmap">
+    { "imports": { "three": "../vendor/three/three.module.js", "three/addons/": "../vendor/three/addons/" } }
+  </script>
+</head>
+<body>
+  <canvas id="c"></canvas>
+
+  <!-- first click: audio needs a gesture -->
+  <div id="splash" class="screen">
+    <div class="splash-inner">
+      <div class="splash-title">GREY CITY <span>BLUES</span></div>
+      <div class="splash-sub">a Rain City case file</div>
+      <div id="splash-status" class="blink">Building the city in the rain…</div>
+    </div>
+  </div>
+
+  <!-- main menu, over the office -->
+  <div id="title" class="screen hidden">
+    <div class="menu-col">
+      <div class="logo">GREY CITY<br /><span>BLUES</span></div>
+      <div class="tag">Mack Malone, Private Investigations. Crazy Sally, rockets. DOTTIE-9, drinks.</div>
+      <button class="btn" id="btn-board">The Big Board</button>
+      <button class="btn" id="btn-bar">The Last Drop</button>
+      <button class="btn" id="btn-dottie">Talk to Dottie</button>
+      <button class="btn small" id="btn-jazz">Change the Record ♪</button>
+      <div class="vols">
+        <label>Jazz <input type="range" id="vol-music" min="0" max="1" step="0.05" /></label>
+        <label>Rain &amp; Lead <input type="range" id="vol-sfx" min="0" max="1" step="0.05" /></label>
+      </div>
+      <div class="controls">
+        <b>On foot</b> WASD move · Hold right mouse to draw &amp; aim the big red revolver, left mouse to fire · R tuck &amp; roll · E car / doors · Mouse wheel zoom<br />
+        <b>Survival</b> F Focus on/off: slows time, burns the color you've stolen · Q flask · G pain pills (full heal, but you see in color)<br />
+        <b>Driving</b> W/S gas &amp; brake · A/D steer · Space handbrake · Click: Sally fires where you point · E get out<br />
+        <b>Anytime</b> N next jazz track · Esc pause
+      </div>
+    </div>
+  </div>
+
+  <!-- the big board: pick a case -->
+  <div id="board" class="screen hidden">
+    <div class="board-wrap">
+      <div class="board-map">
+        <canvas id="citymap" width="900" height="900"></canvas>
+        <div class="map-title">RAIN CITY</div>
+      </div>
+      <div class="board-side">
+        <div class="board-head">THE BIG BOARD <span id="board-score"></span></div>
+        <div id="cases"></div>
+        <div class="board-foot">
+          <button class="btn small" id="btn-board-back">← Back to the office</button>
+          <button class="btn small" id="btn-import">Import a newsreel</button>
+          <input type="file" id="import-file" accept=".json,application/json" hidden />
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- dialogue (cutscenes, bar, outros) -->
+  <div id="dialog" class="hidden">
+    <div class="dlg-box">
+      <div id="dlg-name"></div>
+      <div id="dlg-text"></div>
+      <div class="dlg-foot"><span>Click / Space ▸</span><button class="btn tiny" id="dlg-skip">Skip ⏭</button></div>
+    </div>
+  </div>
+  <div id="stamp" class="hidden"></div>
+
+  <!-- The Last Drop -->
+  <div id="barui" class="screen hidden">
+    <div class="bar-panel">
+      <div class="bar-head">THE LAST DROP</div>
+      <div id="bar-text"></div>
+      <div id="bar-opts"></div>
+    </div>
+  </div>
+
+  <!-- HUD -->
+  <div id="hud" class="hidden">
+    <div id="vig-hurt"></div>
+    <div id="vig-focus"></div>
+    <div id="hud-tl">
+      <div class="who-row">
+        <canvas id="pt-mack" class="portrait" width="96" height="96"></canvas>
+        <div class="who-bars">
+          <div class="hud-label">MACK MALONE · GRIT</div>
+          <div class="bar grit"><div id="grit-fill"></div></div>
+          <div class="hud-label sally-label">CRAZY SALLY <span id="sally-state"></span></div>
+          <div class="bar sallybar"><div id="sally-fill"></div></div>
+        </div>
+        <canvas id="pt-sally" class="portrait sally" width="96" height="96"></canvas>
+      </div>
+      <div id="flasks"></div>
+      <div id="ammo"></div>
+      <div id="pills-row"><span class="pill-ico"></span> <span id="pills-n">2</span> <span class="hud-label">PAIN PILLS</span> <span id="color-warn" class="hidden">· SEEING COLOR</span></div>
+      <div class="hud-label">STOLEN COLOR · F FOCUS</div>
+      <div class="bar focusbar"><div id="focus-fill"></div></div>
+      <div id="car-row" class="hidden"><div class="hud-label">THE CAR</div><div class="bar car"><div id="car-fill"></div></div></div>
+    </div>
+    <div id="hud-top">
+      <div id="case-no"></div>
+      <div id="case-title"></div>
+      <div id="obj"><span id="obj-text"></span> <span id="obj-prog"></span></div>
+      <div id="bossbar" class="hidden"><div id="boss-name"></div><div class="bar boss"><div id="boss-fill"></div></div><div id="boss-sub"></div></div>
+    </div>
+    <div id="hud-tr">
+      <canvas id="minimap" width="200" height="200"></canvas>
+      <div class="hud-label bleed-label">CITY INFECTION <span id="bleed-pct">0%</span></div>
+      <div class="bar bleed"><div id="bleed-fill"></div></div>
+    </div>
+    <div id="captions"></div>
+    <div id="hint"></div>
+    <div id="floaters"></div>
+    <div id="pointers"></div>
+    <div id="newsreel-tag" class="hidden">THE DAILY GREY NEWSREEL <span id="newsreel-who"></span></div>
+  </div>
+  <div id="cross"></div>
+
+  <div id="pause" class="screen hidden">
+    <div class="panel-c">
+      <div class="big">PAUSED</div>
+      <button class="btn" id="btn-resume">Back to the rain</button>
+      <button class="btn" id="btn-quit">Drop the case</button>
+    </div>
+  </div>
+
+  <div id="result" class="screen hidden">
+    <div class="panel-c">
+      <div class="big" id="res-title"></div>
+      <div id="res-sub"></div>
+      <div id="res-stats"></div>
+      <div id="res-btns"></div>
+    </div>
+  </div>
+
+  <div id="np" class="hidden"></div>
+  <div id="fade"></div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
