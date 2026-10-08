@@ -9,7 +9,7 @@ import { initAudio, audio, playlist, skipTrack, setIndoors, sfx, setEngine } fro
 import { buildOffice, buildBar } from './interiors.js';
 import { createGame } from './game.js';
 import { createHud } from './hud.js';
-import { CASES, CAST, GUS_HINTS, DOTTIE_IDLE, PATROL, BAR_CLOSERS } from './story.js';
+import { CASES, CAST, GUS_HINTS, DOTTIE_IDLE, PATROL, BAR_CLOSERS, TOASTS } from './story.js';
 import { drawCityMap, L, DISTRICTS, C } from './city.js';
 import { fx } from './fx.js';
 import { pick } from './util.js';
@@ -120,8 +120,9 @@ function speakerOf(who, caseDef) {
   if (who === 'DAME') return { name: caseDef ? caseDef.dame.name : 'A dame', cls: 'dame' };
   return CAST[who] || { name: who, cls: 'dame' };
 }
-function runDialog(lines, { caseDef, onAct, done } = {}) {
-  dlg.lines = lines; dlg.i = -1; dlg.done = done; dlg.caseDef = caseDef; dlg.onAct = onAct;
+function runDialog(lines, { caseDef, onAct, done, door = false } = {}) {
+  dlg.lines = lines; dlg.i = -1; dlg.done = done; dlg.caseDef = caseDef; dlg.onAct = onAct; dlg.door = door;
+  $('dlg-skip').textContent = door ? 'Walk out the door 🚪' : 'Skip ⏭';
   $('dialog').classList.remove('hidden');
   nextLine();
 }
@@ -158,7 +159,7 @@ function tickDialog(dt) {
   $('dlg-text').textContent = dlg.full.slice(0, dlg.typed);
 }
 $('dialog').addEventListener('click', (e) => { if (e.target.id !== 'dlg-skip') nextLine(); });
-$('dlg-skip').addEventListener('click', (e) => { e.stopPropagation(); endDialog(); });
+$('dlg-skip').addEventListener('click', (e) => { e.stopPropagation(); if (dlg.door) sfx.door(); endDialog(); });
 
 // ------------------------------------------------------------------ the big board
 const mapCanvas = $('citymap');
@@ -320,8 +321,8 @@ function onEnd(r) {
       save.seenBar = save.seenBar || {};
       const seen = save.seenBar[c.id];
       save.seenBar[c.id] = true; persist();
-      if (seen) showResult(true, { ...s, score, grade, newBest });
-      else runDialog(barLines, { caseDef: c, done: () => showResult(true, { ...s, score, grade, newBest }) });
+      // first close: the full debrief. After that: a quick toast. Either way, the door walks you out.
+      runDialog(seen ? pick(TOASTS) : barLines, { caseDef: c, door: true, done: () => showResult(true, { ...s, score, grade, newBest }) });
     }, 900);
   } else {
     showResult(false, { ...r.stats, reason: r.reason });
@@ -344,7 +345,7 @@ function showResult(win, s) {
     b('Back to the Big Board', () => setMode('board'));
     const reel = loadReel(c.id);
     if (reel) b('▶ Watch the newsreel', () => playReel(c, reel));
-    if (lastBar && lastBar.c === c) b('▶ Bar scene', () => { $('result').classList.add('hidden'); mode = 'barOutro'; runDialog(lastBar.lines, { caseDef: c, done: () => setMode('result') }); });
+    if (lastBar && lastBar.c === c) b('▶ Full bar scene', () => { $('result').classList.add('hidden'); mode = 'barOutro'; runDialog(lastBar.lines, { caseDef: c, door: true, done: () => setMode('result') }); });
   } else {
     b('Try again', () => fade(() => { game.stop(); startStreets(c); }));
     b('Back to the office', () => fade(() => { game.stop(); hud.clear(); setMode('board'); }));

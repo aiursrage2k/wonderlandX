@@ -74,8 +74,10 @@ npx http-server -c-1 .     # then visit http://localhost:8080/noir/
   each wave. Every portal keeps spitting goons, who scatter and paint, until
   it's sealed. Between waves there's a breather with a countdown, and any
   leftover goons run for it.
-- **The bar scene** plays the first time you close a case. On replays you go
-  straight to the score, with a button to rewatch it.
+- **The bar scene.** The first time you close a case you get the full debrief:
+  Mack broods, Gus reads the evidence, Sally orders another round. After that
+  it's just a quick toast. Walk out the door to skip either one; the full scene
+  can be rewatched from the results screen.
 - **Wayfinding.** "Go to" objectives (start with *meet Big Pork at the Holy
   Glaze*) paint red chevrons on the road that re-route in real time, plus a
   beacon at the destination. The radar shows every objective, with an arrow on

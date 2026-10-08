@@ -1314,6 +1314,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
   // ===================================================================== update
   function update(rdt) {
     if (!S) return;
+    if (S.ended) return; // the case is over; onEnd has already been called once
     runTimers(rdt);
     if (!S) return;
     if (S.replay) { updateReplay(rdt); return; }
@@ -1345,6 +1346,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       if (S.endT <= 0) {
         const r = { win: S.result === 'win', reason: S.reason, stats: { ...S.stats, time: S.time, peak: S.peak, hp: P.hp / P.maxHp, evidence: S.evidence.length, evidenceTotal: (EVIDENCE[S.caseDef.id] || []).length }, rec: S.rec, evidence: S.evidence.slice() };
         S.running = false;
+        S.ended = true;
         onEnd(r);
         return;
       }

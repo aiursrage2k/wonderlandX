@@ -618,6 +618,15 @@ export const BAR_CLOSERS = {
 };
 
 // Evidence the goons drop. Pick it up on foot; at the bar Gus reads it and it points at the next case.
+// After the first time, closing a case again just gets a toast at the bar.
+export const TOASTS = [
+  [['SALLY', 'To Rain City! Grey, wet, and ours! Gus, hit me again!'], ['MACK', 'To the rain.']],
+  [['SALLY', 'Another one closed, Mack! Bottoms up!'], ['MACK', 'Same case. Same rain. Same drink. Some things you don\'t mess with.']],
+  [['SALLY', 'To us! And to rockets! Mostly rockets!'], ['MACK', 'To the rockets, then.']],
+  [['SALLY', 'Didn\'t we already solve this one? Who cares! Cheers!'], ['MACK', 'Twice the case, twice the rye.']],
+  [['SALLY', 'Gus! Two of the usual! And one for Dottie, she\'ll be by later!'], ['MACK', 'She\'s already here, Sally. She\'s under the table.']],
+];
+
 export const EVIDENCE = {
   1: [{ name: 'A Prism receipt', read: 'Technicolor Supply Co. Forty pounds of Prism, paid in full. Deliver to: the Kaleidoscope Club, Little Saxophone.', gus: 'The Kaleidoscope? That\'s Vic Vermilion\'s joint now. Orange suit, orange teeth.' }, { name: 'A dock manifest', read: 'Cargo: "Joy, assorted. Handle with smiles." Signed V.V.', gus: 'V.V. Vic Vermilion signs everything. He signed a cake once.' }],
   2: [{ name: 'A deposit slip', read: 'First Grey Bank, safe deposit box seven. Where the amount goes, somebody drew a rainbow.', gus: 'First Grey Bank. Somebody\'s fixing to make a withdrawal with rollers.' }, { name: 'A club napkin', read: 'A phone number in lipstick: KLondike 5-7777. Under it, one word: "Choir."', gus: 'Choir? Nobody in Rain City sings in a choir. Nobody\'s that happy.' }],
