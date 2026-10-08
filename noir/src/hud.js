@@ -15,7 +15,7 @@ export function createHud() {
     bleed: $('bleed-fill'), bleedPct: $('bleed-pct'), bleedBar: document.querySelector('.bar.bleed'),
     captions: $('captions'), hint: $('hint'), floaters: $('floaters'), pointers: $('pointers'),
     sally: $('sally-fill'), sallyState: $('sally-state'), ptMack: $('pt-mack'), ptSally: $('pt-sally'),
-    stomach: $('stomach'),
+    stomach: $('stomach'), boost: $('boost-fill'),
     ammo: $('ammo'), pillsN: $('pills-n'), colorWarn: $('color-warn'), focus: $('focus-fill'),
     vigHurt: $('vig-hurt'), vigFocus: $('vig-focus'), mini: $('minimap'), stamp: $('stamp'),
   };
@@ -79,6 +79,7 @@ export function createHud() {
     el.ptSally.classList.toggle('down', !!s.sallyDown);
     el.carRow.classList.toggle('hidden', !s.inCar);
     el.car.style.transform = `scaleX(${s.carHp})`;
+    el.boost.style.transform = `scaleX(${s.boost ?? 1})`;
     el.bleed.style.transform = `scaleX(${s.bleed})`;
     el.bleedPct.textContent = `${Math.round(s.bleed * 100)}%`;
     el.bleedBar.classList.toggle('warn', s.bleed > 0.75);
@@ -238,6 +239,7 @@ export function createHud() {
 
   return {
     show, say, stamp, floater, update,
+    wanted(on) { document.getElementById('wanted').classList.toggle('hidden', !on); },
     caseTitle(no, t) { el.caseNo.textContent = no.toUpperCase(); el.caseTitle.textContent = t; },
     objective(t) { el.objText.textContent = t; },
     progress(p) { el.objProg.textContent = p; },

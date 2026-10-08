@@ -227,6 +227,7 @@ export function makePackard() {
   const root = new THREE.Group();
   const body = new THREE.Group();
   root.add(body);
+  const lights = [];
   const black = nmat(0x0d0d0f, { kind: 'std', rough: 0.12, metal: 0.7 });
   const chrome = nmat(0xf0f0f0, { kind: 'std', rough: 0.06, metal: 1 });
   const glass = nmat(0x0a0c10, { kind: 'std', rough: 0.03, metal: 0.95 });
@@ -262,7 +263,7 @@ export function makePackard() {
     part(box, chrome, sx * 1.29, 0.42, -0.15, 0.03, 0.05, 2.4, body);
     // headlight pods on the fenders
     part(sph, chrome, sx * 0.98, 1.05, 2.9, 0.42, 0.42, 0.32, body);
-    part(sph, nmat(0xffffff, { kind: 'basic', paint: false }), sx * 0.98, 1.05, 3.02, 0.34, 0.34, 0.16, body);
+    lights.push(part(sph, nmat(0xffffff, { kind: 'basic', paint: false }), sx * 0.98, 1.05, 3.02, 0.34, 0.34, 0.16, body));
     // tail light
     part(box, nmat(0xff1a1a, { kind: 'basic', keep: 1, paint: false }), sx * 0.98, 0.95, -3.14, 0.18, 0.12, 0.05, body);
   }
@@ -273,11 +274,10 @@ export function makePackard() {
     part(box, chrome, sx * 0.62, 0.68, 2.62, 0.38, 0.3, 0.1, body); // catwalk grilles
     for (let k = 0; k < 4; k++) part(box, nmat(0x111111), sx * 0.62, 0.58 + k * 0.07, 2.68, 0.34, 0.02, 0.02, body);
   }
-  part(box, chrome, 0, 1.45, 2.66, 0.06, 0.14, 0.18, body); // hood ornament
-  part(sph, chrome, 0, 1.56, 2.66, 0.1, 0.12, 0.28, body);
+  const orn = [part(box, chrome, 0, 1.45, 2.66, 0.06, 0.14, 0.18, body), part(sph, chrome, 0, 1.56, 2.66, 0.1, 0.12, 0.28, body)]; // hood ornament
   // bumpers with guards
-  part(box, chrome, 0, 0.45, 3.2, 2.35, 0.2, 0.16, body);
-  part(box, chrome, 0, 0.45, -3.3, 2.3, 0.2, 0.16, body);
+  const bumperF = part(box, chrome, 0, 0.45, 3.2, 2.35, 0.2, 0.16, body);
+  const bumperR = part(box, chrome, 0, 0.45, -3.3, 2.3, 0.2, 0.16, body);
   for (const sx of [0.45, -0.45]) { part(box, chrome, sx, 0.58, 3.24, 0.1, 0.42, 0.12, body); part(box, chrome, sx, 0.58, -3.34, 0.1, 0.42, 0.12, body); }
   part(box, chrome, 0, 0.8, -3.1, 0.3, 0.14, 0.04, body); // plate frame
   part(box, white, 0, 0.8, -3.11, 0.26, 0.1, 0.03, body);
@@ -294,7 +294,9 @@ export function makePackard() {
     wheels.push(w);
   }
   root.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-  return { root, body, wheels, lightbar: null, length: 6.4 };
+  // breakable bits for the smash: bumpers, guards, ornament, headlights
+  const guards = body.children.filter((m) => m.geometry === box && m.material === chrome && Math.abs(m.scale.x - 0.1) < 0.01);
+  return { root, body, wheels, lightbar: null, length: 6.4, breakable: { bumperF, bumperR, orn, lights, guards }, hood };
 }
 
 export function makeCar(kind = 'sedan', color = '#222222') {
@@ -530,7 +532,7 @@ export function rainbowCoat() {
     base(sh);
     sh.uniforms.ntime = NU.ntime;
     sh.fragmentShader = 'uniform float ntime;\n' + sh.fragmentShader.replace('outgoingLight = ncol;',
-      'vec3 rb = 0.55 + 0.45 * cos(6.2831 * (vec3(0.0, 0.33, 0.67) + vNW.y * 0.45 + ntime * 0.35));\n  ncol = rb * (0.35 + nl * 1.6);\n  outgoingLight = ncol;');
+      'vec3 rb = 0.5 + 0.5 * cos(6.2831 * (vec3(0.0, 0.33, 0.67) + vNW.y * 0.45 + vNW.x * 0.05 + ntime * 0.35));\n  rb = pow(rb, vec3(1.6));\n  ncol = rb * (0.3 + min(nl, 1.2) * 0.85);\n  outgoingLight = ncol;');
   };
   m.customProgramCacheKey = () => 'rainbowcoat';
   rainbowMat = m;
@@ -724,10 +726,73 @@ export function makeImp(color, scale = 1) {
   part(G.box, dark, 0, -0.14, 0.28, 0.3, 0.05, 0.04, head); // grin
   const armL = pivot(root, -0.5, 1.3, 0.1), armR = pivot(root, 0.5, 1.3, 0.1);
   for (const a of [armL, armR]) { part(G.cyl, skin, 0, -0.3, 0, 0.14, 0.6, 0.14, a); part(G.cone, dark, 0, -0.65, 0.05, 0.08, 0.2, 0.08, a); }
-  for (const s of [-1, 1]) { const w = part(G.box, nmat(0x1a1a1a, { paint: false }), s * 0.75, 1.5, -0.4, 1.1, 0.04, 0.7, root); w.rotation.z = s * 0.5; w.rotation.y = s * 0.3; }
+  // rainbow bat wings on pivots so they can flap
+  const wings = [];
+  for (const s of [-1, 1]) {
+    const wp = pivot(root, s * 0.35, 1.5, -0.4);
+    const wshape = new THREE.Shape();
+    wshape.moveTo(0, 0); wshape.lineTo(1.6, 0.6); wshape.lineTo(1.4, -0.1); wshape.lineTo(1.1, -0.5); wshape.lineTo(0.7, -0.2); wshape.lineTo(0.4, -0.6); wshape.closePath();
+    const wm = new THREE.Mesh(new THREE.ShapeGeometry(wshape), rainbowWing());
+    wm.scale.set(s, 1, 1); wm.rotation.x = -0.3;
+    wp.add(wm); wings.push(wp);
+  }
   const tail = part(G.cyl, skin, 0, 0.8, -0.7, 0.06, 1.0, 0.06, root); tail.rotation.x = 1.0;
   const tool = pivot(armR, 0, -0.6, 0.1);
   const muzzle = pivot(tool, 0, 0, 0.2);
   root.scale.setScalar(scale);
-  return { root, legL, legR, armL, armR, head, tool, muzzle, walk: 0, color };
+  return { root, legL, legR, armL, armR, head, tool, muzzle, walk: 0, color, wings };
+}
+
+let wingMat = null;
+function rainbowWing() {
+  if (wingMat) return wingMat;
+  const base = rainbowCoat();
+  wingMat = base.clone();
+  wingMat.side = THREE.DoubleSide;
+  wingMat.onBeforeCompile = base.onBeforeCompile;
+  wingMat.customProgramCacheKey = () => 'rainbowwing';
+  return wingMat;
+}
+
+// A giant Technicolor beast: horns, rainbow hide, the size of a tenement.
+export function makeBeast(color) {
+  const m = makeImp(color, 3.4);
+  const dark = nmat(0x0a0a0a, { paint: false });
+  for (const x of [-0.35, 0.35]) { const h = part(G.cone, dark, x, 0.55, 0, 0.18, 0.9, 0.18, m.head); h.rotation.z = -x * 1.6; }
+  part(G.sph, rainbowCoat(), 0, 1.6, -0.3, 1.2, 0.5, 1.0, m.root); // hump
+  return m;
+}
+
+// Rain City civilians: coats, hats, umbrellas. Grey as the weather.
+const CIV_COATS = [0x4a4844, 0x5e5a54, 0x3a3a3c, 0x6a6560, 0x2c2c2e];
+export function makeCivilian(seed = Math.random()) {
+  const root = new THREE.Group();
+  const coat = nmat(CIV_COATS[Math.floor(seed * CIV_COATS.length)]);
+  const dark = nmat(0x1a1a1a);
+  const skin = nmat(0xbfb4a8);
+  const legL = pivot(root, -0.14, 0.9, 0), legR = pivot(root, 0.14, 0.9, 0);
+  for (const l of [legL, legR]) { part(G.cyl, dark, 0, -0.45, 0, 0.16, 0.9, 0.16, l); part(G.box, dark, 0, -0.88, 0.05, 0.16, 0.1, 0.28, l); }
+  part(G.cone, coat, 0, 1.25, 0, 0.95, 1.1, 0.8, root);
+  part(G.cyl, coat, 0, 1.7, 0, 0.62, 0.4, 0.5, root);
+  const head = pivot(root, 0, 2.05, 0);
+  part(G.sph, skin, 0, 0, 0, 0.32, 0.38, 0.34, head);
+  const armL = pivot(root, -0.36, 1.82, 0), armR = pivot(root, 0.36, 1.82, 0);
+  for (const a of [armL, armR]) part(G.cyl, coat, 0, -0.3, 0, 0.15, 0.6, 0.15, a);
+  let umbrella = null;
+  if (seed < 0.55) {
+    // black umbrella held over the head
+    umbrella = pivot(root, 0.15, 2.6, 0.1);
+    part(new THREE.SphereGeometry(0.95, 14, 6, 0, Math.PI * 2, 0, Math.PI / 2.4), nmat(0x111111, { kind: 'std', rough: 0.25 }), 0, 0, 0, 1, 0.55, 1, umbrella);
+    part(G.cyl, dark, 0, -0.4, 0, 0.03, 0.9, 0.03, umbrella);
+    armR.rotation.x = -0.6; armR.rotation.z = 0.3;
+  } else {
+    part(G.cyl, dark, 0, 0.16, 0, 0.62, 0.04, 0.62, head);
+    part(G.cyl, dark, 0, 0.28, 0, 0.34, 0.22, 0.34, head);
+    if (seed > 0.8) { const bc = part(G.box, nmat(0x2a2018), 0, -0.68, 0.05, 0.45, 0.32, 0.12); armL.add(bc); }
+  }
+  root.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.userData.civMat = o.material; } });
+  return { root, legL, legR, armL, armR, head, umbrella, walk: Math.random() * 6 };
+}
+export function setInfected(m, on) {
+  m.root.traverse((o) => { if (o.isMesh) o.material = on ? rainbowCoat() : o.userData.civMat; });
 }

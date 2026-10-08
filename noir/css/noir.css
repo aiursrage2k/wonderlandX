@@ -124,6 +124,8 @@ button.btn:disabled { opacity: 0.35; cursor: default; }
 #sally-state { color: #9a9a96; }
 .grit > div { background: linear-gradient(#f2efe8, #a9a59c); }
 .car > div { background: linear-gradient(#bbb, #666); }
+.boostbar { height: 8px; }
+.boostbar > div { background: linear-gradient(90deg, #ff3a10, #ffb020, #fff2a0); }
 #car-row { margin-top: 8px; }
 #ammo { display: flex; gap: 4px; margin: 6px 0 4px; height: 18px; align-items: flex-end; }
 .round { width: 9px; height: 18px; border-radius: 4px 4px 1px 1px; background: linear-gradient(90deg, #8a0a1c, #ff2a3a 50%, #8a0a1c); box-shadow: 0 0 6px rgba(255, 42, 58, 0.6); }
@@ -159,6 +161,8 @@ button.btn:disabled { opacity: 0.35; cursor: default; }
 .stomach { margin-top: 4px; font: 14px var(--bebas); letter-spacing: 2px; color: #9a9a96; text-align: right; }
 #stomach.s1 { color: #c9c4b8; } #stomach.s2 { color: #9fe08a; } #stomach.s3 { color: #62ff2e; animation: blink 0.4s infinite; }
 @keyframes warn { 50% { border-color: #ff2d95; box-shadow: 0 0 14px #ff2d95; } }
+#wanted { position: absolute; top: 128px; left: 50%; transform: translateX(-50%); font: 26px var(--bebas); letter-spacing: 6px; padding: 2px 18px; color: #fff; animation: siren 0.5s steps(1) infinite; }
+@keyframes siren { 0% { background: #c0101e; box-shadow: 0 0 24px #ff2030; } 50% { background: #1030c0; box-shadow: 0 0 24px #3060ff; } }
 #captions { position: absolute; left: 50%; bottom: 9vh; transform: translateX(-50%); width: min(820px, 90vw); text-align: center; }
 .cap { display: inline-block; margin: 3px 0; font-size: 19px; background: rgba(0, 0, 0, 0.72); padding: 6px 14px; line-height: 1.35; transition: opacity 0.4s; }
 .cap b { font: 18px var(--bebas); letter-spacing: 2px; margin-right: 8px; font-weight: normal; }

@@ -9,7 +9,7 @@ import { initAudio, audio, playlist, skipTrack, setIndoors, sfx, setEngine } fro
 import { buildOffice, buildBar } from './interiors.js';
 import { createGame } from './game.js';
 import { createHud } from './hud.js';
-import { CASES, CAST, GUS_HINTS, DOTTIE_IDLE, PATROL } from './story.js';
+import { CASES, CAST, GUS_HINTS, DOTTIE_IDLE, PATROL, BAR_CLOSERS } from './story.js';
 import { drawCityMap, L, DISTRICTS, C } from './city.js';
 import { fx } from './fx.js';
 import { pick } from './util.js';
@@ -83,6 +83,7 @@ const hud = createHud();
 let office, bar, game;
 let mode = 'boot'; // boot | splash | title | board | intro | play | pause | bar | barMid | outro | result | reel
 let currentCase = null;
+let lastIndoor = 'office';
 let selectedCase = 1;
 
 function setMode(m) {
@@ -97,6 +98,8 @@ function setMode(m) {
   if (m === 'bar' || m === 'barMid') $('barui').classList.remove('hidden');
   if (m === 'pause') $('pause').classList.remove('hidden');
   if (m === 'result') $('result').classList.remove('hidden');
+  if (m === 'board' || m === 'title') lastIndoor = 'office';
+  if (m === 'barOutro' || m === 'bar') lastIndoor = 'bar';
   const indoors = !['play', 'pause', 'reel'].includes(m);
   setIndoors(indoors);
   if (indoors) setEngine(false);
@@ -296,9 +299,21 @@ function onEnd(r) {
     selectedCase = Math.min(CASES.length, c.id + 1);
     fade(() => {
       game.stop(); hud.clear();
-      mode = 'outro'; office.setView('desk');
-      setIndoors(true); playlist('office');
-      runDialog(c.outro, { caseDef: c, done: () => showResult(true, { ...s, score, grade, newBest }) });
+      // case closed: walk into the Last Drop, Mack broods over it, Sally orders another round
+      mode = 'barOutro';
+      setIndoors(true); playlist('bar'); sfx.door();
+      // the evidence goes on the bar; Gus reads it, and it points at the next case
+      const ev = r.evidence || [];
+      const next = CASES.find((x) => x.id === c.id + 1);
+      const evLines = [];
+      if (ev.length) {
+        evLines.push(['MACK', `I laid it out on the bar for Gus. ${ev.map((x) => x.name.toLowerCase()).join('. ')}.`]);
+        for (const x of ev) evLines.push(['GUS', x.gus]);
+        if (next && next.clue && !save.clues[next.id]) { save.clues[next.id] = true; persist(); evLines.push(['GUS', `And Mack, for whatever comes next: ${next.clue.text}`]); }
+      } else if (next) evLines.push(['GUS', 'Nothing in your pockets, Mack? Next time pick something up off those goons. A receipt. A matchbook. I can read a city from a matchbook.']);
+      lastIndoor = 'bar';
+      hud.show(false); $('cross').style.display = 'none'; document.body.classList.remove('playing');
+      runDialog([...c.outro, ...evLines, ...(BAR_CLOSERS[c.id] || [])], { caseDef: c, done: () => showResult(true, { ...s, score, grade, newBest }) });
     }, 900);
   } else {
     showResult(false, { ...r.stats, reason: r.reason });
@@ -312,7 +327,7 @@ function showResult(win, s) {
   $('res-sub').innerHTML = win ? `${c.title} — ${c.dame.name} can sleep tonight. Nobody else in Rain City can.` : s.reason === 'bleed' ? 'The city went Technicolor. Mack Malone took one look at a turquoise sky, lost his lunch in the gutter, and gave up. Somewhere a saxophone turned pink and wept.' : `Mack Malone, face down in a puddle. The rain didn't care. The rain never does.<br><br><span class="who-sally">Crazy Sally:</span> ${pick(['Well. That\'s that. I\'m going to the Last Drop to get drunk. Somebody scrape him up and bring him by.', 'Get up, Mack. ...No? Fine. I\'ll be at the bar. Getting drunk. Very drunk. In your honor.', 'Gus! GUS! Pour me everything! Mack\'s taking a nap in a puddle again!'])}`;
   const row = (a, b) => `<div><span>${a}</span><span>${b}</span></div>`;
   $('res-stats').innerHTML = (win ? `<div class="grade">GRADE ${s.grade} · ${s.score.toLocaleString()}${s.newBest ? ' ★ NEW BEST' : ''}</div>` : '') +
-    row('Syndicate put down', s.kills) + row('Portals closed', s.portals) + row('Rockets Sally fired', s.rockets) + row('Flasks emptied', s.flasks) + row('Peak city color', `${Math.round(s.peak * 100)}%`) + row('Time on the streets', fmtTime(s.time)) +
+    row('Syndicate put down', s.kills) + (s.evidenceTotal ? row('Evidence found', `${s.evidence} / ${s.evidenceTotal}`) : '') + row('Portals closed', s.portals) + row('Rockets Sally fired', s.rockets) + row('Flasks emptied', s.flasks) + row('Peak city color', `${Math.round(s.peak * 100)}%`) + row('Time on the streets', fmtTime(s.time)) +
     (win && s.newBest ? row('Newsreel', 'recorded — find it on the Big Board') : '');
   const btns = $('res-btns');
   btns.innerHTML = '';
@@ -455,7 +470,7 @@ function frame(now) {
     if (game.state && game.state.boss && !game.state.boss.dead) playlist('boss');
   } else if (mode === 'pause' || (mode === 'result' && game.running === false && game.state)) {
     scene = game.scene; camera = game.camera;
-  } else if (mode === 'bar' || mode === 'barMid') {
+  } else if (mode === 'bar' || mode === 'barMid' || mode === 'barOutro' || (mode === 'result' && lastIndoor === 'bar')) {
     bar.update(dt); scene = bar.scene; camera = bar.camera;
   } else if (office) {
     office.update(dt); scene = office.scene; camera = office.camera;

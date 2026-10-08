@@ -4,10 +4,10 @@ import * as THREE from 'three';
 import { NU, splat, stroke, wash, fadeAll, clearPaint, flushPaint, coverage } from './paint.js';
 import { buildCity, L, C, DISTRICTS, roadC, nodeIndex, pushOut, rayDist, clearLine, roadPoint, lamps, vents, cops, copCars, flaskSpots, signs } from './city.js';
 import { rainbowCoat as rainbowMatLocal } from './models.js';
-import { makeDetective, makeSally, makeGangster, makeCar, makePortal, makePrismKing, makeMayor, makeFlask, makeRainbowGoon, makeRoomba, makeTruck, makeCopter, makeMech, makeCultist, makeImp, makeRobot, drainModel, GANG_COLORS, gangMat } from './models.js';
+import { makeDetective, makeSally, makeGangster, makeCar, makePortal, makePrismKing, makeMayor, makeFlask, makeRainbowGoon, makeRoomba, makeTruck, makeCopter, makeMech, makeCultist, makeImp, makeBeast, makeRobot, makeCivilian, setInfected, makeCop, drainModel, GANG_COLORS, gangMat } from './models.js';
 import { makeRain, Particles, Tracers, Flashes, hexToRgb, fx } from './fx.js';
 import { sfx, setEngine } from './audio.js';
-import { BOSSES, LINES, DONUT_LINES, COP_RETORTS } from './story.js';
+import { BOSSES, LINES, DONUT_LINES, COP_RETORTS, MONOLOGUES, EVIDENCE } from './story.js';
 import { clamp, rand, pick, weighted, wrapAngle, Deck } from './util.js';
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -24,6 +24,10 @@ const TYPES = {
   copter: { hp: 240, speed: 15, r: 4, scale: 1 },
   cultist: { hp: 70, speed: 5.5, r: 0.8, scale: 1 },
   imp: { hp: 45, speed: 11.5, r: 0.7, scale: 1 },
+  demon: { hp: 120, speed: 13, r: 1.4, scale: 1.6 },
+  beast: { hp: 900, speed: 4.2, r: 3.2, scale: 1 },
+  cop: { hp: 60, speed: 6, r: 1.0, scale: 1 },
+  copcar: { hp: 260, speed: 24, r: 2.6, scale: 1 },
 };
 
 export function createGame({ renderer, hud, onEnd, onBar }) {
@@ -54,6 +58,19 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
   Object.assign(moon.shadow.camera, { left: -70, right: 70, top: 70, bottom: -70, near: 10, far: 220 });
   moon.shadow.bias = -0.0008;
   scene.add(moon, moon.target);
+  // skid marks: a ring buffer of dark rubber stripes on the wet road
+  const SKIDS = 900;
+  const skids = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.42, 1.0), new THREE.MeshBasicMaterial({ color: 0x050505, transparent: true, opacity: 0.55, depthWrite: false }), SKIDS);
+  skids.frustumCulled = false; skids.count = 0;
+  const _sm = new THREE.Matrix4(), _sq = new THREE.Quaternion(), _sp = new THREE.Vector3(), _ss = new THREE.Vector3(1, 1, 1);
+  let skidI = 0;
+  function skidMark(x, z, ang, len) {
+    _sq.setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0)).premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), ang));
+    _sp.set(x, 0.06, z); _ss.set(1, Math.max(0.3, len), 1);
+    skids.setMatrixAt(skidI, _sm.compose(_sp, _sq, _ss));
+    skidI = (skidI + 1) % SKIDS; skids.count = Math.max(skids.count, skidI === 0 ? SKIDS : skidI);
+    skids.instanceMatrix.needsUpdate = true;
+  }
   // a hard pool of light that follows Mack, like every noir hero gets
   const heroSpot = new THREE.SpotLight(0xfff4e6, 2600, 70, 0.42, 0.75, 1.4);
   heroSpot.castShadow = true;
@@ -64,6 +81,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
   for (let i = 0; i < 8; i++) { const l = new THREE.PointLight(0xfff1d8, 0, 34, 1.6); scene.add(l); lampPool.push(l); }
 
   const city = buildCity(scene);
+  scene.add(skids);
   const rain = makeRain(24000);
   scene.add(rain);
   const parts = new Particles(6000);
@@ -110,6 +128,16 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     const l = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.45, 0.02), pillCap); l.position.set(0, 0.5, 0.42); g.add(l);
     return g;
   };
+  const evPaper = new THREE.MeshStandardMaterial({ color: 0xf2eee4, roughness: 0.7, emissive: 0x555555 });
+  const evPin = new THREE.MeshBasicMaterial({ color: 0xff2030 });
+  const evidenceModel = () => {
+    const g = new THREE.Group();
+    const p = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.04, 1.5), evPaper); p.rotation.x = -0.9; p.position.y = 1.0; g.add(p);
+    const pin = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 6), evPin); pin.position.set(0, 1.55, -0.3); g.add(pin);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(1.4, 1.6, 30), new THREE.MeshBasicMaterial({ color: 0xff2030, transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false }));
+    ring.rotation.x = -Math.PI / 2; ring.position.y = 0.08; g.add(ring);
+    return g;
+  };
   const flaskPickupModel = () => { const f = makeFlask(1.4); f.traverse((o) => { if (o.isMesh) o.castShadow = false; }); return f; };
 
   // beam for the Prism King
@@ -147,7 +175,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
   let S = null;
   const P = { pos: V(), face: 0, hp: 100, maxHp: 100, flasks: 3, maxFlasks: 5, focus: 0, focusMeter: 1, focusHeld: false, pills: 2, color: 0, ammo: 6, reload: 0, kick: 0, aiming: false, aimT: 0, focusOn: false, holsterT: 0, inCar: false, fireCd: 0, roll: 0, rollCd: 0, rollDir: V(), hurtT: 0, lastHurt: 0, walk: 0 };
   const SA = { pos: V(), face: 0, cd: 2, walk: 0, inCar: false, hp: 120, maxHp: 120, down: false, lastHurt: 0, downT: 0 };
-  const CAR = { pos: V(), ang: 0, vx: 0, vz: 0, steer: 0, hp: 400, alive: true, respawn: 0, speed: 0 };
+  const CAR = { pos: V(), ang: 0, vx: 0, vz: 0, steer: 0, hp: 400, alive: true, respawn: 0, speed: 0, boost: 1, boosting: false, skidT: 0, screechT: 0 };
   const killDeck = new Deck(LINES.kill), rocketDeck = new Deck(LINES.sallyRocket), donutDeck = new Deck(DONUT_LINES), copDeck = new Deck(COP_RETORTS);
 
   // ===================================================================== newsreel recording
@@ -272,8 +300,209 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     for (const f2 of S.fissures) {
       f2.t -= dt;
       if (Math.random() < dt * 6) parts.spawn(f2.x + rand(-6, 6), 0.3, f2.z + rand(-6, 6), rand(-0.5, 0.5), rand(3, 7), rand(-0.5, 0.5), { life: 1.2, size: 0.4, color: hexToRgb(pick(GANG_COLORS)) });
-      if (f2.t <= 0) { f2.t = rand(1.5, 3); splat(f2.x + rand(-8, 8), f2.z + rand(-8, 8), rand(1.5, 3), pick(GANG_COLORS), 0.8, 5); }
+      if (f2.t <= 0) { f2.t = rand(3.5, 6); splat(f2.x + rand(-8, 8), f2.z + rand(-8, 8), rand(1, 2), pick(GANG_COLORS), 0.75, 4); }
     }
+  }
+
+  // ===================================================================== smash
+  // Crashes hurt the Packard visibly: sparks, flying debris, parts tearing off,
+  // smoke from the hood and finally fire.
+  const debrisGeo = new THREE.BoxGeometry(0.3, 0.12, 0.4);
+  const debrisMats = [new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.3, metalness: 0.7 }), new THREE.MeshStandardMaterial({ color: 0xe0e0e0, roughness: 0.1, metalness: 1 }), new THREE.MeshStandardMaterial({ color: 0x0a0c10, roughness: 0.05, metalness: 0.9 })];
+  const debris = [];
+  function spawnDebris(x, y, z, vx, vz, n = 6, mesh = null) {
+    for (let k = 0; k < n; k++) {
+      let m;
+      if (mesh && k === 0) {
+        m = mesh.clone(); m.material = mesh.material;
+        mesh.updateWorldMatrix(true, false);
+        mesh.getWorldPosition(m.position); mesh.getWorldQuaternion(m.quaternion); mesh.getWorldScale(m.scale);
+        mesh.visible = false;
+      } else {
+        m = new THREE.Mesh(debrisGeo, pick(debrisMats));
+        m.position.set(x + rand(-1, 1), y + rand(0, 1), z + rand(-1, 1));
+        m.scale.setScalar(rand(0.6, 1.8));
+      }
+      m.castShadow = true;
+      scene.add(m);
+      debris.push({ m, v: V(vx * rand(0.3, 0.8) + rand(-6, 6), rand(4, 10), vz * rand(0.3, 0.8) + rand(-6, 6)), w: V(rand(-8, 8), rand(-8, 8), rand(-8, 8)), rest: false });
+    }
+    while (debris.length > 140) scene.remove(debris.shift().m);
+  }
+  function updateDebris(dt) {
+    for (const d of debris) {
+      if (d.rest) continue;
+      d.v.y -= 22 * dt;
+      d.m.position.addScaledVector(d.v, dt);
+      d.m.rotation.x += d.w.x * dt; d.m.rotation.y += d.w.y * dt; d.m.rotation.z += d.w.z * dt;
+      if (d.m.position.y < 0.08) { d.m.position.y = 0.08; d.v.y *= -0.3; d.v.x *= 0.6; d.v.z *= 0.6; d.w.multiplyScalar(0.5); if (Math.abs(d.v.y) < 1) d.rest = true; }
+    }
+  }
+  function sparks(x, y, z, n = 18, dx = 0, dz = 0) {
+    for (let k = 0; k < n; k++) parts.spawn(x, y, z, dx * 0.3 + rand(-9, 9), rand(2, 9), dz * 0.3 + rand(-9, 9), { life: rand(0.2, 0.5), size: rand(0.15, 0.35), color: [1, 0.85, 0.45], grav: 25 });
+  }
+  // impact on the Packard: a big hit is a SMASH
+  function smashCar(force, x, z, nx = 0, nz = 0) {
+    sparks(x, 1, z, Math.min(40, 10 + force * 1.5), -nx * 10, -nz * 10);
+    if (force > 10) {
+      fx.shake = Math.max(fx.shake, Math.min(1, force / 30));
+      spawnDebris(x, 1, z, -nx * 8 + CAR.vx * 0.3, -nz * 8 + CAR.vz * 0.3, Math.min(8, Math.floor(force / 5)));
+      if (force > 18) hud.floater(V(x, 0, z), pick(['SMASH!', 'CRUNCH!', 'KRAK!', 'WHAM!']));
+    }
+    carDamageVisuals();
+  }
+  function carDamageVisuals() {
+    const b = carM.breakable; if (!b) return;
+    const hp = CAR.hp / 400;
+    const tear = (mesh) => { if (mesh && mesh.visible) spawnDebris(0, 0, 0, CAR.vx, CAR.vz, 1, mesh); };
+    if (hp < 0.8) tear(b.orn[0]), tear(b.orn[1]);
+    if (hp < 0.65) tear(b.bumperF), b.guards.slice(0, 2).forEach(tear);
+    if (hp < 0.5) tear(b.lights[0]);
+    if (hp < 0.38) tear(b.bumperR), b.guards.slice(2).forEach(tear);
+    if (hp < 0.25) tear(b.lights[1]);
+    carM.body.rotation.z = (1 - hp) * 0.06; // the frame sags
+  }
+  function restoreCar() {
+    const b = carM.breakable; if (!b) return;
+    for (const m of [b.bumperF, b.bumperR, ...b.orn, ...b.lights, ...b.guards]) m.visible = true;
+  }
+  function carSmoke(dt) {
+    if (!CAR.alive) return;
+    const hp = CAR.hp / 400;
+    if (hp > 0.55) return;
+    const hx = CAR.pos.x + Math.sin(CAR.ang) * 2.2, hz = CAR.pos.z + Math.cos(CAR.ang) * 2.2;
+    if (Math.random() < dt * (hp < 0.3 ? 30 : 12)) parts.spawn(hx + rand(-0.5, 0.5), 1.4, hz + rand(-0.5, 0.5), rand(-0.5, 0.5), rand(2, 4), rand(-0.5, 0.5), { life: 1.6, size: 1.6, grow: 2.5, color: hp < 0.3 ? [0.08, 0.08, 0.09] : [0.55, 0.56, 0.58], alpha: 0.6, drag: 1, kind: 1 });
+    if (hp < 0.25 && Math.random() < dt * 25) parts.spawn(hx + rand(-0.4, 0.4), 1.3, hz + rand(-0.4, 0.4), rand(-0.3, 0.3), rand(2, 4), rand(-0.3, 0.3), { life: 0.4, size: rand(0.6, 1.1), color: [1, 0.55, 0.15], kind: 1 });
+  }
+
+  // ===================================================================== civilians
+  // Rain City's citizens: umbrellas, hats, places to be. They keep clear of portals,
+  // but the longer a portal stays open the farther its influence reaches. Kill one
+  // and the cops come out of the Holy Glaze for you.
+  function sidewalkPoint(near, minD, maxD) {
+    for (let k = 0; k < 30; k++) {
+      const a = Math.random() * 6.28, d = rand(minD, maxD);
+      const x = near.x + Math.cos(a) * d, z = near.z + Math.sin(a) * d;
+      const ix = nodeIndex(x), iz = nodeIndex(z);
+      const p = Math.random() < 0.5 ? { x: roadC(ix) + (Math.random() < 0.5 ? -14 : 14), z } : { x, z: roadC(iz) + (Math.random() < 0.5 ? -14 : 14) };
+      if (Math.abs(p.x) < C.edge - 4 && Math.abs(p.z) < C.edge - 4) return p;
+    }
+    return { x: near.x + 20, z: near.z };
+  }
+  function updateCivilians(dt) {
+    const f = focus();
+    // keep about two dozen people on the sidewalks around Mack
+    S.civT -= dt;
+    if (S.civT <= 0) {
+      S.civT = 0.4;
+      const live = S.civs.filter((c) => !c.dead);
+      if (live.length < 24) {
+        const p = sidewalkPoint(f, 50, 120);
+        const model = makeCivilian(Math.random());
+        scene.add(model.root);
+        S.civs.push({ model, pos: V(p.x, 0, p.z), face: 0, target: null, infected: false, dead: false, t: 0, hp: 20 });
+      }
+    }
+    for (let i = S.civs.length - 1; i >= 0; i--) {
+      const c = S.civs[i];
+      c.t += dt;
+      if (c.dead) {
+        c.model.root.rotation.x = -Math.min(1, c.t * 3) * Math.PI / 2;
+        c.model.root.position.y = 0.3;
+        if (c.t > 8) { scene.remove(c.model.root); S.civs.splice(i, 1); }
+        continue;
+      }
+      if (Math.abs(c.pos.x - f.x) + Math.abs(c.pos.z - f.z) > 260) { scene.remove(c.model.root); S.civs.splice(i, 1); continue; }
+      let sp = c.infected ? 1.6 : 2.6, mx = 0, mz = 0;
+      // infection: a portal's reach grows with its age; painters rub off on people too
+      if (!c.infected) {
+        for (const p of S.portals) {
+          const d = Math.hypot(c.pos.x - p.pos.x, c.pos.z - p.pos.z);
+          const reach = Math.min(90, 20 + (p.age || 0) * 0.7);
+          if (d < reach && Math.random() < dt * 0.35) infectCiv(c);
+          if (d < 45) { mx += (c.pos.x - p.pos.x) / d; mz += (c.pos.z - p.pos.z) / d; sp = 6; } // run from it
+        }
+        for (const e of S.enemies) if (!e.cop && (e.type === 'dauber' || e.type === 'goon' || e.type === 'cultist') && Math.hypot(c.pos.x - e.pos.x, c.pos.z - e.pos.z) < 3.5 && Math.random() < dt * 0.3) infectCiv(c);
+        // dive out of the way of a speeding Packard
+        if (P.inCar && Math.abs(CAR.speed) > 8) {
+          const dx = c.pos.x - CAR.pos.x, dz = c.pos.z - CAR.pos.z, d = Math.hypot(dx, dz);
+          if (d < 9) { const fx2 = Math.sin(CAR.ang), fz2 = Math.cos(CAR.ang); const side = dx * fz2 - dz * fx2 > 0 ? 1 : -1; mx += fz2 * side * 3; mz += -fx2 * side * 3; sp = 9; }
+        }
+      }
+      if (mx || mz) { const l = Math.hypot(mx, mz); c.pos.x += mx / l * sp * dt; c.pos.z += mz / l * sp * dt; c.face = Math.atan2(mx, mz); c.target = null; }
+      else {
+        if (!c.target || Math.hypot(c.target.x - c.pos.x, c.target.z - c.pos.z) < 2 || c.t > 25) { c.target = sidewalkPoint(c.pos, 15, 45); c.t = c.dead ? c.t : 0; }
+        const dx = c.target.x - c.pos.x, dz = c.target.z - c.pos.z, d = Math.hypot(dx, dz) || 1;
+        c.pos.x += dx / d * sp * dt; c.pos.z += dz / d * sp * dt;
+        c.face += wrapAngle(Math.atan2(dx, dz) - c.face) * Math.min(1, dt * 5);
+      }
+      pushOut(c.pos, 0.5);
+      if (c.infected) {
+        c.paintT = (c.paintT || 0) - dt;
+        if (c.paintT <= 0) { c.paintT = 0.7; splat(c.pos.x, c.pos.z, 0.9, pick(GANG_COLORS), 0.7, 2); }
+      }
+      const m = c.model;
+      m.root.position.set(c.pos.x, 0, c.pos.z);
+      m.root.rotation.set(0, c.face, c.infected ? Math.sin(S.time * 4 + m.walk) * 0.15 : 0);
+      animWalk(m, sp, dt);
+      if (m.umbrella) m.umbrella.rotation.z = Math.sin(S.time * 2 + m.walk) * 0.08;
+    }
+  }
+  function infectCiv(c) {
+    if (c.infected || c.dead) return;
+    c.infected = true;
+    setInfected(c.model, true);
+    if (Math.random() < 0.25) say(pick(['MACK', 'SALLY']), pick(['That fella just turned turquoise. Don\'t shoot him, Mack — he\'s still a citizen.', 'Civilians are getting painted! Seal that portal and they\'ll snap out of it!', 'Poor sap\'s seeing color. Leave him be. Close the hole and he\'s cured.']), 3);
+  }
+  function cureNear(x, z, r) {
+    let n = 0;
+    for (const c of S.civs) if (c.infected && !c.dead && Math.hypot(c.pos.x - x, c.pos.z - z) < r) { c.infected = false; setInfected(c.model, false); n++; }
+    if (n) { hud.floater(V(x, 0, z), `${n} CITIZENS CURED`); later(() => S && say('NARR', pick(['"Where am I? Why is my coat... oh. It\'s grey again. Thank God."', '"I had the strangest dream. Everything was teal."', '"Officer? Is it raining? Oh good. Good."']), 2.6), 600); }
+  }
+  function killCiv(c, byMack) {
+    if (c.dead) return;
+    c.dead = true; c.t = 0;
+    drainModel(c.model);
+    for (let k = 0; k < 14; k++) parts.spawn(c.pos.x, 1.4, c.pos.z, rand(-4, 4), rand(2, 6), rand(-4, 4), { life: 0.6, size: 0.4, color: [0.85, 0.1, 0.12], grav: 18 });
+    sfx.hurt();
+    S.stats.civilians = (S.stats.civilians || 0) + 1;
+    if (byMack) goWanted();
+  }
+  // ===================================================================== the cops
+  function goWanted() {
+    if (S.wanted) { say('MACK', pick(['Another one. The cops won\'t forget this.', 'I\'m digging my own grave in the rain.']), 2.2); return; }
+    S.wanted = true; S.copT = 3;
+    hud.wanted(true);
+    say('PORK', 'ALL UNITS! Malone just plugged a citizen! Put down the crullers! ...Okay, finish the crullers, THEN get him!', 4.5);
+    later(() => S && say('MACK', 'That\'s it. I\'m an enemy of the city tonight. Should\'ve watched where I was pointing.', 3.5), 4600);
+    later(() => S && say('SALLY', 'The COPS are after US? Mack, this is the best night of my life. And the worst. Mostly the best.', 3.2), 8400);
+  }
+  function updateCops(dt) {
+    if (!S.wanted || S.over) return;
+    S.copT -= dt; S.sirenT -= dt;
+    if (S.sirenT <= 0) { S.sirenT = 1.4; sfx.siren(); }
+    const cops = S.enemies.filter((e) => e.cop).length;
+    if (S.copT <= 0 && cops < 6) {
+      S.copT = rand(9, 14);
+      const p = spawnPoint(55, 110);
+      const car = addEnemy('copcar', p.x, p.z); car.cop = true;
+      for (let k = 0; k < 2; k++) { const q = sidewalkPoint(focus(), 35, 60); const c2 = addEnemy('cop', q.x, q.z); c2.cop = true; }
+    }
+  }
+  function updateCopCar(e, dt, dp) {
+    const f = focus();
+    const want = Math.atan2(f.x - e.pos.x, f.z - e.pos.z);
+    e.face += clamp(wrapAngle(want - e.face), -dt * 2.4, dt * 2.4);
+    const sp = dp < 10 ? 12 : e.speed;
+    e.pos.x += Math.sin(e.face) * sp * dt; e.pos.z += Math.cos(e.face) * sp * dt;
+    if (pushOut(e.pos, 2.0)) e.face += rand(-1, 1);
+    if (dp < (P.inCar ? 4.8 : 2.8) && e.hitCd <= 0) { e.hitCd = 1.5; sfx.crash(1); fx.shake = 0.5; damagePlayer(P.inCar ? 22 : 18); if (P.inCar) smashCar(24, (e.pos.x + CAR.pos.x) / 2, (e.pos.z + CAR.pos.z) / 2); if (P.inCar) { CAR.vx += Math.sin(e.face) * 14; CAR.vz += Math.cos(e.face) * 14; } }
+    if (dp < 32 && e.cd <= 0) { e.cd = 1.1; const a = want + rand(-0.1, 0.1); enemyShot(V(e.pos.x + Math.sin(a) * 2, 1.5, e.pos.z + Math.cos(a) * 2), Math.sin(a), Math.cos(a), '#bbbbbb', 40, 6, 'bullet'); sfx.pistol(0, 0.7); }
+    const m = e.model;
+    m.root.position.set(e.pos.x, 0, e.pos.z); m.root.rotation.y = e.face;
+    const bl = Math.floor(S.time * 6) % 2;
+    m.car.lightbar.userData.a.visible = !!bl; m.car.lightbar.userData.b.visible = !bl;
+    m.car.wheels.forEach((w) => w.children.forEach((c) => (c.rotation.x += sp * dt / 0.42)));
   }
 
   // ===================================================================== wayfinding
@@ -403,6 +632,8 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       fx: new Set(opts.effects || []), barUsed: false, donutIn: false, donutT: 0, retortT: 0, lightningT: 6,
       rec: { v: 1, caseId: caseDef.id, frames: [], events: [] }, recT: 0, firing: false,
       stages: null, routeT: 0, route: null, timers: [],
+      evidence: [], evidenceLeft: (EVIDENCE[caseDef.id] || []).slice(),
+      civs: [], civT: 0, wanted: false, copT: 0, sirenT: 0,
     };
     // unless the case opens with its own errand, the first job is getting to the scene
     const goTo = area ? roadPoint(area, () => 0.5) : { x: L.cityHall.x, z: L.cityHall.z + 40 };
@@ -418,11 +649,17 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     sallyM.root.rotation.set(0, 0, 0);
     CAR.pos.set(sx + 2, 0, sz - 7); CAR.ang = Math.PI / 2; CAR.auto = null; CAR.vx = CAR.vz = 0; CAR.hp = 400; CAR.alive = true; CAR.respawn = 0;
     carM.root.visible = true; carM.root.traverse((o) => { if (o.userData.origMat) o.material = o.userData.origMat; });
+    restoreCar();
+    while (debris.length) scene.remove(debris.pop().m);
     mack.root.visible = true; sallyM.root.visible = true;
     // flask pickups scattered around
     const spots = flaskSpots.filter((p) => !area || (p.x > area.x0 - 40 && p.x < area.x1 + 40 && p.z > area.z0 - 40 && p.z < area.z1 + 40));
     (spots.length ? spots : flaskSpots).slice(0, 10).forEach((p, i) => addPickup(p.x, p.z, i % 3 === 2 ? 'pills' : 'flask'));
     if (caseDef.hell) makeFissures(caseDef.hell);
+    // the opening monologue, Sally cutting in; the first stage's own line waits its turn
+    const mono = MONOLOGUES[caseDef.id] || [];
+    mono.forEach(([w, t], i) => later(() => S && say(w, t, 4.8), 600 + i * 4700));
+    S.monoUntil = mono.length ? 0.6 + mono.length * 4.7 : 0;
     nextStage();
     hud.caseTitle(caseDef.id ? `Case No. ${caseDef.id}` : 'Off the books', caseDef.title);
     // a few goons loitering near the office: something to shoot, something to run over
@@ -440,6 +677,8 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     for (const s of S.shots) scene.remove(s.mesh);
     for (const r of S.rockets) scene.remove(r.mesh);
     for (const p of S.pickups) scene.remove(p.mesh);
+    for (const c of S.civs) scene.remove(c.model.root);
+    hud.wanted(false);
     if (S.fissures) for (const f2 of S.fissures) scene.remove(f2.m);
     scene.background.copy(baseBg); scene.fog.color.copy(baseBg);
     beam.visible = false;
@@ -454,11 +693,12 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     const st = S.stages[S.stageIdx];
     if (!st) { win(); return; }
     S.stage = st; S.stageKills = 0; S.stagePortals = 0; S.stageRoombas = 0; S.spawnT = 2; S.wave = 1; S.waveT = 24;
+    if (st.beasts) for (let i = 0; i < st.beasts; i++) later(() => { if (S && S.stage === st) { const p = spawnPoint(60, 120); addEnemy('beast', p.x, p.z); say('SALLY', pick(['Mack. MACK. That thing is the size of the Holy Glaze!', 'BIG ONE! Big rainbow one! I need a bigger rocket!']), 2.6); } }, 2500 + i * 6000);
     if (st.copters) for (let i = 0; i < st.copters; i++) later(() => { if (S && S.stage === st) { const p = spawnPoint(80, 160); addEnemy('copter', p.x, p.z); } }, 800 + i * 2500);
     if (st.roombas) for (let i = 0; i < st.roombas; i++) later(() => { if (S && S.stage === st) { const p = spawnPoint(60, 150); addEnemy('roomba', p.x, p.z); } }, 400 + i * 900);
     if (st.portals) for (let i = 0; i < st.portals; i++) later(() => S && S.stage === st && openPortal(), 600 + i * 1600);
     if (st.boss) spawnBoss(st.boss);
-    if (st.line) say(st.line[0], st.line[1], 4.5);
+    if (st.line) { if (S.time < (S.monoUntil || 0)) later(() => S && say(st.line[0], st.line[1], 4.5), (S.monoUntil - S.time) * 1000); else say(st.line[0], st.line[1], 4.5); }
     hud.objective(st.text, S.stageIdx + 1, S.stages.length);
     updateObjective();
   }
@@ -551,6 +791,10 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     } else if (type === 'copter') model = makeCopter(color);
     else if (type === 'cultist') model = makeCultist(color);
     else if (type === 'imp') model = makeImp(color);
+    else if (type === 'demon') model = makeImp(color, 1.6);
+    else if (type === 'beast') model = makeBeast(color);
+    else if (type === 'cop') { const c = makeCop(); model = { root: c.root, arm: c.arm }; }
+    else if (type === 'copcar') { const c = makeCar('cop'); model = { root: c.root, car: c }; }
     else if (type === 'goon') model = makeRainbowGoon();
     else if (type === 'roomba') model = makeRoomba(color);
     else model = makeGangster(color, type === 'roller' ? 'roller' : type === 'dauber' ? 'dauber' : 'hood', t.scale);
@@ -653,17 +897,18 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     flashes.ball(p.pos.x, 6.5, p.pos.z, 8, 0.5);
     wash(p.pos.x, p.pos.z, 40, 1);
     fadeAll(0.05);
+    cureNear(p.pos.x, p.pos.z, 100);
     S.stats.portals++;
     if (p.stage === S.stage) S.stagePortals++;
     if (!S.over) quip('MACK', LINES.close, 0.8, 3);
     checkStage();
   }
 
-  function addPickup(x, z, kind = 'flask') {
-    const mesh = kind === 'pills' ? pillPickupModel() : flaskPickupModel();
+  function addPickup(x, z, kind = 'flask', item = null) {
+    const mesh = kind === 'evidence' ? evidenceModel() : kind === 'pills' ? pillPickupModel() : flaskPickupModel();
     mesh.position.set(x, 0.6, z);
     scene.add(mesh);
-    S.pickups.push({ mesh, x, z, kind, t: Math.random() * 6 });
+    S.pickups.push({ mesh, x, z, kind, item, t: Math.random() * 6 });
   }
 
   // ===================================================================== combat
@@ -673,6 +918,8 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     if (S.over) return;
     if (P.inCar) {
       CAR.hp -= d * 0.8;
+      if (Math.random() < 0.3) sparks(CAR.pos.x, 1.2, CAR.pos.z, 5);
+      carDamageVisuals();
       if (CAR.hp <= 0 && CAR.alive) destroyCar();
       return;
     }
@@ -698,6 +945,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
 
   function hitEnemy(e, dmg, kind = 'bullet') {
     if (e.dead) return;
+    if (e.type === 'truck' && !e.unloaded) unloadTruck(e);
     if (e.type === 'boss' && kind === 'rocket' && S.fx.has('rocket2x')) dmg *= 2;
     e.hp -= dmg;
     e.flash = 0.08;
@@ -705,14 +953,40 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     if (e.hp <= 0) killEnemy(e);
   }
 
+  // the first hit on a Goon Truck: everybody in the back jumps and runs for it
+  function unloadTruck(e) {
+    e.unloaded = true;
+    const n = e.model.car.goons.length;
+    e.model.car.goons.forEach((g, i) => {
+      g.root.visible = false;
+      const type = i === 0 ? 'goon' : i === 1 ? 'hood' : 'dauber';
+      const r = addEnemy(type, e.pos.x, e.pos.z);
+      r.emerge = 0.6; r.emergeDir = (i / n) * 6.28 + rand(-0.4, 0.4);
+      r.scatterT = rand(2.5, 4); r.scattered = true;
+    });
+    say(pick(['SALLY', 'MACK']), pick(['They\'re JUMPING! Look at \'em go!', 'Rats off a sinking truck.', 'Scatter, you painted rats!']), 2.2);
+  }
+
   function killEnemy(e, silent = false) {
     if (e.dead) return;
     e.dead = true;
     S.enemies.splice(S.enemies.indexOf(e), 1);
     const big = S.fx.has('bigWash') ? 1.6 : 1;
-    wash(e.pos.x, e.pos.z, (e.type === 'boss' ? 60 : e.type === 'roomba' || e.type === 'truck' ? 34 : e.type === 'lowrider' ? 22 : 16) * big, 1);
+    wash(e.pos.x, e.pos.z, (e.type === 'boss' ? 60 : e.type === 'roomba' || e.type === 'truck' || e.type === 'beast' ? 34 : e.type === 'lowrider' ? 22 : 16) * big, 1);
     fadeAll(e.type === 'boss' ? 0.3 : 0.018 * big);
     if (e.type === 'copter') { sfx.crash(1); hud.floater(e.pos, 'SHOT DOWN'); }
+    if (e.type === 'truck') {
+      // the paint drums in the bed go up: a color explosion, a big rainbow decal, riders flung clear
+      later(() => {
+        if (!S) return;
+        for (let k = 0; k < 120; k++) { const a = Math.random() * 6.28, v = rand(6, 26); parts.spawn(e.pos.x, 2, e.pos.z, Math.cos(a) * v, rand(4, 18), Math.sin(a) * v, { life: rand(0.8, 1.6), size: rand(0.5, 1.2), color: hexToRgb(GANG_COLORS[k % 6]), grav: 18 }); }
+        for (let k = 0; k < 6; k++) { const a = k / 6 * 6.28 + rand(-0.3, 0.3); splat(e.pos.x + Math.cos(a) * rand(4, 9), e.pos.z + Math.sin(a) * rand(4, 9), rand(3, 5), GANG_COLORS[k], 0.95, 10); }
+        splat(e.pos.x, e.pos.z, 5, '#ffffff', 0.6, 12);
+        flashes.ball(e.pos.x, 2, e.pos.z, 10, 0.5);
+        if (!e.unloaded) for (let k = 0; k < 3; k++) { const g2 = addEnemy(k === 0 ? 'hood' : 'dauber', e.pos.x, e.pos.z); g2.emerge = 0.7; g2.emergeDir = Math.random() * 6.28; g2.scattered = true; g2.scatterT = 3; }
+      }, 120);
+    }
+    if (e.type === 'beast') { explode(e.pos.x, 3, e.pos.z, 10, 60, false); hud.floater(e.pos, 'THE BEAST GOES GREY'); }
     if (e.type === 'lowrider' || e.type === 'roomba' || e.type === 'truck') explode(e.pos.x, 1, e.pos.z, e.type === 'lowrider' ? 7 : 9, 60, false);
     if (e.type === 'roomba' && e.stage === S.stage) S.stageRoombas++;
     for (let k = 0; k < 26; k++) parts.spawn(e.pos.x, 1.5, e.pos.z, rand(-6, 6), rand(3, 9), rand(-6, 6), { life: 0.7, size: 0.5, color: e.rgb, grav: 20, kind: 0 });
@@ -720,6 +994,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     e.model.root.userData.fall = 0;
     S.bodies.push({ root: e.model.root, t: 0, car: e.type === 'lowrider' || e.type === 'roomba' || e.type === 'truck', copter: e.type === 'copter' ? { y: e.model.root.position.y, spin: rand(2, 4) } : null });
     if (silent) return;
+    if (e.cop) { sfx.hurt(); quip('MACK', ['Sorry, officer.', 'Nothing personal, flatfoot.', 'Go back to your crullers.'], 0.6, 3); return; }
     sfx.kill();
     S.stats.kills++;
     recEvent(['k', r1(e.pos.x), r1(e.pos.z), e.color, e.type === 'boss' ? 'hood' : e.type]);
@@ -727,6 +1002,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     hud.floater(e.pos, e.type === 'boss' ? 'THE COLOR DIES WITH HIM' : e.type === 'roomba' ? 'PAINTBOT SCRAPPED' : '−COLOR');
     if (e.type === 'roomba' && Math.random() < 0.6) later(() => S && say(pick(['MACK', 'SALLY']), pick(['Scrapped. Somebody tell the warranty department.', 'Bad robot! BAD!', 'That\'s one less appliance with ambitions.', 'Dottie\'s gonna be upset. That was her cousin.']), 2.6), 400);
     if (e.type === 'boss') { beam.visible = false; hud.boss(null); fx.shake = 1; P.focus = Math.max(P.focus, 2.5); }
+    else if (S.evidenceLeft.length && S.stats.kills >= 4 && (Math.random() < 0.12 || S.stats.kills % 11 === 0)) { addPickup(e.pos.x, e.pos.z, 'evidence', S.evidenceLeft.shift()); hud.floater(e.pos, 'DROPPED SOMETHING'); }
     else if (Math.random() < 0.14) addPickup(e.pos.x, e.pos.z, Math.random() < 0.35 ? 'pills' : 'flask');
     P.focusMeter = Math.min(1, P.focusMeter + (e.type === 'lowrider' ? 0.2 : 0.1));
     quip('MACK', killDeck, 0.3, 5);
@@ -752,13 +1028,44 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       }
     }
     if (!friendly && !P.inCar && Math.hypot(P.pos.x - x, P.pos.z - z) < r) damagePlayer(25, x, z);
+    if (friendly && dmg > 0) for (const c of S.civs) if (!c.dead && Math.hypot(c.pos.x - x, c.pos.z - z) < r * 0.8) killCiv(c, true);
     if (Math.hypot(x - L.donut.x, z - L.donut.z) < 45 && S.retortT <= 0) { S.retortT = 8; later(() => S && say('COP', pick(['HEY! There\'s crullers in here!', 'Watch it, Malone! That\'s police property!', 'You almost hit the bear claws!']), 2.5), 500); }
   }
 
+  // bullets and rockets only crack a portal; Mack has to seal it by hand with his flask of grey
   function hitPortal(p, dmg) {
+    if (p.cracked) return;
     p.hp -= dmg;
     p.flash = 0.1;
-    if (p.hp <= 0) closePortal(p);
+    if (p.hp <= 0) {
+      p.hp = 0; p.cracked = true; p.seal = 0;
+      sfx.close();
+      for (let k = 0; k < 40; k++) { const a = Math.random() * 6.28; parts.spawn(p.pos.x + Math.cos(a) * 5, 6.5 + Math.sin(a) * 5, p.pos.z, Math.cos(a) * 4, Math.sin(a) * 4, rand(-2, 2), { life: 0.6, size: 0.5, color: [1, 1, 1] }); }
+      hud.floater(p.pos, 'CRACKED — SEAL IT ON FOOT');
+      if (!S.sealHint) { S.sealHint = true; say('MACK', 'It\'s cracked. Now I walk up and jam the flask of grey in it. Hold E. Three seconds. Sally, cover me.', 4); later(() => S && say('SALLY', 'Covering! I\'m covering! I\'m covering EVERYTHING!', 2.4), 4200); }
+    }
+  }
+  function nearestCracked() {
+    let best = null, bd = 8;
+    for (const p of S.portals) if (p.cracked) { const d = Math.hypot(p.pos.x - P.pos.x, p.pos.z - P.pos.z); if (d < bd) { bd = d; best = p; } }
+    return best;
+  }
+  function updateSealing(pdt) {
+    const p = !P.inCar && !S.over ? nearestCracked() : null;
+    for (const q of S.portals) if (q !== p && q.seal > 0) q.seal = Math.max(0, q.seal - pdt);
+    P.sealing = null;
+    if (!p) return;
+    if (keys.has('KeyE')) {
+      p.seal += pdt;
+      P.sealing = p;
+      P.face = Math.atan2(p.pos.x - P.pos.x, p.pos.z - P.pos.z);
+      if (Math.random() < pdt * 30) parts.spawn(p.pos.x + rand(-1, 1), rand(1, 10), p.pos.z, rand(-1, 1), rand(-2, 2), rand(1, 3), { life: 0.6, size: 0.6, color: [0.75, 0.75, 0.78], kind: 1 });
+      if (p.seal >= 3) {
+        sfx.gulp();
+        say('MACK', pick(['Grey. Drink up.', 'Last call.', 'Closing time, sweetheart.', 'Take it straight, no chaser.']), 2);
+        closePortal(p);
+      }
+    } else p.seal = Math.max(0, p.seal - pdt * 2);
   }
 
   // hitscan from (o) in direction (d): returns hit point
@@ -780,13 +1087,22 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       const px = ex - dx * t, pz = ez - dz * t;
       if (px * px + pz * pz < 20) hits.push([t, null, p]);
     }
+    for (const c of S.civs) {
+      if (c.dead) continue;
+      const ex = c.pos.x - o.x, ez = c.pos.z - o.z;
+      const t = ex * dx + ez * dz;
+      if (t < 0 || t > wall) continue;
+      const px = ex - dx * t, pz = ez - dz * t;
+      if (px * px + pz * pz < 0.6) hits.push([t, null, null, c]);
+    }
     hits.sort((a, b) => a[0] - b[0]);
     let end = wall, n = 0;
-    for (const [t, e, p] of hits) {
+    for (const [t, e, p, civ] of hits) {
       if (n >= pierce) break;
       n++;
       end = t;
       _hp.set(o.x + dx * t, o.y, o.z + dz * t);
+      if (civ) { killCiv(civ, true); continue; }
       if (e) {
         hitEnemy(e, dmg * (n === 1 ? 1 : 0.7));
         for (let k = 0; k < 6; k++) parts.spawn(_hp.x, _hp.y, _hp.z, dx * 5 + rand(-4, 4), rand(1, 5), dz * 5 + rand(-4, 4), { life: 0.4, size: 0.4, color: e.rgb, grav: 15 });
@@ -875,9 +1191,15 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       else if (thr < 0) vf -= (vf > 0 ? 60 : 18) * dt;
       CAR.steer += (st - CAR.steer) * Math.min(1, dt * 8);
       const hb = keys.has('Space');
-      vr *= Math.exp(-(hb ? 1.2 : 9) * dt);
-      if (hb) vf *= Math.exp(-0.8 * dt);
-      vf = clamp(vf, -16, 50);
+      vr *= Math.exp(-(hb ? 0.9 : 9) * dt);
+      if (hb) vf *= Math.exp(-0.6 * dt);
+      // Shift: rocket boost out the tailpipes
+      CAR.boosting = (keys.has('ShiftLeft') || keys.has('ShiftRight')) && CAR.boost > 0.02 && thr >= 0;
+      if (CAR.boosting) { vf += 70 * dt; CAR.boost = Math.max(0, CAR.boost - dt * 0.45); if (!CAR.wasBoosting) { sfx.boost(); fx.shake = Math.max(fx.shake, 0.3); } }
+      else CAR.boost = Math.min(1, CAR.boost + dt * (Math.abs(vr) > 5 ? 0.35 : 0.1)); // drifting refills the tank
+      CAR.wasBoosting = CAR.boosting;
+      vf = clamp(vf, -16, CAR.boosting ? 78 : 50);
+      CAR.drift = Math.abs(vr);
     } else if (CAR.auto && !S.over) {
       const c = autopilot(dt, vf);
       if (c.thr > 0) vf += 26 * dt; else if (c.thr < 0) vf -= 40 * dt;
@@ -891,7 +1213,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       vf *= Math.exp(-2.5 * dt);
     }
     vf *= Math.exp(-0.25 * dt);
-    const turn = CAR.steer * 2.3 * clamp(vf / 10, -1, 1) * (1 - Math.min(0.45, Math.abs(vf) / 110));
+    const turn = CAR.steer * 2.3 * clamp(vf / 10, -1, 1) * (1 - Math.min(0.45, Math.abs(vf) / 110)) * (P.inCar && keys.has('Space') ? 1.7 : 1);
     CAR.ang += turn * dt;
     const nfX = Math.sin(CAR.ang), nfZ = Math.cos(CAR.ang), nrX = Math.cos(CAR.ang), nrZ = -Math.sin(CAR.ang);
     CAR.vx = nfX * vf + nrX * vr;
@@ -908,12 +1230,32 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
         const vn = CAR.vx * n.x + CAR.vz * n.z;
         if (vn < 0) {
           CAR.vx -= vn * n.x * 1.4; CAR.vz -= vn * n.z * 1.4;
-          if (-vn > 14) { sfx.crash(1); fx.shake = 0.5; CAR.hp -= -vn * 0.6; if (CAR.hp <= 0 && CAR.alive) destroyCar(); }
+          if (-vn > 8) { sfx.crash(Math.min(1, -vn / 25)); CAR.hp -= Math.max(0, -vn - 8) * 0.7; smashCar(-vn, p.x - n.x * 1.3, p.z - n.z * 1.3, n.x, n.z); if (CAR.hp <= 0 && CAR.alive) destroyCar(); }
         }
       }
     }
     carM.root.position.set(CAR.pos.x, 0, CAR.pos.z);
     carM.root.rotation.y = CAR.ang;
+    if (P.inCar) {
+      const bx = CAR.pos.x - nfX * 3.3, bz = CAR.pos.z - nfZ * 3.3;
+      if (CAR.boosting) for (let k = 0; k < 4; k++) {
+        for (const side of [0.55, -0.55]) {
+          const x = bx + nrX * side, z = bz + nrZ * side;
+          parts.spawn(x, 0.55, z, -nfX * rand(14, 24) + rand(-1, 1), rand(0, 1.5), -nfZ * rand(14, 24) + rand(-1, 1), { life: rand(0.12, 0.25), size: rand(0.9, 1.6), color: k % 2 ? [1, 0.55, 0.12] : [1, 0.9, 0.4], kind: 1, drag: 3 });
+        }
+        if (k === 0) flashes.light(bx, 1, bz, 180, 0.05);
+      }
+      const drifting = (CAR.drift || 0) > 4.5 && Math.abs(vf) > 6;
+      if (drifting || CAR.boosting) {
+        for (const side of [1.0, -1.0]) {
+          const wx = CAR.pos.x - nfX * 1.98 + nrX * side, wz = CAR.pos.z - nfZ * 1.98 + nrZ * side;
+          if (Math.random() < 0.7) parts.spawn(wx, 0.4, wz, rand(-1, 1) - CAR.vx * 0.05, rand(0.5, 2), rand(-1, 1) - CAR.vz * 0.05, { life: rand(0.8, 1.6), size: rand(1.5, 2.6), grow: 3, color: [0.82, 0.83, 0.86], alpha: 0.45, drag: 1.5, kind: 1 });
+          skidMark(wx, wz, Math.atan2(CAR.vx, CAR.vz), Math.hypot(CAR.vx, CAR.vz) * dt * 1.2);
+        }
+        CAR.screechT -= dt;
+        if (CAR.screechT <= 0) { CAR.screechT = 0.2; sfx.screech(drifting ? clamp(Math.abs(vf) / 30, 0.5, 1.2) : 0.7); }
+      }
+    }
     carM.body.rotation.z = -CAR.steer * clamp(vf / 40, -1, 1) * 0.06;
     carM.body.rotation.x = -clamp(vf / 50, -1, 1) * 0.02;
     carM.wheels.forEach((w, i) => { w.children.forEach((c) => (c.rotation.x += vf * dt / 0.42)); if (i < 2) w.rotation.y = CAR.steer * 0.45; });
@@ -926,11 +1268,13 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       l.target.position.set(CAR.pos.x + nfX * 22 + nrX * side, 0, CAR.pos.z + nfZ * 22 + nrZ * side);
     }
     // run the Syndicate over
+    if (Math.abs(vf) > 8 && P.inCar) for (const c of S.civs) if (!c.dead && Math.hypot(c.pos.x - CAR.pos.x, c.pos.z - CAR.pos.z) < 2.6) killCiv(c, true);
     if (Math.abs(vf) > 8) {
       for (const e of S.enemies.slice()) {
-        if (e.type === 'lowrider' || e.type === 'roomba' || e.type === 'truck' || e.type === 'copter') continue;
+        if (e.type === 'lowrider' || e.type === 'roomba' || e.type === 'truck' || e.type === 'copter' || e.type === 'demon') continue;
+        if (e.type === 'beast' && Math.hypot(e.pos.x - CAR.pos.x, e.pos.z - CAR.pos.z) < 2.4 + e.r) { if (e.hitCd <= 0) { e.hitCd = 1; hitEnemy(e, 50); CAR.vx *= -0.4; CAR.vz *= -0.4; sfx.crash(1); fx.shake = 0.6; } continue; }
         if (Math.hypot(e.pos.x - CAR.pos.x, e.pos.z - CAR.pos.z) < 2.4 + e.r) {
-          if (e.type === 'boss') { if (e.hitCd <= 0) { hitEnemy(e, 60); e.hitCd = 1; vf *= 0.3; sfx.crash(1); CAR.vx *= 0.3; CAR.vz *= 0.3; } }
+          if (e.type === 'boss') { if (e.hitCd <= 0) { hitEnemy(e, 60); e.hitCd = 1; vf *= 0.3; sfx.crash(1); CAR.vx *= 0.3; CAR.vz *= 0.3; CAR.hp -= 15; smashCar(20, e.pos.x, e.pos.z); } }
           else { const ex = e.pos.x, ez = e.pos.z; hitEnemy(e, 999); explode(ex, 1.2, ez, 5, 45, true); splat(ex, ez, 3, e.color, 0.5); if (Math.random() < 0.3) quip('SALLY', ['SPLAT!', 'Ten points!', 'Hood ornament!', 'He EXPLODED, Mack! Do it again!'], 1, 3); }
         }
       }
@@ -969,7 +1313,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     if (S.over) {
       S.endT -= rdt;
       if (S.endT <= 0) {
-        const r = { win: S.result === 'win', reason: S.reason, stats: { ...S.stats, time: S.time, peak: S.peak, hp: P.hp / P.maxHp }, rec: S.rec };
+        const r = { win: S.result === 'win', reason: S.reason, stats: { ...S.stats, time: S.time, peak: S.peak, hp: P.hp / P.maxHp, evidence: S.evidence.length, evidenceTotal: (EVIDENCE[S.caseDef.id] || []).length }, rec: S.rec, evidence: S.evidence.slice() };
         S.running = false;
         onEnd(r);
         return;
@@ -978,6 +1322,10 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
 
     updateWayfinding(rdt);
     updateHell(rdt);
+    updateDebris(dt);
+    carSmoke(dt);
+    updateCivilians(dt);
+    updateCops(dt);
     if (CAR.alive) updateCar(P.inCar ? pdt : dt);
     else if (CAR.respawn > 0) {
       CAR.respawn -= dt;
@@ -985,6 +1333,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
         const p = spawnPoint(25, 45);
         CAR.pos.set(p.x, 0, p.z); CAR.vx = CAR.vz = 0; CAR.hp = 400; CAR.alive = true; CAR.ang = Math.random() * 6;
         carM.root.traverse((o) => { if (o.userData.origMat) o.material = o.userData.origMat; });
+        restoreCar(); carM.body.rotation.z = 0;
         say('SALLY', 'Got us a new ride, Mack! Don\'t ask whose!', 3);
       }
     }
@@ -1017,7 +1366,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     flushPaint(rdt);
     // HUD
     hud.update({
-      hp: P.hp / P.maxHp, flasks: P.flasks, maxFlasks: P.maxFlasks, bleed: Math.min(1, S.bleed), focus: P.focus > 0 || P.focusHeld, focusMeter: P.focusMeter, pills: P.pills, ammo: P.ammo, reloading: P.reload > 0, seeColor: P.color > 0,
+      boost: CAR.boost, hp: P.hp / P.maxHp, flasks: P.flasks, maxFlasks: P.maxFlasks, bleed: Math.min(1, S.bleed), focus: P.focus > 0 || P.focusHeld, focusMeter: P.focusMeter, pills: P.pills, ammo: P.ammo, reloading: P.reload > 0, seeColor: P.color > 0,
       inCar: P.inCar, carHp: CAR.alive ? CAR.hp / 400 : 0, carAlive: CAR.alive,
       player: focus(), enemies: S.enemies, portals: S.portals, car: CAR, sally: SA, boss: S.boss && !S.boss.dead ? S.boss : null,
       hint: currentHint(), camera, time: S.time, objectives: objectiveMarks(), sallyHp: SA.hp / SA.maxHp, sallyDown: SA.down,
@@ -1032,7 +1381,8 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     if (g.type === 'goto') out.push({ x: g.x, z: g.z, c: '#ff2a3a', k: 'goto', label: g.label });
     if (g.type === 'portals') for (const p of S.portals) out.push({ x: p.pos.x, z: p.pos.z, c: '#ff2d95', k: 'portal' });
     if (g.type === 'roombas' || S.stage.roombas) for (const e of S.enemies) if (e.type === 'roomba') out.push({ x: e.pos.x, z: e.pos.z, c: '#18e0ff', k: 'bot' });
-    for (const e of S.enemies) if (e.type === 'copter') out.push({ x: e.pos.x, z: e.pos.z, c: '#ffe11a', k: 'copter' });
+    if (S.wanted) for (const e of S.enemies) if (e.type === 'copcar') out.push({ x: e.pos.x, z: e.pos.z, c: '#3060ff', k: 'cop' });
+    for (const e of S.enemies) if (e.type === 'copter' || e.type === 'beast') out.push({ x: e.pos.x, z: e.pos.z, c: '#ffe11a', k: e.type });
     if (g.type === 'boss' && S.boss && !S.boss.dead) out.push({ x: S.boss.pos.x, z: S.boss.pos.z, c: '#ffe11a', k: 'boss' });
     if (g.type === 'kill') { let best = null, bd = 1e9; for (const e of S.enemies) { const d = Math.hypot(e.pos.x - focus().x, e.pos.z - focus().z); if (d < bd) { bd = d; best = e; } } if (best && bd > 50) out.push({ x: best.pos.x, z: best.pos.z, c: '#ffffff', k: 'kill' }); }
     return out;
@@ -1040,6 +1390,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
 
   function currentHint() {
     if (S.over) return '';
+    { const cp = !P.inCar && nearestCracked(); if (cp) return cp.seal > 0 ? `SEALING ${'▮'.repeat(Math.ceil(cp.seal / 3 * 10))}${'▯'.repeat(10 - Math.ceil(cp.seal / 3 * 10))}` : 'Hold E — jam the flask of grey into the portal'; }
     if (!P.inCar && CAR.alive && P.pos.distanceTo(CAR.pos) < 5) return 'E — Get in the car';
     if (P.inCar) return '';
     if (L.bar.door && Math.hypot(P.pos.x - L.bar.door.x, P.pos.z - L.bar.door.z) < 5) return S.barUsed ? 'The Last Drop — Gus already patched you up' : 'E — Duck into The Last Drop';
@@ -1048,7 +1399,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
 
   function handleInput(rdt, pdt) {
     if (pressed.has('KeyZ')) summonCar();
-    if (pressed.has('KeyE')) {
+    if (pressed.has('KeyE') && !(!P.inCar && nearestCracked())) {
       if (P.inCar) exitCar();
       else if (CAR.alive && P.pos.distanceTo(CAR.pos) < 5) enterCar();
       else if (!S.barUsed && L.bar.door && Math.hypot(P.pos.x - L.bar.door.x, P.pos.z - L.bar.door.z) < 5) {
@@ -1077,6 +1428,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
         hud.floater(P.pos, 'FULL GRIT · EVERYTHING IS IN COLOR');
       } else quip('MACK', LINES.noPills, 1, 2);
     }
+    updateSealing(pdt);
     // holster for a moment and Mack thumbs fresh rounds in
     P.holsterT = P.aiming ? 0 : P.holsterT + pdt;
     if (!P.inCar && P.holsterT > 0.6 && P.ammo < 6 && P.reload <= 0) { P.reload = 1.0; sfx.reload(); }
@@ -1109,13 +1461,13 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       P.roll -= pdt;
       P.pos.x += P.rollDir.x * 22 * pdt; P.pos.z += P.rollDir.z * 22 * pdt;
     } else {
-      const sp = P.aiming ? 7 : 11;
+      const sp = P.sealing ? 0 : P.aiming ? 7 : 11;
       P.pos.x += mx * sp * pdt; P.pos.z += mz * sp * pdt;
     }
     P.moving = ml > 0;
     pushOut(P.pos, 0.7);
     // right mouse draws the big red revolver; left mouse only fires while aiming
-    P.aiming = mouse.right && P.roll <= 0;
+    P.aiming = mouse.right && P.roll <= 0 && !P.sealing;
     P.aimT = clamp(P.aimT + (P.aiming ? pdt : -pdt) * 7, 0, 1);
     if (P.aiming) P.face = Math.atan2(aim.x - P.pos.x, aim.z - P.pos.z);
     else if (ml) P.face += wrapAngle(Math.atan2(mx, mz) - P.face) * Math.min(1, pdt * 12);
@@ -1204,6 +1556,8 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     // revolver kick and the reload flip
     P.kick = Math.max(0, P.kick - dt * 8);
     const up = P.aimT;
+    if (P.sealing) { m.armL.rotation.x = -1.6; m.armR.rotation.x = -0.4; m.root.rotation.x = 0.25; m.flask.position.set(-0.42, 1.7, 0.9); }
+    else { m.flask.position.set(0.42, 1.2, 0.05); }
     m.armR.rotation.x = -0.15 - up * 1.3 - P.kick * 0.45 + (P.reload > 0 ? 0.5 : 0);
     m.gun.position.set(0.42, 1.78 - (1 - up) * 0.75, 0.68 - (1 - up) * 0.5);
     m.gun.rotation.x = (1 - up) * 1.2 - P.kick * 0.5 + (P.reload > 0 ? 0.8 + Math.sin(P.reload * 18) * 0.2 : 0);
@@ -1324,15 +1678,30 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
         if (e.emerge <= 0) { e.model.root.rotation.x = 0; splat(e.pos.x, e.pos.z, 3, e.color, 0.9, 8); sfx.splat(0.5); }
         continue;
       }
+      if (e.scatterT > 0) {
+        // running for their lives, painting as they go
+        e.scatterT -= dt;
+        e.pos.x += Math.cos(e.emergeDir) * 9 * dt; e.pos.z += Math.sin(e.emergeDir) * 9 * dt;
+        if (pushOut(e.pos, e.r)) e.emergeDir += Math.PI / 2;
+        e.face = Math.atan2(Math.cos(e.emergeDir), Math.sin(e.emergeDir));
+        if (e.paintCd <= 0) { e.paintCd = 0.15; splat(e.pos.x, e.pos.z, 1.2, e.color, 0.8, 2); }
+        e.model.root.position.set(e.pos.x, 0, e.pos.z); e.model.root.rotation.y = e.face;
+        animWalk(e.model, 12, dt);
+        continue;
+      }
       if (e.type === 'lowrider' || e.type === 'truck') { updateLowrider(e, dt, dp); continue; }
       if (e.type === 'roomba') { updateRoomba(e, dt, dp); continue; }
       if (e.type === 'copter') { updateCopter(e, dt, dp); continue; }
+      if (e.type === 'copcar') { updateCopCar(e, dt, dp); continue; }
       let speed = 0;
       if (e.type === 'dauber') {
         if (dp < 16) { const tx = e.pos.x - dxp, tz = e.pos.z - dzp; nav(e, tx, tz, dt, e.speed * 1.2); speed = e.speed * 1.2; }
         else { const w = wanderTarget(e); nav(e, w.x, w.z, dt, e.speed); speed = e.speed; }
         if (e.paintCd <= 0) { e.paintCd = 0.18; splat(e.pos.x + rand(-1, 1), e.pos.z + rand(-1, 1), rand(1.2, 2.6), e.color, 0.8, 3); if (dp < 50 && Math.random() < 0.2) sfx.spray(clamp(1 - dp / 50, 0, 1)); }
         e.face = e.moveFace ?? e.face;
+      } else if (e.type === 'hood' && e.scattered && dp > 30) {
+        const w = wanderTarget(e); nav(e, w.x, w.z, dt, e.speed); speed = e.speed; e.face = e.moveFace ?? e.face;
+        if (e.paintCd <= 0) { e.paintCd = 0.2; splat(e.pos.x, e.pos.z, 1.6, e.color, 0.8, 3); }
       } else if (e.type === 'hood') {
         if (!SA.down && !SA.inCar && dp < 30 && e.walk % 1 < 0.35) { const sx2 = SA.pos.x - e.pos.x, sz2 = SA.pos.z - e.pos.z, sd = Math.hypot(sx2, sz2); if (sd < dp) { dxp = sx2; dzp = sz2; dp = sd; } }
         if (dp > 22 || !clearLine(e.pos.x, e.pos.z, f.x, f.z)) { if (dp < 120) nav(e, f.x, f.z, dt, e.speed); else { const w = wanderTarget(e); nav(e, w.x, w.z, dt, e.speed); } speed = e.speed; e.face = e.moveFace ?? e.face; }
@@ -1363,8 +1732,41 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
           e.healT = 1;
           for (const o of S.enemies) if (o !== e && o.type !== 'boss' && o.hp < o.maxHp && Math.hypot(o.pos.x - e.pos.x, o.pos.z - e.pos.z) < 12) { o.hp = Math.min(o.maxHp, o.hp + 6); parts.spawn(o.pos.x, 2.5, o.pos.z, 0, 2, 0, { life: 0.6, size: 0.6, color: [1, 1, 1] }); }
         }
-        if (e.paintCd <= 0) { e.paintCd = 5; for (let k = 0; k < 10; k++) { const a = k / 10 * 6.28; splat(e.pos.x + Math.cos(a) * 4, e.pos.z + Math.sin(a) * 4, 0.8, e.color, 0.8, 1); } splat(e.pos.x, e.pos.z, 1.4, '#ffffff', 0.9, 0); }
+        if (e.paintCd <= 0) { e.paintCd = 8; for (let k = 0; k < 10; k++) { const a = k / 10 * 6.28; splat(e.pos.x + Math.cos(a) * 4, e.pos.z + Math.sin(a) * 4, 0.6, e.color, 0.8, 1); } splat(e.pos.x, e.pos.z, 1.4, '#ffffff', 0.9, 0); }
         e.model.eye.rotation.z += dt * 2;
+      } else if (e.type === 'cop') {
+        // a cop from the Holy Glaze: slow, round, and finally doing his job
+        if (dp > 18) { nav(e, f.x, f.z, dt, e.speed); speed = e.speed; e.face = e.moveFace ?? e.face; }
+        else { e.face = Math.atan2(dxp, dzp); if (e.cd <= 0) { e.cd = rand(1.2, 1.8); const a = e.face + rand(-0.08, 0.08); enemyShot(V(e.pos.x + Math.sin(a), 1.8, e.pos.z + Math.cos(a)), Math.sin(a), Math.cos(a), '#bbbbbb', 40, 6, 'bullet'); sfx.pistol(0, 0.6); } }
+        if (Math.random() < dt * 0.05) say('COP', pick(['Freeze, Malone!', 'Halt! In the name of the... the... donut!', 'Stop or I\'ll... huff... stop!', 'You have the right to remain grey!']), 2);
+        e.model.arm.rotation.x = -1.6;
+      } else if (e.type === 'demon') {
+        // winged demon: circles overhead, then swoops
+        e.ang = (e.ang ?? Math.random() * 6.28) + dt * 0.9;
+        const swoop = e.swoop > 0;
+        const tx = swoop ? e.sx : f.x + Math.cos(e.ang) * 14, tz = swoop ? e.sz : f.z + Math.sin(e.ang) * 14;
+        const ddx = tx - e.pos.x, ddz = tz - e.pos.z, dd = Math.hypot(ddx, ddz) || 1;
+        const sp = swoop ? 30 : e.speed;
+        e.pos.x += ddx / dd * Math.min(sp * dt, dd); e.pos.z += ddz / dd * Math.min(sp * dt, dd);
+        e.face = Math.atan2(ddx, ddz);
+        e.alt = swoop ? Math.max(1.4, (e.alt ?? 7) - dt * 18) : Math.min(7.5, (e.alt ?? 7) + dt * 6);
+        if (!swoop && e.cd <= 0 && dp < 40) { e.cd = rand(2.5, 3.5); e.swoop = 0.9; e.sx = f.x; e.sz = f.z; sfx.spray(0.8); }
+        if (swoop) { e.swoop -= dt; if (Math.hypot(f.x - e.pos.x, f.z - e.pos.z) < (P.inCar ? 3 : 1.8) && e.hitCd <= 0) { e.hitCd = 1; damagePlayer(14); splat(f.x, f.z, 2.5, e.color, 0.9, 5); } }
+        if (e.paintCd <= 0) { e.paintCd = 0.15; e.hue = ((e.hue || 0) + 1) % 6; splat(e.pos.x, e.pos.z, 1.1, GANG_COLORS[e.hue], 0.7, 2); }
+        speed = 0;
+        e.flying = true;
+      } else if (e.type === 'beast') {
+        // giant Technicolor beast: lumbers after Mack and stomps
+        nav(e, f.x, f.z, dt, e.speed); speed = e.speed * 0.6; e.face = e.moveFace ?? e.face;
+        if (e.paintCd <= 0) { e.paintCd = 0.5; e.hue = ((e.hue || 0) + 1) % 6; splat(e.pos.x + rand(-2, 2), e.pos.z + rand(-2, 2), 2.6, GANG_COLORS[e.hue], 0.85, 4); }
+        if (dp < 10 && e.cd <= 0) {
+          e.cd = 2.6; fx.shake = 0.8; sfx.boom(0.9);
+          splat(e.pos.x, e.pos.z, 9, pick(GANG_COLORS), 0.9, 12);
+          damagePlayer(P.inCar ? 22 : 18);
+          if (!SA.down && Math.hypot(SA.pos.x - e.pos.x, SA.pos.z - e.pos.z) < 10) damageSally(12);
+          for (let k = 0; k < 30; k++) { const a = k / 30 * 6.28; parts.spawn(e.pos.x + Math.cos(a) * 2, 0.4, e.pos.z + Math.sin(a) * 2, Math.cos(a) * 18, 2, Math.sin(a) * 18, { life: 0.5, size: 0.9, color: [0.9, 0.9, 0.9], kind: 1 }); }
+        }
+        if (Math.random() < dt * 0.15) say('NARR', pick(['*a roar in seven colors*', '*the beast bellows a show tune*', '*BWAAAAAAMP*']), 1.8);
       } else if (e.type === 'imp') {
         // fast, low, lunges for Mack (or Sally)
         let tx = f.x, tz = f.z;
@@ -1419,6 +1821,8 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       m.root.scale.setScalar((e.type === 'boss' ? e.def.scale : TYPES[e.type].scale) * (e.flash > 0 ? 1.08 : 1));
       if (e.type === 'goon') { m.root.rotation.order = 'XYZ'; m.armR.rotation.x = -1.45; m.gun.rotation.x = 0; }
       if (e.type === 'imp') m.root.position.y = Math.abs(Math.sin(S.time * 9 + e.walk)) * (e.lunge > 0 ? 1.2 : 0.5);
+      if (e.type === 'demon') m.root.position.y = e.alt + Math.sin(S.time * 3 + e.walk) * 0.4;
+      if (m.wings) m.wings.forEach((w, i) => { w.rotation.y = (i ? -1 : 1) * (0.2 + Math.sin(S.time * (e.type === 'demon' ? 14 : 22) + e.walk) * 0.7); });
       if (m.halo) m.halo.rotation.z += dt * 2;
       if (m.dottie) { m.brush.rotation.y += dt * 14; m.dottie.head.rotation.z = Math.sin(S.time * 3) * 0.3; m.dottie.armL.rotation.z = 2.5 + Math.sin(S.time * 5) * 0.4; }
       if (m.prism) { m.prism.rotation.y += dt * 2; m.prism.rotation.x = Math.sin(S.time) * 0.3; }
@@ -1434,7 +1838,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     else if (leash >= 70) { nav(e, e.anchor.x, e.anchor.z, dt, e.speed); speed = e.speed; }
     else { const a = S.time * 0.6; e.pos.x += Math.cos(a) * 3 * dt; e.pos.z += Math.sin(a) * 3 * dt; speed = 3; }
     e.face = Math.atan2(dxp, dzp);
-    if (e.paintCd <= 0) { e.paintCd = 0.12; stroke(e.lastPaint?.x ?? e.pos.x, e.lastPaint?.z ?? e.pos.z, e.pos.x, e.pos.z, 3 + def.scale, e.color, 0.7); e.lastPaint = { x: e.pos.x, z: e.pos.z }; }
+    if (e.paintCd <= 0) { e.paintCd = 0.12; stroke(e.lastPaint?.x ?? e.pos.x, e.lastPaint?.z ?? e.pos.z, e.pos.x, e.pos.z, Math.min(4.5, 2 + def.scale), e.color, 0.6); e.lastPaint = { x: e.pos.x, z: e.pos.z }; }
     const enraged = e.hp < e.maxHp * 0.4;
     const mz = V(e.pos.x + Math.sin(e.face) * 1.5 * def.scale, 1.2 * def.scale, e.pos.z + Math.cos(e.face) * 1.5 * def.scale);
     if (dp < 75 && e.cd <= 0) {
@@ -1628,6 +2032,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
         const rel = Math.hypot(CAR.vx, CAR.vz);
         hitEnemy(e, rel * 2.5);
         const nx = (f.x - e.pos.x) / dp, nz = (f.z - e.pos.z) / dp;
+        smashCar(rel, (e.pos.x + CAR.pos.x) / 2, (e.pos.z + CAR.pos.z) / 2, -nx, -nz);
         CAR.vx = nx * 14; CAR.vz = nz * 14;
         CAR.hp -= 12;
       } else { damagePlayer(12); P.pos.x += (f.x - e.pos.x) / dp * 3; P.pos.z += (f.z - e.pos.z) / dp * 3; }
@@ -1668,9 +2073,12 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     e.pos.x += Math.sin(e.face) * sp * dt; e.pos.z += Math.cos(e.face) * sp * dt;
     if (d < 4) e.target = null;
     if (e.paintCd <= 0) { e.paintCd = 0.08; stroke(e.lastPaint?.x ?? e.pos.x, e.lastPaint?.z ?? e.pos.z, e.pos.x, e.pos.z, 2.6, e.color, 0.8); e.lastPaint = { x: e.pos.x, z: e.pos.z }; }
-    if (e.type === 'truck') {
+    if (e.type === 'truck' && !e.unloaded) {
+      // every so often a couple of painters hop off the back
+      e.dropT = (e.dropT ?? rand(10, 18)) - dt;
+      if (e.dropT <= 0 && S.enemies.length < 30) { e.dropT = rand(16, 24); for (let k = 0; k < 2; k++) { const g2 = addEnemy('dauber', e.pos.x - Math.sin(e.face) * 4, e.pos.z - Math.cos(e.face) * 4); g2.emerge = 0.5; g2.emergeDir = e.face + Math.PI + rand(-0.8, 0.8); g2.scattered = true; } }
       // goons in the back fire rockets
-      if (dp < 60 && e.cd <= 0) {
+      if (dp < 60 && e.cd <= 0 && !e.unloaded) {
         const f2 = focus();
         if (clearLine(e.pos.x, e.pos.z, f2.x, f2.z)) {
           e.cd = rand(1.8, 2.6);
@@ -1679,7 +2087,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
           enemyRocket(wp, f2.x + rand(-2, 2), f2.z + rand(-2, 2), e.color);
         } else e.cd = 0.4;
       }
-      for (const g of e.model.car.goons) g.root.rotation.y = Math.atan2(focus().x - e.pos.x, focus().z - e.pos.z) - e.face;
+      for (const g of e.model.car.goons) if (g.root.visible) g.root.rotation.y = Math.atan2(focus().x - e.pos.x, focus().z - e.pos.z) - e.face;
     } else if (dp < 28 && e.cd <= 0) {
       e.cd = 0.55;
       const f = focus();
@@ -1696,6 +2104,8 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
         const rel = Math.hypot(CAR.vx - Math.sin(e.face) * sp, CAR.vz - Math.cos(e.face) * sp);
         hitEnemy(e, rel * 3.5);
         damagePlayer(rel * 0.8);
+        smashCar(rel, (e.pos.x + CAR.pos.x) / 2, (e.pos.z + CAR.pos.z) / 2, (e.pos.x - CAR.pos.x) / dp, (e.pos.z - CAR.pos.z) / dp);
+        spawnDebris(e.pos.x, 1, e.pos.z, -CAR.vx * 0.4, -CAR.vz * 0.4, Math.min(6, Math.floor(rel / 6)));
         const nx = (f.x - e.pos.x) / dp, nz = (f.z - e.pos.z) / dp;
         CAR.vx += nx * 12; CAR.vz += nz * 12;
       } else damagePlayer(30);
@@ -1712,8 +2122,9 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       p.open = Math.min(1, p.open + dt * 0.7);
       p.g.userData.uni.t.value = S.time;
       p.g.userData.uni.open.value = p.open;
-      p.g.scale.setScalar((0.2 + p.open * 0.8) * (p.flash > 0 ? 1.06 : 1));
+      p.g.scale.setScalar((0.2 + p.open * 0.8) * (p.flash > 0 ? 1.06 : 1) * (p.cracked ? 0.85 + Math.sin(S.time * 30) * 0.04 - (p.seal || 0) * 0.15 : 1));
       p.flash -= dt;
+      p.age = (p.age || 0) + dt;
       p.g.rotation.y = Math.sin(S.time * 0.3) * 0.2;
       p.paintCd -= dt;
       if (p.paintCd <= 0) {
@@ -1733,11 +2144,11 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     // goons left far behind melt back into the rain so the fight stays where Mack is
     const f = focus();
     for (const e of S.enemies.slice()) {
-      if (e.type === 'boss' || (e.type === 'roomba' && st.roombas) || e.emerge > 0) continue;
+      if (e.type === 'boss' || e.cop || (e.type === 'roomba' && st.roombas) || e.emerge > 0) continue;
       if (Math.abs(e.pos.x - f.x) + Math.abs(e.pos.z - f.z) > 340) { S.enemies.splice(S.enemies.indexOf(e), 1); removeEnemy(e); }
     }
     S.spawnT -= dt;
-    const alive = S.enemies.filter((e) => e.type !== 'boss').length;
+    const alive = S.enemies.filter((e) => e.type !== 'boss' && !e.cop).length;
     // ramp: the longer a stage runs, the faster they come
     const interval = st.interval * (S.portals.length ? 0.8 : 1);
     // waves: every so often the sky opens wider and a crowd of goons pours out
@@ -1797,7 +2208,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
           if (Math.hypot(s.pos.x - SA.pos.x, s.pos.z - SA.pos.z) < (s.kind === 'bomb' ? 6 : 4.5)) damageSally(s.dmg * 0.8);
           sfx.splat(1);
           for (let k = 0; k < 16; k++) parts.spawn(s.pos.x, 0.8, s.pos.z, rand(-8, 8), rand(3, 9), rand(-8, 8), { life: 0.7, size: 0.6, color: hexToRgb(s.color), grav: 22 });
-        } else splat(s.pos.x, s.pos.z, rand(0.9, 1.6), s.color, 0.8, 3);
+        } else if (s.kind !== 'bullet') splat(s.pos.x, s.pos.z, rand(0.9, 1.6), s.color, 0.8, 3);
         scene.remove(s.mesh);
         S.shots.splice(i, 1);
       }
@@ -1852,6 +2263,17 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       p.mesh.position.y = 0.6 + Math.sin(p.t * 3) * 0.2;
       p.mesh.rotation.y += dt * 2;
       if (Math.random() < dt * 3) parts.spawn(p.x + rand(-0.6, 0.6), 1.5, p.z + rand(-0.6, 0.6), 0, 1.5, 0, { life: 0.6, size: 0.25, color: [1, 1, 1] });
+      if (p.kind === 'evidence') {
+        p.mesh.rotation.y -= dt * 2; p.mesh.children[2].rotation.z += dt;
+        if (P.inCar && Math.hypot(p.x - f.x, p.z - f.z) < 12 && !S.evHint) { S.evHint = true; say('SALLY', 'Evidence, Mack! You gotta get out and pick it up. I don\'t touch paper. Paper cuts.', 3); }
+        if (!P.inCar && Math.hypot(p.x - f.x, p.z - f.z) < 2.4) {
+          scene.remove(p.mesh); S.pickups.splice(i, 1);
+          S.evidence.push(p.item); sfx.stamp();
+          hud.floater(V(p.x, 0, p.z), `EVIDENCE: ${p.item.name.toUpperCase()}`);
+          say('MACK', p.item.read, 5);
+        }
+        continue;
+      }
       if (Math.hypot(p.x - f.x, p.z - f.z) < (P.inCar ? 3.5 : 2)) {
         scene.remove(p.mesh); S.pickups.splice(i, 1);
         sfx.pickup();
@@ -1994,6 +2416,8 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       win() { if (S) { S.stageIdx = S.stages.length - 1; S.stage = null; win(); } },
       player: P, car: CAR, sally: SA, aim, mouse, keys, enterCar, openPortal, summonCar,
       lose(reason) { if (S) lose(reason); },
+      hit(e, d = 99999) { hitEnemy(e, d); },
+      killCiv(c) { killCiv(c, true); },
       spawn(type, x, z) { const p = { x, z }; pushOut(p, 3); return addEnemy(type, p.x, p.z); },
       tp(x, z) { P.pos.set(x, 0, z); if (P.inCar) CAR.pos.set(x, 0, z); snapCamera(); },
     },

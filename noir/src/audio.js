@@ -144,6 +144,21 @@ export const sfx = {
     noise(t, 0.05, { type: 'highpass', freq: 3500, gain: 0.25 });
     noise(t + 0.08, 0.6, { type: 'bandpass', freq: 500, q: 0.7, gain: 0.08, attack: 0.05 }); // echo down the street
   },
+  siren() {
+    if (!ctx) return; const t = at();
+    tone(t, 740, 0.55, { type: 'square', gain: 0.035, attack: 0.05 });
+    tone(t + 0.6, 560, 0.55, { type: 'square', gain: 0.035, attack: 0.05 });
+  },
+  boost() {
+    if (!ctx) return; const t = at();
+    noise(t, 0.9, { type: 'bandpass', freq: 300, q: 0.7, gain: 0.45, endFreq: 2400, attack: 0.03 });
+    tone(t, 60, 0.7, { type: 'sawtooth', gain: 0.18, endFreq: 140 });
+  },
+  screech(v = 1) {
+    if (!ctx) return; const t = at();
+    noise(t, 0.26, { type: 'bandpass', freq: 2400 + Math.random() * 700, q: 12, gain: 0.22 * v, attack: 0.02 });
+    tone(t, 1900 + Math.random() * 300, 0.24, { type: 'sawtooth', gain: 0.025 * v, attack: 0.02 });
+  },
   focus() {
     if (!ctx) return; const t = at();
     tone(t, 400, 0.8, { type: 'sine', gain: 0.18, endFreq: 90 });

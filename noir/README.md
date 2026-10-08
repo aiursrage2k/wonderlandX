@@ -49,6 +49,24 @@ npx http-server -c-1 .     # then visit http://localhost:8080/noir/
   case-specific clues that change the fight (double rocket damage on a boss,
   weaker portals and so on). You can also walk in once per case mid-mission to
   get patched up.
+- **Portals** spit goons until you crack them with bullets or rockets, then walk
+  up on foot and hold E to jam Mack's flask of grey into them. That's three
+  seconds with your back to the goons, so let Sally cover you.
+- **Evidence.** Goons drop receipts, pamphlets, matchbooks. Pick them up on foot.
+  At the bar after the case, Gus reads them, and they unlock the clue for the
+  next case.
+- **Monologues.** Every case opens on the street with Mack's narration and Sally
+  cutting in, and closes at the Last Drop with Mack brooding while Sally orders
+  another round.
+- **Civilians** walk the sidewalks with umbrellas and keep clear of portals, but
+  a portal left open long enough reaches them and they get infected: rainbow,
+  shambling, painting. Sealing the portal cures them. Kill a civilian, infected
+  or not, and the cops finally leave the Holy Glaze: you're Wanted by the City
+  for the rest of the case.
+- **The Packard takes a beating**: sparks and debris on every crash, bumpers,
+  headlights and the hood ornament tear off, then the engine smokes and burns.
+- **Goon Trucks** dump their riders the first time you hit them, and the riders
+  scatter and paint.
 - **Wayfinding.** "Go to" objectives (start with *meet Big Pork at the Holy
   Glaze*) paint red chevrons on the road that re-route in real time, plus a
   beacon at the destination. The radar shows every objective, with an arrow on
@@ -91,8 +109,10 @@ leaves a breadcrumb for the finale: an eye painted on the pier, a hymnal called
 | Right mouse (hold) | Draw and aim the big red revolver |
 | Left mouse | Fire (while aiming). In the car, Sally fires a rocket where you point |
 | R / Space | Tuck and roll (on foot) |
-| Space | Handbrake (in the car) |
-| E | Get in or out of the Packard, enter the Last Drop |
+| Shift | Rocket boost (in the car): flames out the tailpipes, burnout marks; drifting refills it |
+| Space | Handbrake drift (in the car): tire smoke, skid marks, squeal |
+| E | Get in or out of the Packard, enter the Last Drop, pick up evidence (on foot) |
+| E (hold, on foot) | Seal a cracked portal by jamming the flask of grey into it (3 seconds, you can't shoot) |
 | Z | Whistle: the Packard drives itself to you |
 | F | Focus on or off: time crawls, paid for with the color you've stolen from the Syndicate |
 | Q | Pull from the flask (heal + a moment of focus) |
