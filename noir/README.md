@@ -7,7 +7,7 @@ Goon Trucks cruise with rocket-men in the back. You are Mack Malone, a grumpy
 hard-boiled private eye with a flask and a big red revolver. Crazy Sally rides
 shotgun in a red dress and fires rockets out of the window of your black '41
 Packard. Every goon you drop washes the color back out of the streets. Let the
-color bleed get too high and Mack pukes in the gutter and gives up.
+City Color meter fill up and Mack pukes in the gutter and gives up.
 
 Built the same way as Wonderland X: three.js plus code. Every model is built
 from primitives, every texture is painted on a canvas, and the sound effects and
@@ -25,16 +25,18 @@ npx http-server -c-1 .     # then visit http://localhost:8080/noir/
 
 - **Main menu = the office.** Rain on the window, blinds throwing shadows, flasks
   on every surface. DOTTIE-9, the drunk robot receptionist, works the front desk.
-- **The Big Board.** A corkboard map of Rain City with nine case files pinned
-  to it. Closing a case unseals the next one. Closed cases stay on the board,
+- **The Big Board.** A corkboard map of Rain City with thirteen case files
+  pinned to it. Closing a case unseals the next one. Closed cases stay on the board,
   so you can replay any case for a better grade.
 - **Every case opens in the office.** Mack is asleep at his desk, a dame checks
   in with Dottie, Sally kicks the door in, and they take the case. Each case is
   louder and more absurd than the last. Along the way: a torch singer whose blue
   note came out actually blue, a rainbow living in a bank vault, holes in the sky
   humming show tunes, a Police Commissioner turning into a frosted cruller, a
-  sunrise smuggled out in boxcars, the corrupt Mayor Horace Krane and his gold
-  statue, and the Prism King himself.
+  sunrise smuggled out in boxcars, the corrupt Mayor Horace Krane and his
+  forty-foot paint mech, the Prism King, a color cult, Dottie converting to that
+  cult and riding a giant Paintbot, and finally the city cracking open into a
+  Technicolor Hell.
 - **The city** is a 16×16 grid of 4-lane streets about 1.3 km across, with
   empty lots, banks, City Hall and Krane Plaza, the Strip and its casinos, the
   docks, the rail yards, the Last Drop, and the Holy Glaze donut shop. The Holy
@@ -58,6 +60,28 @@ npx http-server -c-1 .     # then visit http://localhost:8080/noir/
 - **Jazz.** Ten generative tunes (ballads, swing, bossa, a waltz, up-tempo hard
   bop) in a rotating playlist. Each play composes a fresh head and solos, and
   `N` skips to the next tune.
+
+## The story so far (and where it's going)
+
+Thirteen cases, one arc. Each case is stranger than the last, and each one
+leaves a breadcrumb for the finale: an eye painted on the pier, a hymnal called
+*Songs of the Seventh Color*, a note from "the Choir".
+
+| # | Case | What happens |
+| --- | --- | --- |
+| 1 | The Blue Period | Prism pushers on the docks. Meet Big Pork at the Holy Glaze. |
+| 2 | Purple Rain Man | A blue note comes out actually blue. Vic Vermilion. The first Paintbots. |
+| 3 | The Vault of Many Colors | Bank heists; a rainbow left in the vault mocks the tellers. |
+| 4 | Holes in the Sky | Portals open over Old Town, humming show tunes. |
+| 5 | Snake Eyes on the Strip | Jellybean jackpots, Paintbot fleets, Chartreuse Charlie. |
+| 6 | Glazed and Confused | The Police Commissioner becomes a thirty-foot frosted cruller. |
+| 7 | The Sunrise Express | A sunrise smuggled in boxcars; Madame Magenta's double-cross. |
+| 8 | Hizzoner | Mayor Krane sold the city: paint copters, then his Re-Election Machine mech. |
+| 9 | The King of Light | The Prism King falls, but he was only the herald. Church bells ring. |
+| 10 | Hymns in the Key of Pink | The Church of the Holy Spectrum baptizes Old Town in paint. Deacon Daffodil. |
+| 11 | Dottie Sees the Light | Dottie joins the cult and rides Mother Roomba. Bring her home. |
+| 12 | The Seventh Color | Southside cracks open; Chromadaemons; the High Chromancer. |
+| 13 | Technicolor Hell | The city herself hires Mack. The Saint of All Colors rises out of City Hall. |
 
 ## Controls
 
@@ -97,3 +121,40 @@ The revolver holds six rounds. Holster it for a moment and Mack reloads.
 `tools/noir-shot.mjs` is a headless Playwright harness. Load the page with
 `?debug` and `window.__noir.step(seconds)` fast-forwards the game without
 rendering, which is handy for scripted playthroughs.
+
+## Writing a new case
+
+Cases are plain data in `src/story.js`. To add the next, stranger chapter,
+append an object to `CASES` and it appears on the Big Board automatically,
+sealed until the case before it is closed:
+
+```js
+{
+  id: 14, title: 'The Moon Has Been Painted', district: 'The Docks', music: 'high',
+  dame: { name: 'Lady Luna', hat: 'veil', shade: 0xdddddd, ghost: true },
+  blurb: 'One line for the board.',
+  intro: [            // [action, speaker, line]; actions: sleep, dameIn, dameDesk, wake, sallyIn, stamp
+    ['sleep', 'NARR', 'Opening narration.'],
+    ['dameIn', 'NARR', 'She walks in.'],
+    [null, 'DOTTIE', '*hic* ...'],
+    ['wake', 'MACK', '...'],
+    ['sallyIn', 'SALLY', '...'],
+    ['stamp', 'MACK', 'We\'re taking it.'],
+  ],
+  stages: [           // goal types: goto (at: landmark), kill (n), portals (n), roombas (n), boss (boss id)
+    { text: 'Meet somebody', goal: { type: 'goto', at: 'donut', r: 30, label: 'BIG PORK', arrive: [['PORK', '...']] }, mix: {}, max: 0, interval: 9 },
+    { text: 'Clear the docks', goal: { type: 'kill', n: 15 }, mix: { hood: 0.4, goon: 0.3, truck: 0.3 }, max: 10, interval: 1.6 },
+    { text: 'Scrap the Paintbots', goal: { type: 'roombas', n: 3 }, roombas: 3, mix: { dauber: 1 }, max: 6, interval: 2 },
+  ],
+  bleedCap: 0.28,     // how much of the district may be painted before Mack gives up
+  outro: [['MACK', '...']],
+  clue: { text: 'What Gus knows.', effects: ['rocket2x', 'portalWeak', 'bigWash', 'lowriderWeak', 'extraFlask'] },
+  gus: 'Gus\'s hint for this case.',
+}
+```
+
+Enemy types for `mix`: `dauber`, `hood`, `goon`, `roller`, `lowrider`,
+`truck`, `roomba`, `copter`, `cultist`, `imp`. Stages also take `copters: n`
+and `roombas: n` to send those in at the start, and a case with `hell: 1` or
+`hell: 2` gets glowing fissures that spit imps. Bosses live in `BOSSES`, landmarks for `goto` in `L` in
+`src/city.js`.

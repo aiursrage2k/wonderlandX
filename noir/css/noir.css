@@ -156,12 +156,16 @@ button.btn:disabled { opacity: 0.35; cursor: default; }
 .bleed { height: 14px; }
 .bleed > div { background: linear-gradient(90deg, #ff2d95, #ff7a12, #ffe11a, #62ff2e, #18e0ff, #a64bff); }
 .bleed.warn { animation: warn 0.5s infinite; }
+.stomach { margin-top: 4px; font: 14px var(--bebas); letter-spacing: 2px; color: #9a9a96; text-align: right; }
+#stomach.s1 { color: #c9c4b8; } #stomach.s2 { color: #9fe08a; } #stomach.s3 { color: #62ff2e; animation: blink 0.4s infinite; }
 @keyframes warn { 50% { border-color: #ff2d95; box-shadow: 0 0 14px #ff2d95; } }
 #captions { position: absolute; left: 50%; bottom: 9vh; transform: translateX(-50%); width: min(820px, 90vw); text-align: center; }
 .cap { display: inline-block; margin: 3px 0; font-size: 19px; background: rgba(0, 0, 0, 0.72); padding: 6px 14px; line-height: 1.35; transition: opacity 0.4s; }
 .cap b { font: 18px var(--bebas); letter-spacing: 2px; margin-right: 8px; font-weight: normal; }
 #hint { position: absolute; left: 50%; bottom: 4vh; transform: translateX(-50%); font: 20px var(--bebas); letter-spacing: 3px; background: rgba(0, 0, 0, 0.6); padding: 4px 14px; }
 #hint:empty { display: none; }
+#ebars div { position: absolute; height: 6px; border: 1px solid rgba(0, 0, 0, 0.9); background: rgba(0, 0, 0, 0.6); transform: translate(-50%, -50%); box-shadow: 0 0 4px rgba(0, 0, 0, 0.8); }
+#ebars div i { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(90deg, #ff2d95, #ff7a12, #ffe11a, #62ff2e, #18e0ff, #a64bff); background-size: var(--w) 100%; }
 #floaters div { position: absolute; font: 22px var(--bebas); letter-spacing: 2px; color: #fff; text-shadow: 0 0 6px #000, 0 0 2px #000; transform: translate(-50%, -50%); white-space: nowrap; }
 #pointers div { position: absolute; width: 0; height: 0; border-left: 10px solid transparent; border-right: 10px solid transparent; border-bottom: 22px solid; transform-origin: 50% 50%; filter: drop-shadow(0 0 4px #000); }
 #newsreel-tag { position: absolute; left: 50%; bottom: 3vh; transform: translateX(-50%); font: 26px var(--bebas); letter-spacing: 5px; background: #000; padding: 4px 18px; border: 2px solid var(--paper); }

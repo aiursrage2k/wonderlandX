@@ -303,6 +303,7 @@ export function buildOffice() {
   const cut = {
     begin(caseDef) {
       resetActors();
+      dottie.root.visible = !caseDef.noDottie;
       sally.root.visible = false;
       dame = makeDame(caseDef.dame);
       dame.root.position.set(-8.5, 0, 3.6); dame.root.rotation.y = Math.PI / 2;
@@ -325,7 +326,7 @@ export function buildOffice() {
         flash = 0.3;
       } else if (a === 'stamp') { sfx.stamp(); view = 'desk'; }
     },
-    end() { resetActors(); view = 'menu'; },
+    end() { resetActors(); dottie.root.visible = true; view = 'menu'; },
   };
 
   return {
@@ -483,7 +484,7 @@ export function buildBar() {
   g.traverse((o) => { if (o.isMesh) o.receiveShadow = true; });
 
   const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
-  const pos = new THREE.Vector3(1.5, 2.3, 5.2).add(OFF), look = new THREE.Vector3(-0.6, 1.5, -2.5).add(OFF);
+  const pos = new THREE.Vector3(-5.2, 2.4, 3.6).add(OFF), look = new THREE.Vector3(0.2, 1.5, -2.2).add(OFF);
   let time = 0;
   return {
     scene, camera,

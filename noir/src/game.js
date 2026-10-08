@@ -3,13 +3,16 @@
 import * as THREE from 'three';
 import { NU, splat, stroke, wash, fadeAll, clearPaint, flushPaint, coverage } from './paint.js';
 import { buildCity, L, C, DISTRICTS, roadC, nodeIndex, pushOut, rayDist, clearLine, roadPoint, lamps, vents, cops, copCars, flaskSpots, signs } from './city.js';
-import { makeDetective, makeSally, makeGangster, makeCar, makePortal, makePrismKing, makeMayor, makeFlask, makeRainbowGoon, makeRoomba, makeTruck, drainModel, GANG_COLORS, gangMat } from './models.js';
+import { rainbowCoat as rainbowMatLocal } from './models.js';
+import { makeDetective, makeSally, makeGangster, makeCar, makePortal, makePrismKing, makeMayor, makeFlask, makeRainbowGoon, makeRoomba, makeTruck, makeCopter, makeMech, makeCultist, makeImp, makeRobot, drainModel, GANG_COLORS, gangMat } from './models.js';
 import { makeRain, Particles, Tracers, Flashes, hexToRgb, fx } from './fx.js';
 import { sfx, setEngine } from './audio.js';
 import { BOSSES, LINES, DONUT_LINES, COP_RETORTS } from './story.js';
 import { clamp, rand, pick, weighted, wrapAngle, Deck } from './util.js';
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
+// how much paint each case's bleedCap tolerates; tuned so standing idle loses in ~4 minutes
+const BLEED_SCALE = 0.55;
 const TYPES = {
   dauber: { hp: 30, speed: 6.5, r: 0.8, scale: 1 },
   hood: { hp: 55, speed: 7.2, r: 0.8, scale: 1 },
@@ -18,6 +21,9 @@ const TYPES = {
   goon: { hp: 95, speed: 7.6, r: 0.8, scale: 1.05 },
   roomba: { hp: 380, speed: 7.5, r: 3.6, scale: 1 },
   truck: { hp: 340, speed: 15, r: 3.2, scale: 1 },
+  copter: { hp: 240, speed: 15, r: 4, scale: 1 },
+  cultist: { hp: 70, speed: 5.5, r: 0.8, scale: 1 },
+  imp: { hp: 45, speed: 11.5, r: 0.7, scale: 1 },
 };
 
 export function createGame({ renderer, hud, onEnd, onBar }) {
@@ -229,6 +235,47 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     }
   }
 
+  // ===================================================================== hell
+  const fissureMat = new THREE.ShaderMaterial({
+    uniforms: { t: { value: 0 } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+    fragmentShader: `uniform float t; varying vec2 vUv;
+      void main(){
+        float jag = abs(vUv.x - 0.5 - 0.18 * sin(vUv.y * 40.0) * sin(vUv.y * 7.0 + 1.0));
+        float core = smoothstep(0.16, 0.0, jag), glow = smoothstep(0.5, 0.0, jag) * 0.5;
+        vec3 c = 0.6 + 0.5 * cos(6.2831 * (vec3(0.0, 0.33, 0.67) + vUv.y * 2.0 - t * 0.4));
+        float ends = smoothstep(0.0, 0.08, vUv.y) * smoothstep(1.0, 0.92, vUv.y);
+        gl_FragColor = vec4(c * (core * 2.0 + glow), (core + glow) * ends);
+      }`,
+  });
+  const baseBg = scene.background.clone(), hellBg = new THREE.Color(0x3a0c14), hellBg2 = new THREE.Color(0x52101a);
+  function makeFissures(level) {
+    S.fissures = [];
+    const n = level * 7;
+    for (let i = 0; i < n; i++) {
+      const p = S.area ? roadPoint(S.area) : (i % 2 ? roadPoint(DISTRICTS['Civic Center']) : roadPoint(null));
+      const len = rand(24, 50);
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(rand(2, 4), len), fissureMat);
+      m.rotation.x = -Math.PI / 2; m.rotation.z = rand(0, Math.PI);
+      m.position.set(p.x, 0.12, p.z);
+      scene.add(m);
+      S.fissures.push({ m, x: p.x, z: p.z, len, t: rand(0, 2) });
+    }
+  }
+  function updateHell(dt) {
+    const lvl = S.caseDef.hell || 0;
+    const target = lvl === 2 ? hellBg2 : lvl === 1 ? hellBg : baseBg;
+    scene.background.lerp(target, Math.min(1, dt));
+    scene.fog.color.copy(scene.background);
+    if (!S.fissures) return;
+    fissureMat.uniforms.t.value = S.time;
+    for (const f2 of S.fissures) {
+      f2.t -= dt;
+      if (Math.random() < dt * 6) parts.spawn(f2.x + rand(-6, 6), 0.3, f2.z + rand(-6, 6), rand(-0.5, 0.5), rand(3, 7), rand(-0.5, 0.5), { life: 1.2, size: 0.4, color: hexToRgb(pick(GANG_COLORS)) });
+      if (f2.t <= 0) { f2.t = rand(1.5, 3); splat(f2.x + rand(-8, 8), f2.z + rand(-8, 8), rand(1.5, 3), pick(GANG_COLORS), 0.8, 5); }
+    }
+  }
+
   // ===================================================================== wayfinding
   function gotoPoint(at) {
     const lm = L[at];
@@ -375,6 +422,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     // flask pickups scattered around
     const spots = flaskSpots.filter((p) => !area || (p.x > area.x0 - 40 && p.x < area.x1 + 40 && p.z > area.z0 - 40 && p.z < area.z1 + 40));
     (spots.length ? spots : flaskSpots).slice(0, 10).forEach((p, i) => addPickup(p.x, p.z, i % 3 === 2 ? 'pills' : 'flask'));
+    if (caseDef.hell) makeFissures(caseDef.hell);
     nextStage();
     hud.caseTitle(caseDef.id ? `Case No. ${caseDef.id}` : 'Off the books', caseDef.title);
     // a few goons loitering near the office: something to shoot, something to run over
@@ -392,6 +440,8 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     for (const s of S.shots) scene.remove(s.mesh);
     for (const r of S.rockets) scene.remove(r.mesh);
     for (const p of S.pickups) scene.remove(p.mesh);
+    if (S.fissures) for (const f2 of S.fissures) scene.remove(f2.m);
+    scene.background.copy(baseBg); scene.fog.color.copy(baseBg);
     beam.visible = false;
     setEngine(false);
     headL.intensity = headR.intensity = 0;
@@ -403,7 +453,8 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     S.stageIdx++;
     const st = S.stages[S.stageIdx];
     if (!st) { win(); return; }
-    S.stage = st; S.stageKills = 0; S.stagePortals = 0; S.stageRoombas = 0; S.spawnT = 2;
+    S.stage = st; S.stageKills = 0; S.stagePortals = 0; S.stageRoombas = 0; S.spawnT = 2; S.wave = 1; S.waveT = 24;
+    if (st.copters) for (let i = 0; i < st.copters; i++) later(() => { if (S && S.stage === st) { const p = spawnPoint(80, 160); addEnemy('copter', p.x, p.z); } }, 800 + i * 2500);
     if (st.roombas) for (let i = 0; i < st.roombas; i++) later(() => { if (S && S.stage === st) { const p = spawnPoint(60, 150); addEnemy('roomba', p.x, p.z); } }, 400 + i * 900);
     if (st.portals) for (let i = 0; i < st.portals; i++) later(() => S && S.stage === st && openPortal(), 600 + i * 1600);
     if (st.boss) spawnBoss(st.boss);
@@ -497,7 +548,10 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       driver.root.position.set(-0.5, 0.6, -0.3);
       car.body.add(driver.root);
       model = { root: car.root, car, driver };
-    } else if (type === 'goon') model = makeRainbowGoon();
+    } else if (type === 'copter') model = makeCopter(color);
+    else if (type === 'cultist') model = makeCultist(color);
+    else if (type === 'imp') model = makeImp(color);
+    else if (type === 'goon') model = makeRainbowGoon();
     else if (type === 'roomba') model = makeRoomba(color);
     else model = makeGangster(color, type === 'roller' ? 'roller' : type === 'dauber' ? 'dauber' : 'hood', t.scale);
     scene.add(model.root);
@@ -524,7 +578,16 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     const x = roadC(nodeIndex(lm.x)) + (lm.x > roadC(nodeIndex(lm.x)) ? 14 : -14), z = lm.z + 40;
     let model;
     if (id === 'king') model = makePrismKing();
-    else if (id === 'krane') model = makeMayor();
+    else if (id === 'krane') model = makeMech();
+    else if (b.model === 'cultist') {
+      model = makeCultist(b.color);
+      if (id === 'chromancer') { const halo = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.06, 8, 32), rainbowMatLocal()); halo.position.y = 2.95; halo.rotation.x = Math.PI / 2; model.root.add(halo); model.halo = halo; }
+    } else if (b.model === 'imp') model = makeImp(b.color);
+    else if (b.model === 'mother') {
+      const r = makeRoomba(b.color);
+      const bot = makeRobot(); bot.root.position.set(0, 1.5, -0.6); bot.root.scale.setScalar(0.9); r.body.add(bot.root);
+      model = { root: r.root, body: r.body, brush: r.brush, eye: r.eye, dottie: bot };
+    }
     else {
       model = makeGangster(b.color, 'hood', b.scale);
       if (id === 'cruller') {
@@ -649,12 +712,13 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     const big = S.fx.has('bigWash') ? 1.6 : 1;
     wash(e.pos.x, e.pos.z, (e.type === 'boss' ? 60 : e.type === 'roomba' || e.type === 'truck' ? 34 : e.type === 'lowrider' ? 22 : 16) * big, 1);
     fadeAll(e.type === 'boss' ? 0.3 : 0.018 * big);
+    if (e.type === 'copter') { sfx.crash(1); hud.floater(e.pos, 'SHOT DOWN'); }
     if (e.type === 'lowrider' || e.type === 'roomba' || e.type === 'truck') explode(e.pos.x, 1, e.pos.z, e.type === 'lowrider' ? 7 : 9, 60, false);
     if (e.type === 'roomba' && e.stage === S.stage) S.stageRoombas++;
     for (let k = 0; k < 26; k++) parts.spawn(e.pos.x, 1.5, e.pos.z, rand(-6, 6), rand(3, 9), rand(-6, 6), { life: 0.7, size: 0.5, color: e.rgb, grav: 20, kind: 0 });
     drainModel(e.model);
     e.model.root.userData.fall = 0;
-    S.bodies.push({ root: e.model.root, t: 0, car: e.type === 'lowrider' || e.type === 'roomba' || e.type === 'truck' });
+    S.bodies.push({ root: e.model.root, t: 0, car: e.type === 'lowrider' || e.type === 'roomba' || e.type === 'truck', copter: e.type === 'copter' ? { y: e.model.root.position.y, spin: rand(2, 4) } : null });
     if (silent) return;
     sfx.kill();
     S.stats.kills++;
@@ -864,7 +928,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     // run the Syndicate over
     if (Math.abs(vf) > 8) {
       for (const e of S.enemies.slice()) {
-        if (e.type === 'lowrider' || e.type === 'roomba' || e.type === 'truck') continue;
+        if (e.type === 'lowrider' || e.type === 'roomba' || e.type === 'truck' || e.type === 'copter') continue;
         if (Math.hypot(e.pos.x - CAR.pos.x, e.pos.z - CAR.pos.z) < 2.4 + e.r) {
           if (e.type === 'boss') { if (e.hitCd <= 0) { hitEnemy(e, 60); e.hitCd = 1; vf *= 0.3; sfx.crash(1); CAR.vx *= 0.3; CAR.vz *= 0.3; } }
           else { const ex = e.pos.x, ez = e.pos.z; hitEnemy(e, 999); explode(ex, 1.2, ez, 5, 45, true); splat(ex, ez, 3, e.color, 0.5); if (Math.random() < 0.3) quip('SALLY', ['SPLAT!', 'Ten points!', 'Hood ornament!', 'He EXPLODED, Mack! Do it again!'], 1, 3); }
@@ -894,7 +958,8 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     // pain pills: the world floods with color for a while
     if (P.color > 0) { P.color = Math.max(0, P.color - rdt); if (P.color === 0) say('MACK', pick(LINES.pillsOff), 2.5); }
     NU.ntime.value += rdt;
-    NU.seeColor.value += ((P.color > 0 ? Math.min(1, P.color / 1.5) : P.focusOn ? 0.38 : 0) - NU.seeColor.value) * Math.min(1, rdt * 3);
+    const nausea = Math.max(clamp((S.bleed - 0.55) / 0.45, 0, 1), (S.caseDef.hell || 0) * 0.35);
+    NU.seeColor.value += (Math.max(P.color > 0 ? Math.min(1, P.color / 1.5) : P.focusOn ? 0.38 : 0, nausea * 0.3) - NU.seeColor.value) * Math.min(1, rdt * 3);
     S.quipT -= rdt; S.donutT -= rdt; S.retortT -= rdt;
 
     // aim on the ground plane
@@ -912,6 +977,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     } else handleInput(rdt, pdt);
 
     updateWayfinding(rdt);
+    updateHell(rdt);
     if (CAR.alive) updateCar(P.inCar ? pdt : dt);
     else if (CAR.respawn > 0) {
       CAR.respawn -= dt;
@@ -937,12 +1003,15 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     S.bleedT -= rdt;
     if (S.bleedT <= 0) {
       S.bleedT = 0.5;
-      fadeAll(0.0016);
-      S.bleed = clamp(coverage(S.area) / S.caseDef.bleedCap, 0, 1.2);
+      fadeAll(0.001);
+      S.bleed = clamp(coverage(S.area) / (S.caseDef.bleedCap * BLEED_SCALE), 0, 1.2);
       S.peak = Math.max(S.peak, S.bleed);
       NU.paintH.value = 6 + S.bleed * 24;
-      if (S.bleed > 0.7 && S.bleedWarn <= 0) { S.bleedWarn = 20; say('MACK', pick(LINES.bleed), 3); }
-      S.bleedWarn -= 0.5;
+      // Mack's stomach turns as the city fills with color
+      const lvl = S.bleed < 0.35 ? 0 : S.bleed < 0.6 ? 1 : S.bleed < 0.85 ? 2 : 3;
+      if (lvl > (S.sickLvl || 0)) say('MACK', pick(LINES.sick[lvl - 1]), 3.2);
+      S.sickLvl = Math.max(S.sickLvl || 0, lvl);
+      if (lvl < (S.sickLvl || 0) - 1) S.sickLvl = lvl + 1;
       if (S.bleed >= 1 && !S.over) lose('bleed');
     }
     flushPaint(rdt);
@@ -963,6 +1032,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     if (g.type === 'goto') out.push({ x: g.x, z: g.z, c: '#ff2a3a', k: 'goto', label: g.label });
     if (g.type === 'portals') for (const p of S.portals) out.push({ x: p.pos.x, z: p.pos.z, c: '#ff2d95', k: 'portal' });
     if (g.type === 'roombas' || S.stage.roombas) for (const e of S.enemies) if (e.type === 'roomba') out.push({ x: e.pos.x, z: e.pos.z, c: '#18e0ff', k: 'bot' });
+    for (const e of S.enemies) if (e.type === 'copter') out.push({ x: e.pos.x, z: e.pos.z, c: '#ffe11a', k: 'copter' });
     if (g.type === 'boss' && S.boss && !S.boss.dead) out.push({ x: S.boss.pos.x, z: S.boss.pos.z, c: '#ffe11a', k: 'boss' });
     if (g.type === 'kill') { let best = null, bd = 1e9; for (const e of S.enemies) { const d = Math.hypot(e.pos.x - focus().x, e.pos.z - focus().z); if (d < bd) { bd = d; best = e; } } if (best && bd > 50) out.push({ x: best.pos.x, z: best.pos.z, c: '#ffffff', k: 'kill' }); }
     return out;
@@ -1081,6 +1151,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
   }
 
   function animWalk(m, speed, dt, phaseKey = 'walk') {
+    if (!m.legL) return;
     m[phaseKey] += speed * dt * 0.9;
     const s = Math.sin(m[phaseKey]) * Math.min(1, speed / 6) * 0.7;
     m.legL.rotation.x = s; m.legR.rotation.x = -s;
@@ -1211,7 +1282,8 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
           const ddx = tix - ix, ddz = tiz - iz;
           let sx = ix, sz = iz;
           if (Math.abs(ddx) >= Math.abs(ddz) && ddx) sx += Math.sign(ddx); else if (ddz) sz += Math.sign(ddz); else if (ddx) sx += Math.sign(ddx);
-          e.wp = { x: roadC(sx), z: roadC(sz) };
+          if (sx === ix && sz === iz) e.direct = true; // same intersection: just slide along the walls toward it
+          else e.wp = { x: roadC(sx), z: roadC(sz) };
         }
       }
     }
@@ -1226,7 +1298,9 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
   }
 
   function wanderTarget(e) {
-    if (!e.wander || Math.hypot(e.wander.x - e.pos.x, e.wander.z - e.pos.z) < 4) {
+    e.wanderT = (e.wanderT || 0) - 1 / 30;
+    if (!e.wander || e.wanderT <= 0 || Math.hypot(e.wander.x - e.pos.x, e.wander.z - e.pos.z) < 4) {
+      e.wanderT = rand(5, 9);
       const ix = nodeIndex(e.pos.x) + pick([-1, 0, 1]), iz = nodeIndex(e.pos.z) + pick([-1, 0, 1]);
       e.wander = { x: roadC(clamp(ix, 0, C.N)) + rand(-8, 8), z: roadC(clamp(iz, 0, C.N)) + rand(-8, 8) };
       if (S.area && Math.random() < 0.5) { const p = roadPoint(S.area); e.wander = p; }
@@ -1252,6 +1326,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       }
       if (e.type === 'lowrider' || e.type === 'truck') { updateLowrider(e, dt, dp); continue; }
       if (e.type === 'roomba') { updateRoomba(e, dt, dp); continue; }
+      if (e.type === 'copter') { updateCopter(e, dt, dp); continue; }
       let speed = 0;
       if (e.type === 'dauber') {
         if (dp < 16) { const tx = e.pos.x - dxp, tz = e.pos.z - dzp; nav(e, tx, tz, dt, e.speed * 1.2); speed = e.speed * 1.2; }
@@ -1274,6 +1349,37 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
           }
         }
         if (e.paintCd <= 0) { e.paintCd = 0.3; splat(e.pos.x + rand(-0.6, 0.6), e.pos.z + rand(-0.6, 0.6), 1.5, e.color, 0.75, 3); }
+      } else if (e.type === 'cultist') {
+        // keeps its distance, chants, heals the faithful, paints the eye
+        if (dp > 28) { nav(e, f.x, f.z, dt, e.speed); speed = e.speed; e.face = e.moveFace ?? e.face; }
+        else {
+          const away = dp < 16 ? -1 : 0, sx = -dzp / dp, sz = dxp / dp, dir = Math.sin(S.time * 0.4 + e.walk) > 0 ? 1 : -1;
+          e.pos.x += (sx * dir * 2.5 + dxp / dp * away * 4) * dt; e.pos.z += (sz * dir * 2.5 + dzp / dp * away * 4) * dt;
+          speed = 3; e.face = Math.atan2(dxp, dzp);
+          if (e.cd <= 0) { e.cd = rand(2, 2.8); for (const k of [-0.25, 0, 0.25]) { const a = e.face + k; enemyShot(V(e.pos.x + Math.sin(a), 1.8, e.pos.z + Math.cos(a)), Math.sin(a), Math.cos(a), pick(GANG_COLORS), 20, 9); } }
+        }
+        e.healT = (e.healT || 0) - dt;
+        if (e.healT <= 0) {
+          e.healT = 1;
+          for (const o of S.enemies) if (o !== e && o.type !== 'boss' && o.hp < o.maxHp && Math.hypot(o.pos.x - e.pos.x, o.pos.z - e.pos.z) < 12) { o.hp = Math.min(o.maxHp, o.hp + 6); parts.spawn(o.pos.x, 2.5, o.pos.z, 0, 2, 0, { life: 0.6, size: 0.6, color: [1, 1, 1] }); }
+        }
+        if (e.paintCd <= 0) { e.paintCd = 5; for (let k = 0; k < 10; k++) { const a = k / 10 * 6.28; splat(e.pos.x + Math.cos(a) * 4, e.pos.z + Math.sin(a) * 4, 0.8, e.color, 0.8, 1); } splat(e.pos.x, e.pos.z, 1.4, '#ffffff', 0.9, 0); }
+        e.model.eye.rotation.z += dt * 2;
+      } else if (e.type === 'imp') {
+        // fast, low, lunges for Mack (or Sally)
+        let tx = f.x, tz = f.z;
+        if (!SA.down && !SA.inCar && Math.hypot(SA.pos.x - e.pos.x, SA.pos.z - e.pos.z) < dp) { tx = SA.pos.x; tz = SA.pos.z; }
+        const td = Math.hypot(tx - e.pos.x, tz - e.pos.z);
+        if (e.lunge > 0) {
+          e.lunge -= dt;
+          e.pos.x += e.lx * 26 * dt; e.pos.z += e.lz * 26 * dt;
+          if (td < 1.6 && e.hitCd <= 0) { e.hitCd = 0.8; if (tx === f.x && tz === f.z) damagePlayer(P.inCar ? 8 : 10); else damageSally(10); splat(tx, tz, 1.6, e.color, 0.8, 4); }
+          speed = 14;
+        } else {
+          nav(e, tx, tz, dt, e.speed); speed = e.speed; e.face = e.moveFace ?? e.face;
+          if (td < 10 && e.cd <= 0) { e.cd = rand(1.2, 1.8); e.lunge = 0.35; e.lx = (tx - e.pos.x) / td; e.lz = (tz - e.pos.z) / td; e.face = Math.atan2(e.lx, e.lz); }
+        }
+        if (e.paintCd <= 0) { e.paintCd = 0.2; e.hue = ((e.hue || 0) + 1) % 6; splat(e.pos.x, e.pos.z, 0.9, GANG_COLORS[e.hue], 0.75, 2); }
       } else if (e.type === 'goon') {
         // rainbow trenchcoat, three-round burst, leaves a rainbow behind him
         if (dp > 24 || !clearLine(e.pos.x, e.pos.z, f.x, f.z)) { if (dp < 140) nav(e, f.x, f.z, dt, e.speed); else { const w = wanderTarget(e); nav(e, w.x, w.z, dt, e.speed); } speed = e.speed; e.face = e.moveFace ?? e.face; }
@@ -1312,6 +1418,9 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       animWalk(m, speed, dt);
       m.root.scale.setScalar((e.type === 'boss' ? e.def.scale : TYPES[e.type].scale) * (e.flash > 0 ? 1.08 : 1));
       if (e.type === 'goon') { m.root.rotation.order = 'XYZ'; m.armR.rotation.x = -1.45; m.gun.rotation.x = 0; }
+      if (e.type === 'imp') m.root.position.y = Math.abs(Math.sin(S.time * 9 + e.walk)) * (e.lunge > 0 ? 1.2 : 0.5);
+      if (m.halo) m.halo.rotation.z += dt * 2;
+      if (m.dottie) { m.brush.rotation.y += dt * 14; m.dottie.head.rotation.z = Math.sin(S.time * 3) * 0.3; m.dottie.armL.rotation.z = 2.5 + Math.sin(S.time * 5) * 0.4; }
       if (m.prism) { m.prism.rotation.y += dt * 2; m.prism.rotation.x = Math.sin(S.time) * 0.3; }
     }
   }
@@ -1320,7 +1429,8 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     const def = e.def;
     const leash = Math.hypot(e.pos.x - e.anchor.x, e.pos.z - e.anchor.z);
     let speed = 0;
-    if (dp > 14 && leash < 70) { nav(e, f.x, f.z, dt, e.speed); speed = e.speed; }
+    if (e.speed <= 0.1) { speed = 0; }
+    else if (dp > 14 && leash < 70) { nav(e, f.x, f.z, dt, e.speed); speed = e.speed; }
     else if (leash >= 70) { nav(e, e.anchor.x, e.anchor.z, dt, e.speed); speed = e.speed; }
     else { const a = S.time * 0.6; e.pos.x += Math.cos(a) * 3 * dt; e.pos.z += Math.sin(a) * 3 * dt; speed = 3; }
     e.face = Math.atan2(dxp, dzp);
@@ -1344,6 +1454,50 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
           const ddx = tx - mz.x, ddz = tz - mz.z, dd = Math.hypot(ddx, ddz);
           enemyShot(mz, ddx / dd * dd / 30, ddz / dd * dd / 30, pick(GANG_COLORS), 18, 16, 'bomb');
         }
+      } else if (def.attack === 'cult') {
+        // teleports in a puff of color, rings of prism orbs
+        e.cd = enraged ? 1.6 : 2.3;
+        const n = enraged ? 16 : 12;
+        for (let k = 0; k < n; k++) { const a = k / n * 6.28 + S.time; enemyShot(V(e.pos.x, 2.2 * def.scale * 0.5, e.pos.z), Math.sin(a), Math.cos(a), GANG_COLORS[k % 6], 18, 8); }
+        e.tpT = (e.tpT || 0) - 1;
+        if (e.tpT <= 0) {
+          e.tpT = 3;
+          for (let k = 0; k < 30; k++) parts.spawn(e.pos.x, 2, e.pos.z, rand(-6, 6), rand(0, 6), rand(-6, 6), { life: 0.6, size: 0.8, color: hexToRgb(pick(GANG_COLORS)) });
+          const a = Math.random() * 6.28, r = rand(14, 20);
+          const p = { x: f.x + Math.cos(a) * r, z: f.z + Math.sin(a) * r }; pushOut(p, e.r);
+          e.pos.x = p.x; e.pos.z = p.z; e.anchor.set(p.x, 0, p.z);
+          sfx.portal();
+        }
+        if (Math.random() < 0.35) say('NARR', pick(def.taunts || ['"Behold the Seventh Color!"']), 2.4);
+      } else if (def.attack === 'mother') {
+        e.cd = enraged ? 1.3 : 1.9;
+        const n = 18;
+        for (let k = 0; k < n; k++) { const a = k / n * 6.28 + S.time * 0.5; enemyShot(V(e.pos.x, 2, e.pos.z), Math.sin(a), Math.cos(a), GANG_COLORS[k % 6], 22, 8); }
+        if (Math.random() < 0.4) say('DOTTIE', pick(['*hic* JOIN USSS, boss! The rainbow is so WARM!', 'Beep boop! Hallelujah! *hic*', 'Malone Investigations has been REPAINTED! Please hold for ENLIGHTENMENT.', 'I see seven colors, boss! SEVEN! *hic* I only had three drinks!']), 2.6);
+      } else if (def.attack === 'hell') {
+        e.mode = ((e.mode || 0) + 1) % 3;
+        if (e.mode === 0) { e.cd = enraged ? 3 : 4; e.beamT = 3; e.beamA = e.face - 1.3; }
+        else if (e.mode === 1) {
+          e.cd = enraged ? 1.4 : 2;
+          for (let k = 0; k < (enraged ? 6 : 4); k++) { const tx = f.x + rand(-9, 9), tz = f.z + rand(-9, 9); const ddx = tx - mz.x, ddz = tz - mz.z, dd = Math.hypot(ddx, ddz); enemyShot(V(mz.x, 10, mz.z), ddx / dd * dd / 30, ddz / dd * dd / 30, pick(GANG_COLORS), 18, 15, 'bomb'); }
+        } else { e.cd = 1.6; for (let k = 0; k < 20; k++) { const a = k / 20 * 6.28; enemyShot(V(e.pos.x, 3, e.pos.z), Math.sin(a), Math.cos(a), GANG_COLORS[k % 6], 24, 9); } }
+        if (Math.random() < 0.3) say('NARR', pick(def.taunts), 2.6);
+      } else if (def.attack === 'mech') {
+        // the Re-Election Machine: sweeping paint cannons, money bombs and a stomp
+        e.mode = ((e.mode || 0) + 1) % 3;
+        if (e.mode === 0) { e.sweep = 1.8; e.sweepA = e.face - 0.9; e.cd = 2.6; }
+        else if (e.mode === 1) {
+          e.cd = enraged ? 1.2 : 1.8;
+          for (let k = 0; k < (enraged ? 4 : 3); k++) {
+            const tx = f.x + rand(-7, 7), tz = f.z + rand(-7, 7);
+            const ddx = tx - mz.x, ddz = tz - mz.z, dd = Math.hypot(ddx, ddz);
+            enemyShot(V(mz.x, 7, mz.z), ddx / dd * dd / 30, ddz / dd * dd / 30, pick(['#ffd35a', '#62ff2e']), 18, 15, 'bomb');
+          }
+          if (Math.random() < 0.5) say('NARR', pick(['"VOTE! FOR! KRAAANE!" (over a loudspeaker)', '"This machine was paid for by the people of Rain City! Thank you, people!"', '"I\'m not a crook, Malone. I\'m a MECH!"', '"Re-elect me or I\'ll step on you!"']), 2.4);
+        } else {
+          e.cd = 1.4;
+          if (dp < 16) { fx.shake = 0.9; sfx.boom(1); splat(e.pos.x, e.pos.z, 14, pick(GANG_COLORS), 0.9, 14); damagePlayer(P.inCar ? 25 : 18); if (Math.hypot(SA.pos.x - e.pos.x, SA.pos.z - e.pos.z) < 16) damageSally(14); for (let k = 0; k < 40; k++) { const a = k / 40 * 6.28; parts.spawn(e.pos.x + Math.cos(a) * 3, 0.5, e.pos.z + Math.sin(a) * 3, Math.cos(a) * 20, 2, Math.sin(a) * 20, { life: 0.5, size: 0.8, color: [0.9, 0.9, 0.9], kind: 1 }); } }
+        }
       } else if (def.attack === 'money') {
         // hurls bags of painted money and sprays gold
         e.cd = enraged ? 1.0 : 1.5;
@@ -1358,6 +1512,19 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
         e.cd = enraged ? 3.5 : 5;
         e.beamT = 2.6; e.beamA = e.face - 1.2;
         for (let k = 0; k < 10; k++) { const a = e.face + (k - 4.5) * 0.12; enemyShot(mz, Math.sin(a), Math.cos(a), pick(GANG_COLORS), 28, 7); }
+      }
+    }
+    if (e.sweep > 0) {
+      e.sweep -= dt;
+      e.sweepA += dt * 1.0;
+      e.sweepCd = (e.sweepCd || 0) - dt;
+      if (e.sweepCd <= 0) {
+        e.sweepCd = 0.05;
+        e.hue = ((e.hue || 0) + 1) % 6;
+        for (const side of [-1, 1]) {
+          const ox = e.pos.x + Math.cos(e.face) * side * 3.5, oz = e.pos.z - Math.sin(e.face) * side * 3.5;
+          enemyShot(V(ox, 5, oz), Math.sin(e.sweepA), Math.cos(e.sweepA), GANG_COLORS[e.hue], 30, 5);
+        }
       }
     }
     if (e.burst > 0 && e.cd < (enraged ? 2.2 : 3.2) - 0.08 * (14 - e.burst)) {
@@ -1390,9 +1557,45 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       if (def.summon === 'portal') { if (S.portals.length < 3) openPortal(); }
       else for (let k = 0; k < 2; k++) { const a = Math.random() * 6; addEnemy(def.summon, e.pos.x + Math.cos(a) * 8, e.pos.z + Math.sin(a) * 8); }
     }
-    if (def.attack === 'beam' && e.phase === 0 && e.hp < e.maxHp * 0.66) { e.phase = 1; openPortal(); say('SALLY', 'He\'s opening MORE holes! Rude!', 2.5); }
-    if (def.attack === 'beam' && e.phase === 1 && e.hp < e.maxHp * 0.33) { e.phase = 2; openPortal(); }
+    if ((def.attack === 'beam' || def.attack === 'hell') && e.phase === 0 && e.hp < e.maxHp * 0.66) { e.phase = 1; openPortal(); say('SALLY', 'He\'s opening MORE holes! Rude!', 2.5); }
+    if ((def.attack === 'beam' || def.attack === 'hell') && e.phase === 1 && e.hp < e.maxHp * 0.33) { e.phase = 2; openPortal(); }
     return speed;
+  }
+
+  // Paint copters: cruise the district at rooftop height, dump buckets of color, and love to hover over Mack
+  function updateCopter(e, dt, dp) {
+    const f = focus();
+    e.turnT -= dt;
+    if (!e.goal || e.turnT <= 0 || Math.hypot(e.goal.x - e.pos.x, e.goal.z - e.pos.z) < 8) {
+      e.turnT = rand(6, 11);
+      if (dp < 110 && Math.random() < 0.6) { const a = Math.random() * 6.28; e.goal = { x: f.x + Math.cos(a) * 14, z: f.z + Math.sin(a) * 14 }; }
+      else e.goal = roadPoint(S.area);
+    }
+    const dx = e.goal.x - e.pos.x, dz = e.goal.z - e.pos.z, d = Math.hypot(dx, dz) || 1;
+    const sp = Math.min(e.speed, d * 0.8);
+    e.vx = (e.vx || 0) + (dx / d * sp - (e.vx || 0)) * Math.min(1, dt * 1.5);
+    e.vz = (e.vz || 0) + (dz / d * sp - (e.vz || 0)) * Math.min(1, dt * 1.5);
+    e.pos.x += e.vx * dt; e.pos.z += e.vz * dt;
+    e.pos.x = clamp(e.pos.x, -C.edge, C.edge); e.pos.z = clamp(e.pos.z, -C.edge, C.edge);
+    e.face += wrapAngle(Math.atan2(e.vx, e.vz) - e.face) * Math.min(1, dt * 2);
+    const alt = 24 + Math.sin(S.time * 0.8 + e.walk) * 1.5;
+    // dump the bucket
+    if (e.paintCd <= 0) {
+      e.paintCd = dp < 30 ? 0.55 : 0.9;
+      e.hue = (e.hue + 1) % 6;
+      const b = V(e.pos.x, alt - 4, e.pos.z);
+      enemyShot(b, e.vx / 18, e.vz / 18, GANG_COLORS[e.hue], 18, 12, 'bomb');
+      S.shots[S.shots.length - 1].vy = -2; S.shots[S.shots.length - 1].life = 3.2;
+    }
+    const m = e.model;
+    m.root.position.set(e.pos.x, alt, e.pos.z);
+    m.root.rotation.set(0, e.face, 0);
+    m.body.rotation.x = clamp(Math.hypot(e.vx, e.vz) / 60, 0, 0.3);
+    m.rotor.rotation.y += dt * 30;
+    m.tail.rotation.x += dt * 40;
+    m.beam.rotation.z = Math.sin(S.time * 0.9 + e.walk) * 0.35;
+    m.root.scale.setScalar(e.flash > 0 ? 1.05 : 1);
+    if (dp < 90 && Math.random() < dt * 0.4) sfx.spray(0.4);
   }
 
   // Paintbots wander like real robot vacuums: straight lines, bounce off walls, turn at random
@@ -1412,7 +1615,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     if (e.paintCd <= 0) {
       e.paintCd = 0.06;
       const bx = e.pos.x - Math.sin(e.face) * 2.6, bz = e.pos.z - Math.cos(e.face) * 2.6;
-      stroke(e.lastPaint?.x ?? bx, e.lastPaint?.z ?? bz, bx, bz, 6.5, GANG_COLORS[e.hue], 0.9);
+      stroke(e.lastPaint?.x ?? bx, e.lastPaint?.z ?? bz, bx, bz, 5, GANG_COLORS[e.hue], 0.85);
       e.lastPaint = { x: bx, z: bz };
       if (Math.random() < 0.3) splat(e.pos.x + rand(-5, 5), e.pos.z + rand(-5, 5), rand(0.8, 1.8), GANG_COLORS[e.hue], 0.8, 3);
       if (dp < 60 && Math.random() < 0.08) sfx.spray(clamp(1 - dp / 60, 0, 1));
@@ -1527,16 +1730,41 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
   function spawner(dt) {
     const st = S.stage;
     if (!st || S.over) return;
+    // goons left far behind melt back into the rain so the fight stays where Mack is
+    const f = focus();
+    for (const e of S.enemies.slice()) {
+      if (e.type === 'boss' || (e.type === 'roomba' && st.roombas) || e.emerge > 0) continue;
+      if (Math.abs(e.pos.x - f.x) + Math.abs(e.pos.z - f.z) > 340) { S.enemies.splice(S.enemies.indexOf(e), 1); removeEnemy(e); }
+    }
     S.spawnT -= dt;
     const alive = S.enemies.filter((e) => e.type !== 'boss').length;
     // ramp: the longer a stage runs, the faster they come
     const interval = st.interval * (S.portals.length ? 0.8 : 1);
+    // waves: every so often the sky opens wider and a crowd of goons pours out
+    if (!st.roam && st.max > 0 && st.goal.type !== 'goto') {
+      S.waveT = (S.waveT ?? 22) - dt;
+      if (S.waveT <= 0) {
+        S.wave = (S.wave || 1) + 1;
+        S.waveT = Math.max(16, 30 - S.wave * 2);
+        const n = Math.min(10, 3 + S.wave);
+        hud.stamp(`WAVE ${S.wave}`);
+        say(pick(['SALLY', 'MACK']), pick(['Here comes another bunch!', 'The sky\'s spitting out a whole parade!', 'More of \'em. There\'s always more of \'em.', 'WAVE! Ooh, I love a wave!']), 2.4);
+        for (let k = 0; k < n; k++) later(() => {
+          if (!S || S.stage !== st) return;
+          const src = S.portals.length ? pick(S.portals) : null;
+          const type = weighted(st.mix);
+          if (src && !['lowrider', 'truck', 'roomba', 'copter'].includes(type)) { const e2 = addEnemy(type, src.pos.x, src.pos.z); e2.emerge = 0.7; e2.emergeDir = Math.random() * 6.28; }
+          else { const p = spawnPoint(40, 100); addEnemy(type, p.x, p.z); }
+        }, k * 350);
+      }
+    }
     // every fight has at least one tear in the sky spitting goons out
     if (!st.roam && st.max > 0 && !S.portals.length && !S.ambientOpening) { S.ambientOpening = true; later(() => { S.ambientOpening = false; if (S.stage && !S.portals.length) openPortal(); }, 1500); }
-    if (S.spawnT <= 0 && alive < st.max) {
+    if (S.spawnT <= 0 && alive < st.max && S.enemies.length < st.max * 1.8) {
       S.spawnT = interval;
       const type = weighted(st.mix);
       let p;
+      if (type === 'imp' && S.fissures && S.fissures.length) { const f2 = pick(S.fissures); const e2 = addEnemy('imp', f2.x, f2.z); e2.emerge = 0.7; e2.emergeDir = Math.random() * 6.28; return; }
       const portal = S.portals.length && Math.random() < 0.9 ? pick(S.portals) : null;
       if (portal && type !== 'lowrider' && type !== 'truck' && type !== 'roomba') { const e2 = addEnemy(type, portal.pos.x, portal.pos.z); e2.emerge = 0.7; e2.emergeDir = Math.random() * Math.PI * 2; sfx.pop(0.6); return; }
       else { const sa = S.area; if (st.roam) S.area = null; p = spawnPoint(40, 110); S.area = sa; }
@@ -1588,7 +1816,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       const sp = Math.hypot(r.vx, r.vz), st = sp * dt;
       const wall = rayDist(r.pos.x, r.pos.z, r.vx / sp, r.vz / sp, st);
       r.pos.x += r.vx * dt; r.pos.z += r.vz * dt;
-      const ty = r.target && S.portals.includes(r.target) ? 6 : 1.3;
+      const ty = r.target && S.portals.includes(r.target) ? 6 : r.target && r.target.type === 'copter' ? 22 : 1.3;
       r.pos.y += (ty - r.pos.y) * Math.min(1, dt * 2.5);
       r.mesh.position.copy(r.pos);
       r.mesh.rotation.y = Math.atan2(r.vx, r.vz);
@@ -1637,6 +1865,19 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     for (let i = S.bodies.length - 1; i >= 0; i--) {
       const b = S.bodies[i];
       b.t += dt;
+      if (b.copter) {
+        // spinning down out of the rain, then boom
+        if (b.copter.y > 0) {
+          b.copter.y -= dt * (6 + b.t * 14);
+          b.root.rotation.y += dt * b.copter.spin * 3;
+          b.root.rotation.z = Math.min(0.8, b.t);
+          b.root.position.y = Math.max(0, b.copter.y);
+          if (Math.random() < dt * 30) parts.spawn(b.root.position.x, b.root.position.y, b.root.position.z, rand(-1, 1), rand(1, 3), rand(-1, 1), { life: 1.4, size: 2.5, grow: 2, color: [0.1, 0.1, 0.11], alpha: 0.7, kind: 1 });
+          if (b.copter.y <= 0) { explode(b.root.position.x, 1, b.root.position.z, 9, 70, false); wash(b.root.position.x, b.root.position.z, 30, 1); }
+        }
+        if (b.t > 9.5) { scene.remove(b.root); S.bodies.splice(i, 1); }
+        continue;
+      }
       if (!b.car) b.root.rotation.x = -Math.min(1, b.t * 3) * Math.PI / 2;
       b.root.position.y = b.car ? 0 : 0.3;
       if (b.t > 8) { b.root.position.y -= (b.t - 8) * 2; }
@@ -1734,6 +1975,9 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     fx.shake = Math.max(0, fx.shake - dt * 2.5);
     if (fx.shake > 0) camera.position.add(V(rand(-1, 1), rand(-1, 1), rand(-1, 1)).multiplyScalar(fx.shake * 0.8));
     camera.lookAt(camLook);
+    // the nausea sway
+    const nz = S ? clamp((S.bleed - 0.55) / 0.45, 0, 1) + (S.puke !== undefined ? 0.6 : 0) : 0;
+    if (nz > 0) { const t = performance.now() / 1000; camera.rotateZ(Math.sin(t * 1.3) * 0.05 * nz); camera.rotateX(Math.sin(t * 0.9) * 0.02 * nz); }
     // see-through cutaway for buildings between camera and Mack
     NU.cutA.value.copy(camera.position);
     NU.cutB.value.set(focus().x, 1.5, focus().z);
@@ -1749,6 +1993,8 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       killAll() { if (!S) return; for (const e of S.enemies.slice()) hitEnemy(e, 99999); for (const p of S.portals.slice()) closePortal(p); },
       win() { if (S) { S.stageIdx = S.stages.length - 1; S.stage = null; win(); } },
       player: P, car: CAR, sally: SA, aim, mouse, keys, enterCar, openPortal, summonCar,
+      lose(reason) { if (S) lose(reason); },
+      spawn(type, x, z) { const p = { x, z }; pushOut(p, 3); return addEnemy(type, p.x, p.z); },
       tp(x, z) { P.pos.set(x, 0, z); if (P.inCar) CAR.pos.set(x, 0, z); snapCamera(); },
     },
   };

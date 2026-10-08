@@ -1,4 +1,4 @@
-// In-game HUD: grit, flasks, the City Infection meter, objective, minimap,
+// In-game HUD: grit, flasks, the City Color meter, objective, minimap,
 // captions (who said what), boss bar, floaters and off-screen pointers.
 import * as THREE from 'three';
 import { CAST } from './story.js';
@@ -15,6 +15,7 @@ export function createHud() {
     bleed: $('bleed-fill'), bleedPct: $('bleed-pct'), bleedBar: document.querySelector('.bar.bleed'),
     captions: $('captions'), hint: $('hint'), floaters: $('floaters'), pointers: $('pointers'),
     sally: $('sally-fill'), sallyState: $('sally-state'), ptMack: $('pt-mack'), ptSally: $('pt-sally'),
+    stomach: $('stomach'),
     ammo: $('ammo'), pillsN: $('pills-n'), colorWarn: $('color-warn'), focus: $('focus-fill'),
     vigHurt: $('vig-hurt'), vigFocus: $('vig-focus'), mini: $('minimap'), stamp: $('stamp'),
   };
@@ -81,6 +82,9 @@ export function createHud() {
     el.bleed.style.transform = `scaleX(${s.bleed})`;
     el.bleedPct.textContent = `${Math.round(s.bleed * 100)}%`;
     el.bleedBar.classList.toggle('warn', s.bleed > 0.75);
+    const st = s.bleed < 0.35 ? 0 : s.bleed < 0.6 ? 1 : s.bleed < 0.85 ? 2 : 3;
+    el.stomach.textContent = ['FINE', 'QUEASY', 'GREEN', 'ABOUT TO BLOW'][st];
+    el.stomach.className = st ? `s${st}` : '';
     hurtT = Math.max(0, hurtT - dt * 1.5);
     el.vigHurt.style.opacity = Math.max(hurtT, s.hp < 0.3 ? 0.35 + Math.sin(s.time * 5) * 0.15 : 0);
     el.vigFocus.style.opacity = s.focus ? 1 : 0;
@@ -102,22 +106,50 @@ export function createHud() {
       f.d.style.opacity = Math.min(1, f.t);
       if (f.t <= 0) { f.d.remove(); floaters.splice(i, 1); }
     }
+    enemyBars(s, w, h);
     pointers(s, w, h);
     minimap(s);
+  }
+
+  // rainbow health bars over anyone hurt but still standing
+  const barEls = [];
+  const ebars = document.getElementById('ebars');
+  function enemyBars(s, w, h) {
+    const list = [];
+    for (const e of s.enemies) if (!e.dead && e.hp < e.maxHp && e.type !== 'boss' && !(e.emerge > 0)) list.push([e.pos, e.hp / e.maxHp, e.type === 'copter' ? 26 : e.type === 'roomba' || e.type === 'truck' ? 7 : e.type === 'lowrider' ? 4.5 : 3.4 * (e.model.root.scale.x || 1), e.type === 'roomba' || e.type === 'truck' || e.type === 'copter' ? 70 : 40]);
+    for (const p of s.portals) if (p.hp < p.maxHp) list.push([p.pos, p.hp / p.maxHp, 13, 80]);
+    while (barEls.length < Math.min(list.length, 30)) { const d = document.createElement('div'); d.appendChild(document.createElement('i')); ebars.appendChild(d); barEls.push(d); }
+    barEls.forEach((d, i) => {
+      const it = list[i];
+      if (!it) { d.style.display = 'none'; return; }
+      v.set(it[0].x, it[2], it[0].z).project(s.camera);
+      if (v.z > 1 || Math.abs(v.x) > 1.05 || Math.abs(v.y) > 1.05) { d.style.display = 'none'; return; }
+      d.style.display = 'block';
+      d.style.left = `${(v.x * 0.5 + 0.5) * w}px`; d.style.top = `${(-v.y * 0.5 + 0.5) * h}px`;
+      d.style.width = `${it[3]}px`;
+      d.style.setProperty('--w', `${it[3]}px`);
+      d.firstChild.style.width = `${Math.max(0, it[1]) * 100}%`;
+    });
   }
 
   // arrows at the screen edge for portals and the boss
   const ptrEls = [];
   function pointers(s, w, h) {
+    // every goon gets a small arrow in his own color; objectives get big ones
     const targets = [];
-    for (const p of s.portals) targets.push([p.pos, '#ff2d95']);
-    for (const e of s.enemies) if (e.type === 'roomba') targets.push([e.pos, '#18e0ff']);
-    if (s.boss) targets.push([s.boss.pos, '#ffe11a']);
+    for (const o of s.objectives || []) targets.push([o, o.c, 1.4]);
+    for (const p of s.portals) targets.push([p.pos, '#ff2d95', 1.3]);
+    if (s.boss) targets.push([s.boss.pos, '#ffe11a', 1.5]);
+    const pl = s.player;
+    const goons = s.enemies.filter((e) => e.type !== 'boss' && Math.abs(e.pos.x - pl.x) + Math.abs(e.pos.z - pl.z) < 220)
+      .sort((a, b) => (Math.abs(a.pos.x - pl.x) + Math.abs(a.pos.z - pl.z)) - (Math.abs(b.pos.x - pl.x) + Math.abs(b.pos.z - pl.z))).slice(0, 18);
+    for (const e of goons) targets.push([e.pos, e.color, e.type === 'roomba' || e.type === 'truck' ? 1.1 : 0.65]);
     while (ptrEls.length < targets.length) { const d = document.createElement('div'); el.pointers.appendChild(d); ptrEls.push(d); }
     ptrEls.forEach((d, i) => {
       const t = targets[i];
       if (!t) { d.style.display = 'none'; return; }
       v.set(t[0].x, 2, t[0].z).project(s.camera);
+      d.style.scale = t[2];
       const on = Math.abs(v.x) < 0.95 && Math.abs(v.y) < 0.9 && v.z < 1;
       if (on) { d.style.display = 'none'; return; }
       let x = v.x, y = v.y;
@@ -220,6 +252,7 @@ export function createHud() {
     clear() {
       caps.splice(0).forEach((c) => c.wrap.remove());
       floaters.splice(0).forEach((f) => f.d.remove());
+      barEls.forEach((d) => (d.style.display = 'none'));
       el.bossbar.classList.add('hidden');
       lastFlasks = -1; lastAmmo = -1;
     },

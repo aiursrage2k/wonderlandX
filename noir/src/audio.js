@@ -267,6 +267,7 @@ const QUAL = {
   m7b5: { tones: [0, 3, 6, 10], voic: [3, 6, 10, 13], scale: [0, 1, 3, 5, 6, 8, 10] },
   dim7: { tones: [0, 3, 6, 9], voic: [3, 6, 9, 12], scale: [0, 2, 3, 5, 6, 8, 9, 11] },
   sus: { tones: [0, 5, 7, 10], voic: [5, 10, 14, 19], scale: [0, 2, 5, 7, 9, 10] },
+  '7sus': { tones: [0, 5, 7, 10], voic: [5, 10, 14, 19], scale: [0, 2, 5, 7, 9, 10] },
 };
 const NOTE = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
 function chord(name) {

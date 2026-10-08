@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { nmat, noirify } from './paint.js';
 import { mulberry32 } from './util.js';
-import { makeCar, makeCop, makeMayor } from './models.js';
+import { makeCar, makeCop, makeMayor, rainbowCoat } from './models.js';
 
 export const C = { N: 16, B: 56, R: 24, P: 80, half: 652, edge: 648, span: 1400 };
 export const roadC = (i) => -640 + i * C.P; // road centerline, i = 0..16
@@ -41,6 +41,7 @@ export const L = {
   office: { b: [2, 2], name: 'Malone Investigations' },
   bar: { b: [4, 4], name: 'The Last Drop' },
   park: { b: [1, 1], name: 'Mercy Park' },
+  church: { b: [3, 0], name: 'Cathedral of the Holy Spectrum' },
   park2: { b: [3, 11], name: 'Potter\'s Field' },
   club: { b: [2, 8], name: 'The Kaleidoscope Club' },
   cityHall: { b: [7, 3], name: 'City Hall' },
@@ -680,6 +681,28 @@ export function buildCity(scene) {
         const ban = new THREE.Mesh(new THREE.PlaneGeometry(5, 14), noirify(new THREE.MeshLambertMaterial({ map: textTex('KRANE', { w: 128, h: 360, font: 'bold 34px Georgia', bg: '#d9b04a', fg: '#1a1408' }) }), { keep: 1 }));
         ban.position.set(bxp, 12, cz + 8.3); sc.add(ban);
       }
+      return;
+    }
+    if (kind === 'church') {
+      // the Cathedral of the Holy Spectrum: black stone, two spires, and a rose window in every color
+      Wm.pave.flat(x0, z0, x1, z1, 0.33, 8);
+      Wm.dark.box(cx - 11, 0.3, z0 + 6, cx + 11, 26, z1 - 12, 8);
+      Wm.trim.geo(new THREE.CylinderGeometry(0.1, 15.6, 12, 4, 1, false, Math.PI / 4), tr(cx, 32, (z0 + 6 + z1 - 12) / 2, 1, 1, 1.9));
+      for (const sx2 of [-1, 1]) {
+        Wm.dark.box(cx + sx2 * 11 - 4, 0.3, z1 - 16, cx + sx2 * 11 + 4, 40, z1 - 8, 8);
+        Wm.trim.geo(new THREE.ConeGeometry(5.6, 22, 4), tr(cx + sx2 * 11, 51, z1 - 12, 1, 1, 1, Math.PI / 4));
+        Wm.dark.geo(new THREE.CylinderGeometry(0.15, 0.15, 6, 6), tr(cx + sx2 * 11, 64, z1 - 12));
+      }
+      for (let s2 = 0; s2 < 3; s2++) Wm.trim.box(cx - 7 + s2, 0.3 + s2 * 0.4, z1 - 8, cx + 7 - s2, 0.7 + s2 * 0.4, z1 - 4 - s2 * 1.4, 8);
+      addBox(cx - 15, z0 + 6, cx + 15, z1 - 8, 30, 'bldg');
+      const rose = new THREE.Mesh(new THREE.CircleGeometry(5.5, 32), rainbowCoat());
+      rose.position.set(cx, 18, z1 - 7.9); sc.add(rose);
+      const frame2 = new THREE.Mesh(new THREE.TorusGeometry(5.6, 0.5, 8, 32), mats.dark);
+      frame2.position.copy(rose.position); sc.add(frame2);
+      for (let k = 0; k < 8; k++) { const sp = new THREE.Mesh(new THREE.BoxGeometry(0.3, 11, 0.3), mats.dark); sp.position.copy(rose.position); sp.position.z += 0.1; sp.rotation.z = k * Math.PI / 8; sc.add(sp); }
+      const door = new THREE.Mesh(new THREE.PlaneGeometry(4, 7), rainbowCoat());
+      door.position.set(cx, 3.8, z1 - 7.95); sc.add(door);
+      sign('THE HOLY SPECTRUM · ALL COLORS WELCOME', cx, 30, z1 - 7.8, 0, 22, 2, 'bold 48px Georgia', '#ff2d95');
       return;
     }
     if (kind === 'plaza') {

@@ -180,8 +180,13 @@ function drawBoardMap() {
   pts.forEach((p, i) => (i ? mctx.lineTo(X(p.x), X(p.z)) : mctx.moveTo(X(p.x), X(p.z))));
   mctx.stroke();
   // pinned case tags
+  const used = [];
   for (const c of CASES) {
-    const p = caseSpot(c), x = X(p.x), y = X(p.z) + (c.id === 8 ? -40 : 0);
+    const p = caseSpot(c);
+    let x = X(p.x), y = X(p.z);
+    // cases in the same district stack down the board instead of overlapping
+    while (used.some(([ux, uy]) => Math.abs(ux - x) < 90 && Math.abs(uy - y) < 56)) y += 58;
+    used.push([x, y]);
     const open = c.id <= save.open, closed = !!save.best[c.id];
     mctx.save();
     mctx.translate(x, y); mctx.rotate(((c.id * 37) % 11 - 5) * 0.02);
@@ -307,7 +312,7 @@ function showResult(win, s) {
   $('res-sub').innerHTML = win ? `${c.title} — ${c.dame.name} can sleep tonight. Nobody else in Rain City can.` : s.reason === 'bleed' ? 'The city went Technicolor. Mack Malone took one look at a turquoise sky, lost his lunch in the gutter, and gave up. Somewhere a saxophone turned pink and wept.' : `Mack Malone, face down in a puddle. The rain didn't care. The rain never does.<br><br><span class="who-sally">Crazy Sally:</span> ${pick(['Well. That\'s that. I\'m going to the Last Drop to get drunk. Somebody scrape him up and bring him by.', 'Get up, Mack. ...No? Fine. I\'ll be at the bar. Getting drunk. Very drunk. In your honor.', 'Gus! GUS! Pour me everything! Mack\'s taking a nap in a puddle again!'])}`;
   const row = (a, b) => `<div><span>${a}</span><span>${b}</span></div>`;
   $('res-stats').innerHTML = (win ? `<div class="grade">GRADE ${s.grade} · ${s.score.toLocaleString()}${s.newBest ? ' ★ NEW BEST' : ''}</div>` : '') +
-    row('Syndicate put down', s.kills) + row('Portals closed', s.portals) + row('Rockets Sally fired', s.rockets) + row('Flasks emptied', s.flasks) + row('Peak color bleed', `${Math.round(s.peak * 100)}%`) + row('Time on the streets', fmtTime(s.time)) +
+    row('Syndicate put down', s.kills) + row('Portals closed', s.portals) + row('Rockets Sally fired', s.rockets) + row('Flasks emptied', s.flasks) + row('Peak city color', `${Math.round(s.peak * 100)}%`) + row('Time on the streets', fmtTime(s.time)) +
     (win && s.newBest ? row('Newsreel', 'recorded — find it on the Big Board') : '');
   const btns = $('res-btns');
   btns.innerHTML = '';

@@ -615,3 +615,119 @@ export function makeTruck(color) {
   root.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   return { root, body, wheels, goons, length: 10.8 };
 }
+
+// Paint copter: a Syndicate whirlybird with a bucket of color slung underneath.
+export function makeCopter(color) {
+  const root = new THREE.Group();
+  const body = new THREE.Group(); root.add(body);
+  const paint = gangMat(color);
+  const dark = nmat(0x181818, { kind: 'std', rough: 0.4, metal: 0.5 });
+  const glass = nmat(0x10141a, { kind: 'std', rough: 0.05, metal: 0.9, transparent: true, opacity: 0.8 });
+  part(G.sph, paint, 0, 0, 0, 2.6, 2.4, 4.2, body); // fuselage
+  part(G.sph, glass, 0, 0.3, 1.5, 2.2, 1.8, 2.0, body); // bubble canopy
+  const boom = part(G.cyl, paint, 0, 0.4, -4.2, 0.5, 4.6, 0.5, body); boom.rotation.x = Math.PI / 2;
+  part(G.box, paint, 0, 1.1, -6.3, 0.15, 1.6, 1.0, body); // fin
+  const tail = new THREE.Group(); tail.position.set(0.35, 1.0, -6.3); body.add(tail);
+  part(G.box, dark, 0, 0, 0, 0.06, 1.6, 0.2, tail);
+  for (const x of [-0.9, 0.9]) { part(G.box, dark, x, -1.5, 0, 0.12, 0.12, 3.6, body); part(G.box, dark, x, -1.1, 0.8, 0.08, 0.8, 0.08, body); part(G.box, dark, x, -1.1, -0.8, 0.08, 0.8, 0.08, body); }
+  part(G.cyl, dark, 0, 1.4, 0, 0.25, 0.6, 0.25, body);
+  const rotor = new THREE.Group(); rotor.position.set(0, 1.75, 0); body.add(rotor);
+  for (const r of [0, Math.PI / 2]) { const b = part(G.box, dark, 0, 0, 0, 0.35, 0.05, 11, rotor); b.rotation.y = r; }
+  // the paint bucket on a cable
+  part(G.cyl, dark, 0, -2.6, 0, 0.04, 1.8, 0.04, body);
+  part(G.cyl, gangMat(GANG_COLORS[(GANG_COLORS.indexOf(color) + 3) % 6]), 0, -3.8, 0, 1.6, 1.2, 1.6, body);
+  // searchlight cone sweeping the street
+  const beam = new THREE.Mesh(new THREE.ConeGeometry(4, 20, 20, 1, true), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.07, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }));
+  beam.position.set(0, -10, 2); body.add(beam);
+  root.traverse((o) => { if (o.isMesh && o !== beam) o.castShadow = true; });
+  return { root, body, rotor, tail, beam };
+}
+
+// The Re-Election Machine: Mayor Krane's walking paint mech, Krane under glass on top.
+export function makeMech() {
+  const root = new THREE.Group();
+  const gold = gangMat('#ffd35a');
+  const steel = nmat(0x3a3c40, { kind: 'std', rough: 0.35, metal: 0.8 });
+  const dark = nmat(0x151515, { kind: 'std', rough: 0.5, metal: 0.6 });
+  const legL = pivot(root, -0.55, 1.15, 0), legR = pivot(root, 0.55, 1.15, 0);
+  for (const l of [legL, legR]) {
+    part(G.box, steel, 0, -0.3, 0, 0.42, 0.65, 0.42, l);
+    part(G.box, gold, 0, -0.75, 0.1, 0.36, 0.5, 0.36, l);
+    part(G.box, dark, 0, -1.08, 0.18, 0.6, 0.14, 0.8, l); // foot
+  }
+  part(G.box, steel, 0, 1.25, 0, 1.6, 0.35, 0.9, root); // hips
+  part(G.box, gold, 0, 1.85, 0, 1.9, 0.95, 1.2, root); // hull
+  part(G.box, dark, 0, 1.85, 0.62, 1.2, 0.5, 0.04, root);
+  part(G.box, gangMat('#ff2d95'), 0, 1.9, 0.63, 1.8, 0.16, 0.02, root).rotation.z = 0.35; // the sash, of course
+  // glass dome with the Mayor inside
+  const head = pivot(root, 0, 2.45, 0);
+  part(G.sph, nmat(0xcfe0ff, { kind: 'std', rough: 0.05, metal: 0.2, transparent: true, opacity: 0.35, paint: false }), 0, 0.15, 0, 1.1, 0.9, 1.1, head);
+  const mayor = makeMayor();
+  mayor.root.scale.setScalar(0.3); mayor.root.position.set(0, -0.25, 0);
+  head.add(mayor.root);
+  const armL = pivot(root, -1.15, 2.1, 0), armR = pivot(root, 1.15, 2.1, 0);
+  for (const a of [armL, armR]) {
+    part(G.box, steel, 0, -0.25, 0, 0.35, 0.6, 0.35, a);
+    const cannon = part(G.cyl, gold, 0, -0.6, 0.35, 0.34, 0.9, 0.34, a); cannon.rotation.x = Math.PI / 2;
+    for (let i = 0; i < 3; i++) part(G.cyl, gangMat(GANG_COLORS[i * 2 + (a === armR ? 1 : 0)]), (i - 1) * 0.1, -0.6, 0.85, 0.08, 0.12, 0.08, a).rotation.x = Math.PI / 2; // nozzles
+  }
+  armL.rotation.x = armR.rotation.x = -1.3;
+  part(G.cyl, steel, 0.5, 2.6, -0.4, 0.08, 1.4, 0.08, root); // antenna with a little flag
+  part(G.box, gold, 0.75, 3.15, -0.4, 0.5, 0.3, 0.02, root);
+  const tool = pivot(armR, 0, -0.6, 0.9);
+  const muzzle = pivot(tool, 0, 0, 0.2);
+  root.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  return { root, legL, legR, armL, armR, head, tool, muzzle, walk: 0, mayor };
+}
+
+// The Church of the Holy Spectrum: robed cultists with a painted eye on the chest.
+export function makeCultist(color, scale = 1) {
+  const root = new THREE.Group();
+  const robe = nmat(0xe8e4dc, { kind: 'std', rough: 0.7, keep: 0.4, paint: false });
+  const trim = gangMat(color);
+  const legL = pivot(root, -0.15, 0.9, 0), legR = pivot(root, 0.15, 0.9, 0);
+  for (const l of [legL, legR]) part(G.box, nmat(0x111111), 0, -0.85, 0.05, 0.18, 0.1, 0.3, l);
+  part(G.cone, robe, 0, 1.1, 0, 1.2, 2.1, 1.1, root); // long robe
+  part(G.cyl, trim, 0, 0.12, 0, 1.18, 0.16, 1.08, root); // hem stripe
+  const eye = part(G.sph, rainbowCoat(), 0, 1.7, 0.42, 0.34, 0.2, 0.06, root); // the painted eye
+  part(G.sph, nmat(0x050505, { paint: false }), 0, 1.7, 0.45, 0.12, 0.12, 0.04, root);
+  const head = pivot(root, 0, 2.25, 0);
+  part(G.cone, robe, 0, 0.15, -0.05, 0.62, 0.9, 0.62, head).rotation.x = 0; // pointed hood
+  part(G.sph, nmat(0x050505, { paint: false }), 0, -0.02, 0.12, 0.34, 0.4, 0.3, head); // shadowed face
+  part(G.sph, nmat(0xffffff, { kind: 'basic', paint: false }), 0.08, 0.02, 0.26, 0.05, 0.03, 0.02, head);
+  part(G.sph, nmat(0xffffff, { kind: 'basic', paint: false }), -0.08, 0.02, 0.26, 0.05, 0.03, 0.02, head);
+  const armL = pivot(root, -0.42, 1.95, 0), armR = pivot(root, 0.42, 1.95, 0);
+  for (const a of [armL, armR]) part(G.cone, robe, 0, -0.35, 0, 0.3, 0.75, 0.3, a);
+  armR.rotation.x = -1.2;
+  const tool = pivot(armR, 0, -0.75, 0.1);
+  part(G.cyl, nmat(0x777777, { kind: 'std', metal: 1, rough: 0.3 }), 0, -0.25, 0, 0.02, 0.5, 0.02, tool);
+  part(G.sph, trim, 0, -0.55, 0, 0.22, 0.26, 0.22, tool); // censer of paint fumes
+  const muzzle = pivot(tool, 0, -0.55, 0.2);
+  root.scale.setScalar(scale);
+  return { root, legL, legR, armL, armR, head, tool, muzzle, eye, walk: 0, color };
+}
+
+// Chromadaemon: a hunched imp out of the Technicolor Hell.
+export function makeImp(color, scale = 1) {
+  const root = new THREE.Group();
+  const skin = rainbowCoat();
+  const dark = nmat(0x0a0a0a, { paint: false });
+  const legL = pivot(root, -0.25, 0.7, 0), legR = pivot(root, 0.25, 0.7, 0);
+  for (const l of [legL, legR]) { part(G.cone, skin, 0, -0.35, 0, 0.26, 0.7, 0.26, l).rotation.x = Math.PI; part(G.cone, dark, 0, -0.72, 0.15, 0.1, 0.3, 0.1, l).rotation.x = Math.PI / 2; }
+  part(G.sph, skin, 0, 1.1, 0, 1.0, 0.9, 1.1, root);
+  const head = pivot(root, 0, 1.65, 0.3);
+  part(G.sph, skin, 0, 0, 0, 0.6, 0.55, 0.6, head);
+  for (const x of [-0.18, 0.18]) {
+    part(G.cone, dark, x, 0.4, -0.05, 0.12, 0.5, 0.12, head).rotation.z = -x * 2;
+    part(G.sph, nmat(0xffffff, { kind: 'basic', paint: false }), x * 0.8, 0.05, 0.27, 0.1, 0.07, 0.04, head);
+  }
+  part(G.box, dark, 0, -0.14, 0.28, 0.3, 0.05, 0.04, head); // grin
+  const armL = pivot(root, -0.5, 1.3, 0.1), armR = pivot(root, 0.5, 1.3, 0.1);
+  for (const a of [armL, armR]) { part(G.cyl, skin, 0, -0.3, 0, 0.14, 0.6, 0.14, a); part(G.cone, dark, 0, -0.65, 0.05, 0.08, 0.2, 0.08, a); }
+  for (const s of [-1, 1]) { const w = part(G.box, nmat(0x1a1a1a, { paint: false }), s * 0.75, 1.5, -0.4, 1.1, 0.04, 0.7, root); w.rotation.z = s * 0.5; w.rotation.y = s * 0.3; }
+  const tail = part(G.cyl, skin, 0, 0.8, -0.7, 0.06, 1.0, 0.06, root); tail.rotation.x = 1.0;
+  const tool = pivot(armR, 0, -0.6, 0.1);
+  const muzzle = pivot(tool, 0, 0, 0.2);
+  root.scale.setScalar(scale);
+  return { root, legL, legR, armL, armR, head, tool, muzzle, walk: 0, color };
+}
