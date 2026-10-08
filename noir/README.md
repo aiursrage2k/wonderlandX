@@ -71,13 +71,19 @@ npx http-server -c-1 .     # then visit http://localhost:8080/noir/
   the action with city news, fake news, ads, and hints: the Mayor's shady deals,
   cult flyers turning up early, all pointing at case 13.
 - **Waves.** Wave cases open portals spread across the whole city, one more
-  each wave. Every portal keeps spitting goons, who scatter and paint, until
-  it's sealed. Between waves there's a breather with a countdown, and any
+  each wave. Every portal opens with a burst of 5 goons, then spits one more
+  every 5 seconds until it's sealed, with no more than 20 goons on the streets
+  at once. Foot goons leave a thin paint snail trail wherever they walk. Between waves there's a breather with a countdown, and any
   leftover goons run for it.
 - **The bar scene.** The first time you close a case you get the full debrief:
   Mack broods, Gus reads the evidence, Sally orders another round. After that
   it's just a quick toast. Walk out the door to skip either one; the full scene
   can be rewatched from the results screen.
+- **WASTED.** Go down and the world slows, Mack hits the pavement, and a big
+  red WASTED slams onto the screen. Then you're in the Last Drop: Mack's stool
+  is empty and Sally is drinking without him. Walk out the door (under the
+  busted neon HELLO, which only says HELL) and the case restarts, with you
+  already in the Packard and Sally riding shotgun.
 - **Score and multiplier.** Kills and portal seals score points times your
   multiplier, which climbs as you chain kills (up to ×8) and drops when you get
   hit or go quiet. Shooting a civilian costs 500 and resets it. The final score

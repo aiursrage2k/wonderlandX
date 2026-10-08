@@ -279,6 +279,12 @@ export function createHud() {
 
   return {
     show, say, stamp, floater, update,
+    wasted(on, sub = '') {
+      const w = document.getElementById('wasted');
+      document.getElementById('wasted-sub').textContent = sub;
+      w.classList.toggle('hidden', !on);
+      if (on) { w.style.animation = 'none'; void w.offsetWidth; w.style.animation = ''; }
+    },
     wanted(on) { document.getElementById('wanted').classList.toggle('hidden', !on); },
     caseTitle(no, t) { el.caseNo.textContent = no.toUpperCase(); el.caseTitle.textContent = t; },
     objective(t) { el.objText.textContent = t; },
@@ -297,6 +303,7 @@ export function createHud() {
       barEls.forEach((d) => (d.style.display = 'none'));
       tagEls.forEach((d) => (d.style.display = 'none'));
       el.bossbar.classList.add('hidden');
+      document.getElementById('wasted').classList.add('hidden');
       lastFlasks = -1; lastAmmo = -1;
     },
   };

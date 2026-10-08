@@ -274,6 +274,13 @@ export const sfx = {
     if (!ctx) return; const t = at();
     tone(t, 330, 0.45, { type: 'sawtooth', gain: 0.06 }); tone(t, 415, 0.45, { type: 'sawtooth', gain: 0.05 });
   },
+  wasted() {
+    if (!ctx) return; const t = at();
+    noise(t, 0.25, { type: 'lowpass', freq: 600, gain: 0.7 });
+    tone(t, 110, 2.6, { type: 'sawtooth', gain: 0.12, endFreq: 41 });
+    tone(t, 116, 2.6, { type: 'sawtooth', gain: 0.08, endFreq: 43 });
+    tone(t + 0.5, 70, 1.4, { gain: 0.35, endFreq: 30 });
+  },
   stamp() {
     if (!ctx) return; const t = at();
     noise(t, 0.15, { type: 'lowpass', freq: 500, gain: 0.6 });

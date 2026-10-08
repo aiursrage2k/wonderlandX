@@ -428,6 +428,25 @@ export function buildBar() {
   }
   const sign = new THREE.Mesh(new THREE.PlaneGeometry(5, 1.1), noirify(new THREE.MeshBasicMaterial({ transparent: true, map: tex(512, 112, (c, w, h) => { c.strokeStyle = '#fff'; c.lineWidth = 5; c.strokeRect(6, 6, w - 12, h - 12); c.fillStyle = '#fff'; c.font = 'italic bold 64px Georgia'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('The Last Drop', w / 2, h / 2 + 4); }) }), { paint: false }));
   sign.position.set(0, 3.8, -5.85); g.add(sign);
+  // the way out, back corner: a door to the rain under a busted neon HELLO; the O burned out years ago, so it just says HELL
+  part(box, M(0x4a3e36, { kind: 'std', rough: 0.35 }), 6.2, 1.2, -5.93, 1.3, 2.4, 0.08, g);
+  part(box, M(0x0c0a09), 6.2, 2.45, -5.92, 1.5, 0.12, 0.1, g); // frame
+  part(new THREE.SphereGeometry(0.06, 8, 6), M(0x9a8a6a, { kind: 'std', metal: 1, rough: 0.3 }), 5.75, 1.15, -5.86, 1, 1, 1, g); // knob
+  const hell = new THREE.Mesh(new THREE.PlaneGeometry(2.3, 0.68), noirify(new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, map: tex(512, 150, (c, w, h) => {
+    c.font = 'bold 118px "Bebas Neue", Impact, sans-serif'; c.textBaseline = 'middle'; c.textAlign = 'left';
+    const letters = 'HELLO', widths = [...letters].map((ch) => c.measureText(ch).width + 14);
+    let x = (w - widths.reduce((a, b) => a + b, 0)) / 2;
+    [...letters].forEach((ch, i) => {
+      const lit = ch !== 'O' || i < 4;
+      c.shadowColor = lit ? '#ff1830' : 'transparent'; c.shadowBlur = lit ? 26 : 0;
+      c.fillStyle = lit ? '#ff2a3a' : '#8a8884';
+      c.fillText(ch, x, h / 2 + 6);
+      if (lit) { c.shadowBlur = 0; c.fillStyle = '#ffd0d4'; c.globalAlpha = 0.5; c.fillText(ch, x, h / 2 + 6); c.globalAlpha = 1; }
+      x += widths[i];
+    });
+  }) }), { paint: false, keep: 1 }));
+  hell.position.set(6.2, 2.95, -5.88); g.add(hell);
+  const hellGlow = new THREE.PointLight(0xff2030, 3.5, 5, 1.6); hellGlow.position.set(6.0, 2.85, -5.4); g.add(hellGlow);
   // stools
   for (let k = 0; k < 7; k++) {
     const x = -4 + k * 1.35;
@@ -455,6 +474,12 @@ export function buildBar() {
   sally.root.position.set(-0.25, 0.05, -1.0); sally.root.rotation.y = Math.PI - 0.5; g.add(sally.root);
   sally.legL.rotation.x = sally.legR.rotation.x = -1.2;
   sally.launcher.position.set(0.3, 1.5, -0.4); sally.launcher.rotation.x = 1.0;
+  // her drink: hidden until she's drinking alone
+  const sallyGlass = new THREE.Group(); sallyGlass.position.set(0, -0.74, 0.06); sally.armL.add(sallyGlass);
+  part(cyl, M(0xaaaaaa, { kind: 'std', rough: 0.05, transparent: true, opacity: 0.55 }), 0, 0, 0, 0.13, 0.22, 0.13, sallyGlass);
+  part(cyl, M(0x6a4a22), 0, -0.04, 0, 0.11, 0.1, 0.11, sallyGlass); // the brown stuff
+  sallyGlass.visible = false;
+  let drinking = false, sipT = 0;
   // booths on the left
   for (let k = 0; k < 3; k++) {
     const z = -1 + k * 2.6;
@@ -502,6 +527,12 @@ export function buildBar() {
   return {
     scene, camera,
     smokeOrigin: new THREE.Vector3(-1.4, 1.2, -1.8).add(OFF),
+    // Mack's stool sits empty when he's face down in a puddle across town
+    setMack(on) { mack.root.visible = on; },
+    sallyDrink(on) {
+      drinking = on; sipT = 0; sallyGlass.visible = on;
+      if (!on) { sally.armL.rotation.set(-1.4, 0, 0.3); sally.head.rotation.x = 0; }
+    },
     shot(who, dist = 2.4) {
       if (who === 'wide' || !who) { pos.copy(home.pos); look.copy(home.look); return; }
       const m = who === 'MACK' ? mack.root : who === 'SALLY' ? sally.root : who === 'GUS' ? gus : null;
@@ -524,6 +555,16 @@ export function buildBar() {
       player.armR.rotation.x = -1.1 + Math.sin(time * 7 + 1) * 0.12;
       player.head.rotation.z = Math.sin(time * 2) * 0.1;
       sally.head.rotation.y = -0.4 + Math.sin(time * 0.6) * 0.25;
+      if (drinking) {
+        // a long pull every few seconds, glass back on the bar in between
+        sipT = (sipT + dt) % 4.5;
+        const up = sipT < 1.6 ? Math.sin((sipT / 1.6) * Math.PI) : 0;
+        sally.armL.rotation.set(-0.9 - up * 1.9, 0, 0.25 + up * 0.35);
+        sally.head.rotation.x = -up * 0.35;
+      }
+      // the neon buzzes and stutters
+      hell.material.opacity = hellGlow.intensity = Math.sin(time * 37) > 0.97 || Math.sin(time * 1.3) > 0.995 ? 0.35 : 1;
+      hellGlow.intensity *= 3.5;
       lights.forEach((l, i) => { l.intensity = 9 + Math.sin(time * 10 + i * 3) * 0.2; });
     },
   };

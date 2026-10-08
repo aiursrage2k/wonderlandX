@@ -9,7 +9,7 @@ import { initAudio, audio, playlist, skipTrack, setIndoors, sfx, setEngine } fro
 import { buildOffice, buildBar } from './interiors.js';
 import { createGame } from './game.js';
 import { createHud } from './hud.js';
-import { CASES, CAST, GUS_HINTS, DOTTIE_IDLE, PATROL, BAR_CLOSERS, TOASTS } from './story.js';
+import { CASES, CAST, GUS_HINTS, DOTTIE_IDLE, PATROL, BAR_CLOSERS, TOASTS, DEATH_BAR } from './story.js';
 import { drawCityMap, L, DISTRICTS, C } from './city.js';
 import { fx } from './fx.js';
 import { pick } from './util.js';
@@ -271,11 +271,11 @@ function beginCase(c, withIntro) {
   runDialog(c.intro, { caseDef: c, onAct: (a) => office.cut.act(a), done: () => fade(() => { office.cut.end(); startStreets(c); }) });
 }
 
-function startStreets(c) {
+function startStreets(c, { inCar = false } = {}) {
   currentCase = c;
   const effects = save.clues[c.id] && c.clue ? c.clue.effects : [];
   hud.clear();
-  game.start(c, { effects, bonusFlasks: save.bonus || 0 });
+  game.start(c, { effects, bonusFlasks: save.bonus || 0, inCar });
   save.bonus = 0; persist();
   setMode('play');
   playlist(c.music === 'boss' ? 'high' : c.music);
@@ -326,6 +326,18 @@ function onEnd(r) {
       save.seenBar[c.id] = true; persist();
       // first close: the full debrief. After that: a quick toast. Either way, the door walks you out.
       runDialog(seen ? pick(TOASTS) : barLines, { caseDef: c, door: true, done: () => showResult(true, { ...s, score, grade, newBest }) });
+    }, 900);
+  } else if (r.reason === 'dead') {
+    // WASTED -> the Last Drop: Mack's stool empty, Sally drinking, then back out to the same case
+    fade(() => {
+      game.stop(); hud.clear();
+      setMode('barOutro');
+      bar.setMack(false); bar.sallyDrink(true);
+      playlist('bar'); sfx.glass();
+      runDialog(pick(DEATH_BAR), {
+        caseDef: c, door: true,
+        done: () => fade(() => { bar.setMack(true); bar.sallyDrink(false); startStreets(c, { inCar: true }); }),
+      });
     }, 900);
   } else {
     showResult(false, { ...r.stats, reason: r.reason });

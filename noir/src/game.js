@@ -13,6 +13,9 @@ import { clamp, rand, pick, weighted, wrapAngle, Deck } from './util.js';
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 // how much paint each case's bleedCap tolerates; tuned so standing idle loses in ~4 minutes
 const BLEED_SCALE = 0.65;
+const TRAIL_TYPES = new Set(['dauber', 'hood', 'goon', 'cultist']);
+// portals: an opening burst, then one goon every few seconds, never more than this many on the streets
+const PORTAL_BURST = 5, PORTAL_TRICKLE = 5, MAX_GOONS = 20;
 const TYPES = {
   dauber: { hp: 30, speed: 6.5, r: 0.8, scale: 1 },
   hood: { hp: 55, speed: 7.2, r: 0.8, scale: 1 },
@@ -778,6 +781,15 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     restoreCar();
     while (debris.length) scene.remove(debris.pop().m);
     mack.root.visible = true; sallyM.root.visible = false;
+    if (opts.inCar && L.bar.door) {
+      // straight out of the Last Drop: the Packard's idling at the curb, Mack at the wheel, Sally riding shotgun
+      const d = L.bar.door, rz = roadC(nodeIndex(d.z)), rx = roadC(nodeIndex(d.x));
+      if (Math.abs(rz - d.z) <= Math.abs(rx - d.x)) { CAR.pos.set(d.x, 0, rz); CAR.ang = Math.PI / 2; }
+      else { CAR.pos.set(rx, 0, d.z); CAR.ang = 0; }
+      CAR.intro = null;
+      P.pos.set(CAR.pos.x, 0, CAR.pos.z); SA.pos.set(CAR.pos.x, 0, CAR.pos.z);
+      enterCar();
+    }
     // flask pickups scattered around
     const spots = flaskSpots.filter((p) => !area || (p.x > area.x0 - 40 && p.x < area.x1 + 40 && p.z > area.z0 - 40 && p.z < area.z1 + 40));
     (spots.length ? spots : flaskSpots).slice(0, 10).forEach((p, i) => addPickup(p.x, p.z, i % 3 === 2 ? 'pills' : 'flask'));
@@ -885,6 +897,14 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       if (P.inCar) exitCar();
       say('MACK', pick(['Too much... color... I\'m gonna be sick.', 'Everything\'s... turquoise... *hurk*', 'I can see... MAUVE... *blaaargh*']), 4);
       later(() => S && say('SALLY', 'Ew! Mack! On the SHOES?!', 3), 2600);
+    }
+    if (reason === 'dead') {
+      // you go down: slow motion, Mack hits the wet street, big red WASTED
+      S.endT = 4.2; S.down = 0;
+      P.focusOn = false;
+      if (P.inCar) exitCar();
+      sfx.wasted();
+      hud.wasted(true, pick(['Face down in a puddle. The rain didn\'t care.', 'The city wins this round. The city always wins a round.', 'Mack Malone, horizontal. Sally\'s already ordering.']));
     }
   }
 
@@ -1487,7 +1507,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     if (P.focusOn) { P.focusMeter = Math.max(0, P.focusMeter - rdt * 0.14); if (P.focusMeter <= 0 || S.over) P.focusOn = false; }
     P.focusHeld = P.focusOn;
     const slowed = P.focus > 0 || P.focusHeld;
-    const slow = slowed ? 0.3 : 1;
+    const slow = S.down !== undefined ? 0.3 : slowed ? 0.3 : 1;
     const dt = rdt * slow, pdt = rdt * (slowed ? 0.85 : 1);
     S.time += dt;
     P.focus = Math.max(0, P.focus - rdt);
@@ -1734,6 +1754,17 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     if (P.inCar) return;
     const m = mack;
     m.root.rotation.order = 'YXZ';
+    if (S.down !== undefined) {
+      // shot down: knees give, then flat on his back in the rain
+      S.down += dt;
+      const k = Math.min(1, S.down * 1.6), e = k * k * (3 - 2 * k);
+      m.root.position.set(P.pos.x - Math.sin(P.face) * e * 0.9, e * 0.25, P.pos.z - Math.cos(P.face) * e * 0.9);
+      m.root.rotation.set(-e * 1.45, P.face, e * 0.2);
+      m.legL.rotation.x = -e * 0.3; m.legR.rotation.x = e * 0.15;
+      m.armL.rotation.x = -e * 2.6; m.armR.rotation.x = -e * 2.2; m.armR.rotation.z = -e * 0.6;
+      aimLine.visible = false;
+      return;
+    }
     if (S.puke !== undefined) {
       S.puke += dt;
       const bend = Math.min(1, S.puke * 2);
@@ -2049,6 +2080,13 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
         if (dp < 3.2 + (P.inCar ? 1.5 : 0) && e.cd <= 0) { e.cd = 1.3; damagePlayer(P.inCar ? 30 : 20); sfx.splat(1); splat(f.x, f.z, 3, e.color, 0.8); }
       } else if (e.type === 'boss') { speed = updateBoss(e, dt, dp, dxp, dzp, f); }
       pushOut(e.pos, e.r);
+      // foot goons drip paint everywhere they go: a thin snail trail behind every one
+      if (TRAIL_TYPES.has(e.type)) {
+        if (!e.trail) e.trail = { x: e.pos.x, z: e.pos.z };
+        const td = Math.hypot(e.pos.x - e.trail.x, e.pos.z - e.trail.z);
+        if (td > 6) e.trail = { x: e.pos.x, z: e.pos.z }; // shoved or teleported: don't streak across town
+        else if (td > 0.9) { stroke(e.trail.x, e.trail.z, e.pos.x, e.pos.z, 0.9, e.color, 0.55); e.trail = { x: e.pos.x, z: e.pos.z }; }
+      }
       // separation
       for (const o of S.enemies) {
         if (o === e || o.type === 'lowrider') continue;
@@ -2376,7 +2414,6 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
         splat(p.pos.x + Math.cos(a) * r, p.pos.z + Math.sin(a) * r, rand(1.5, 4), pick(GANG_COLORS), 0.8, 6);
       }
       if (Math.random() < dt * 20) parts.spawn(p.pos.x + rand(-4, 4), 6.5 + rand(-4, 4), p.pos.z, rand(-2, 2), rand(-1, 3), rand(1, 4), { life: 1, size: 0.5, color: hexToRgb(pick(GANG_COLORS)) });
-      p.spawnCd -= dt;
     }
   }
 
@@ -2392,15 +2429,13 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     }
     if (st.perPortal) {
       // each tear in the sky keeps spitting goons until it's sealed; they scatter and go paint the town
-      const cap = st.perPortal * Math.max(1, S.portals.length) + 2;
       for (const p of S.portals) {
-        // an opening burst of goons, then a slow trickle: one every 5 seconds until it's sealed
-        if (p.burst === undefined) { p.burst = st.perPortal; p.spawnCd = 0.8; }
+        // an opening burst of 5 goons, then one every 5 seconds until it's sealed; 20 on the streets, tops
+        if (p.burst === undefined) { p.burst = PORTAL_BURST; p.spawnCd = 0.8; }
         p.spawnCd -= dt;
         if (p.spawnCd > 0 || p.cracked) continue;
-        p.spawnCd = p.burst > 0 ? 0.5 : (st.trickle || 5);
-        const mine = S.enemies.filter((e) => e.src === p).length;
-        if (mine >= st.perPortal + 4 || S.enemies.filter((e) => !e.cop && e.type !== 'boss').length >= cap + 4) continue;
+        p.spawnCd = p.burst > 0 ? 0.5 : PORTAL_TRICKLE;
+        if (S.enemies.filter((e) => !e.cop && e.type !== 'boss').length >= MAX_GOONS) continue;
         if (p.burst > 0) p.burst--;
         // the first few stay behind and guard the portal; the rest go paint the town
         const guards = S.enemies.filter((e) => e.guard === p).length;
@@ -2446,7 +2481,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     }
     // every fight has at least one tear in the sky spitting goons out
     if (!st.roam && st.max > 0 && !st.portals && !S.portals.length && !S.ambientOpening) { S.ambientOpening = true; later(() => { S.ambientOpening = false; if (S.stage && !S.portals.length) openPortal(); }, 1500); }
-    if (S.spawnT <= 0 && alive < st.max && S.enemies.length < st.max * 1.8) {
+    if (S.spawnT <= 0 && alive < Math.min(MAX_GOONS, st.max) && S.enemies.length < st.max * 1.8) {
       S.spawnT = interval;
       const type = weighted(st.mix);
       let p;
@@ -2661,7 +2696,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     const lead = P.inCar ? 0.55 : 0;
     const lx = f.x + CAR.vx * lead * (P.inCar ? 1 : 0), lz = f.z + CAR.vz * lead * (P.inCar ? 1 : 0);
     const ax = P.inCar ? 0 : (aim.x - f.x) * 0.18, az = P.inCar ? 0 : (aim.z - f.z) * 0.18;
-    const h = (P.inCar ? 46 + Math.min(18, Math.abs(CAR.speed) * 0.35) : 28) * zoom;
+    const h = (P.inCar ? 46 + Math.min(18, Math.abs(CAR.speed) * 0.35) : 28) * zoom * (S && S.down !== undefined ? Math.max(0.45, 1 - S.down * 0.5) : 1);
     return { pos: V(lx + ax, h, lz + az + h * 0.62), look: V(lx + ax, 0, lz + az - 2) };
   }
   function snapCamera() { const t = camTargets(); camPos.copy(t.pos); camLook.copy(t.look); }

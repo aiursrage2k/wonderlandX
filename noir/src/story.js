@@ -671,3 +671,11 @@ export const RADIO_FILLER = [
   'A reminder from the 13th Precinct: if you see a crime, please call. If nobody answers, they\'re at lunch. They\'re always at lunch.',
   'Sightings of giant robot vacuums repainting the crosswalks. The city says it did not order them. The robots say they were "called."',
 ];
+
+// Mack goes down: he wakes up at the Last Drop, Sally already three deep, the case still open
+export const DEATH_BAR = [
+  [['NARR', 'Somebody scraped Mack off the pavement and poured him onto a stool at the Last Drop. Sally didn\'t look up from her glass.'], ['SALLY', 'Gus. Another. He\'s not dead, he\'s resting in a puddle.'], ['GUS', 'On the house, sweetheart. He\'s breathing. Mostly.'], ['SALLY', 'Wake up, Mack. The case is still open and I\'m still thirsty.']],
+  [['SALLY', 'To Mack! Who got shot! Again! Gus, keep \'em coming!'], ['GUS', 'You\'ve toasted him four times tonight, Sally.'], ['SALLY', 'He got shot four times tonight, Gus.'], ['NARR', 'Mack came to with rain in his ears and a bar rag on his forehead. The color was still out there. So was the case.']],
+  [['GUS', 'Drinking alone, Sally?'], ['SALLY', 'Mack\'s on a little vacation. Face down. Third puddle on the left.'], ['SALLY', 'He\'ll be back. He always comes back. Pour me one for when he does.'], ['NARR', 'An hour later the door swung open, dripping. Mack Malone, still breathing, still on the case.']],
+  [['SALLY', 'Gus, if a guy gets shot full of paint, is he still a guy, or is he art?'], ['GUS', 'Ask him when he wakes up.'], ['SALLY', 'Ugh. Fine. One more, then I go scrape him up. Again.'], ['NARR', 'She went. She always went. The Packard was idling at the curb, and the case was waiting in the rain.']],
+];
