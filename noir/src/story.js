@@ -17,9 +17,9 @@ export const CAST = {
 // stage goal types: kill (any gang), portals (close the portals this stage opens), boss
 export const CASES = [
   {
-    id: 1, title: 'The Blue Period', district: 'The Docks', music: 'low',
+    id: 1, title: 'The Blue Period', district: 'City', music: 'low',
     dame: { name: 'Mrs. Edna Pruitt', hat: 'cloche', shade: 0x6a6460, fur: false },
-    blurb: 'A dockworker came home off the night shift and called the sea "blue." In this town the sea is the color of dishwater, and that\'s how we like it.',
+    blurb: 'A dockworker came home off the night shift and called the sea "blue." Then the sky started tearing open all over town. Four waves of it, by the sound of things.',
     intro: [
       ['sleep', 'NARR', 'Rain City. 3 a.m. The rain had been falling so long it had seniority.'],
       [null, 'MACK', 'Zzz... no, officer... the flask was already empty when I got here... zzz...'],
@@ -38,12 +38,16 @@ export const CASES = [
       [null, 'DOTTIE', '*hic* I\'m holding all of them. In my heart.'],
     ],
     stages: [
-      { text: 'Meet Big Pork at the Holy Glaze — he owes Sally a favor', goal: { type: 'goto', at: 'donut', r: 30, label: 'BIG PORK', arrive: [['PORK', '*chew* Malone. Sally. You didn\'t see me. I\'m a cop. I\'m eating. Those are the same thing.'], ['PORK', 'Kids on Pier 9 are pushing Prism. One sniff and you see colors. The Docks, Malone. And next time bring a cruller.'], ['MACK', 'Thanks, Pork. Fat pig.'], ['PORK', 'I heard that! ...It\'s fair.']] }, mix: {}, max: 0, interval: 9, line: ['SALLY', 'Big Pork! Best snitch in the 13th. Follow the red arrows, Mack — or hit Z and the Packard comes to you!'] },
-      { text: 'Get down to the Docks', goal: { type: 'goto', at: 'docks', r: 40, label: 'PIER 9' }, mix: {}, max: 0, interval: 9 },
-      { text: 'Ice the Prism pushers tagging the Docks', goal: { type: 'kill', n: 10 }, mix: { dauber: 1 }, max: 6, interval: 2.4, line: ['MACK', 'Daubers. Spray cans full of color. They paint, I erase. That\'s the whole job.'] },
-      { text: 'They brought guns to a paint fight — clean up the crew', goal: { type: 'kill', n: 8 }, mix: { dauber: 0.5, hood: 0.5 }, max: 7, interval: 2.2, line: ['SALLY', 'Ooh, these ones shoot back! Paintballs! Mack, they\'re SHOOTING COLORS AT US!'] },
+      { text: 'Meet Big Pork at the Holy Glaze — he owes Sally a favor', goal: { type: 'goto', at: 'donut', r: 30, label: 'BIG PORK', arrive: [['PORK', '*chew* Malone. Sally. You didn\'t see me. I\'m a cop. I\'m eating. Those are the same thing.'], ['PORK', 'Kids on Pier 9 are pushing Prism, but that ain\'t the worst of it. There\'s holes opening up in the sky, Malone. Little tears. Guys with spray cans climb out of \'em.'], ['PORK', 'One tonight. More tomorrow. The more you leave open, the more come out. Seal \'em. And next time bring a cruller.'], ['MACK', 'Thanks, Pork. Fat pig.'], ['PORK', 'I heard that! ...It\'s fair.']] }, mix: {}, max: 0, interval: 9, line: ['SALLY', 'Big Pork! Best snitch in the 13th. Follow the red arrows, Mack — or hit Z and the Packard comes to you!'] },
+      { text: 'Wave 1 of 4 — a tear in the sky. Find it, crack it, seal it', stamp: 'WAVE 1', goal: { type: 'portals', n: 1 }, portals: 1, spread: true, minD: 150, maxD: 320, perPortal: 4, mix: { dauber: 1 }, max: 6, interval: 2.6, line: ['MACK', 'There it is. A hole in the sky, spitting out painters. Shoot the ring till it cracks, then walk up and jam my flask of grey in it.'] },
+      { text: 'Breather — reload, take a pull, breathe the rain', goal: { type: 'breather', t: 20 }, mix: {}, max: 0, interval: 9, banter: [['SALLY', 'One down! Mack, that was SO fun. Is it always this fun?'], ['MACK', 'Pork said one tonight. Pork also said he\'s on a diet. Stay sharp.']] },
+      { text: 'Wave 2 of 4 — two more tears, opposite ends of town', stamp: 'WAVE 2', goal: { type: 'portals', n: 2 }, portals: 2, spread: true, minD: 160, maxD: 420, perPortal: 4, mix: { dauber: 0.7, hood: 0.3 }, max: 8, interval: 2.4, line: ['SALLY', 'Two of \'em! One each? No — I\'m with you. I\'m always with you. Drive!'] },
+      { text: 'Breather — the rain is doing what it can', goal: { type: 'breather', t: 20 }, mix: {}, max: 0, interval: 9, banter: [['MACK', 'Every one of those holes leaves color behind. The rain washes it out. Slowly. Too slowly.'], ['SALLY', 'I named my last rocket Pork. It exploded. I feel like that\'s a metaphor.']] },
+      { text: 'Wave 3 of 4 — three tears and the goons are getting bolder', stamp: 'WAVE 3', goal: { type: 'portals', n: 3 }, portals: 3, spread: true, minD: 160, maxD: 520, perPortal: 4, mix: { dauber: 0.5, hood: 0.5 }, max: 12, interval: 2.2, line: ['MACK', 'Three now. They\'re spreading out like gossip. Pick the nearest and work outward.'] },
+      { text: 'Breather — last one before the big one', goal: { type: 'breather', t: 22 }, mix: {}, max: 0, interval: 9, banter: [['SALLY', 'Mack. Mack. What if it\'s four next time.'], ['MACK', 'Then it\'s four, Sally. Fill the flask.']] },
+      { text: 'Wave 4 of 4 — four tears across Rain City. Seal them all', stamp: 'WAVE 4', goal: { type: 'portals', n: 4 }, portals: 4, spread: true, minD: 140, maxD: 600, perPortal: 4, mix: { dauber: 0.45, hood: 0.4, goon: 0.15 }, max: 16, interval: 2.0, line: ['SALLY', 'FOUR! It\'s four, Mack! I called it! I\'m so happy and so scared!'] },
     ],
-    bleedCap: 0.2,
+    bleedCap: 0.11,
     outro: [
       ['MACK', 'The docks went back to grey. The sea went back to dishwater. Walt went back to complaining. That\'s what I call a happy ending.'],
       ['SALLY', 'One of them had a business card. "The Technicolor Syndicate — We Put the Color in Your Cheeks." Fancy.'],

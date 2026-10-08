@@ -543,9 +543,16 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
   scene.add(beacon);
   const _cm = new THREE.Matrix4(), _cq = new THREE.Quaternion(), _cs = V(), _cp = V(), _up = V(0, 1, 0);
   function updateWayfinding(dt) {
-    const g = S.stage && S.stage.goal;
-    if (!g || g.type !== 'goto' || S.over) { chevrons.count = 0; beacon.visible = false; return; }
+    let g = S.stage && S.stage.goal;
     const f = focus();
+    if (g && g.type === 'portals' && S.portals.length) {
+      let best = null, bd = 1e9;
+      for (const p of S.portals) { const d = Math.hypot(p.pos.x - f.x, p.pos.z - f.z) - (p.cracked ? 40 : 0); if (d < bd) { bd = d; best = p; } }
+      if (bd < 18) best = null; // you're there; no arrows in the way of the fight
+      g = best ? { type: 'lead', x: best.pos.x, z: best.pos.z } : null;
+      if (best && (!S.leadP || S.leadP !== best)) { S.leadP = best; S.route = null; }
+    }
+    if (!g || (g.type !== 'goto' && g.type !== 'lead') || S.over) { chevrons.count = 0; beacon.visible = false; return; }
     S.routeT -= dt;
     if (S.routeT <= 0 || !S.route) { S.routeT = 0.25; S.route = route(f.x, f.z, g.x, g.z); S.route[0] = { x: f.x, z: f.z }; }
     S.route[0] = { x: f.x, z: f.z };
@@ -576,8 +583,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     chevrons.count = n;
     chevrons.instanceMatrix.needsUpdate = true;
     chevMat.opacity = 0.7 + Math.sin(S.time * 5) * 0.15;
-    updateObjective();
-    if (Math.hypot(f.x - g.x, f.z - g.z) < (g.r || 20)) checkStage();
+    if (g.type === 'goto') { updateObjective(); if (Math.hypot(f.x - g.x, f.z - g.z) < (g.r || 20)) checkStage(); }
   }
 
   // Z: whistle for the Packard and it drives itself to you
@@ -698,7 +704,15 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     if (st.beasts) for (let i = 0; i < st.beasts; i++) later(() => { if (S && S.stage === st) { const p = spawnPoint(60, 120); addEnemy('beast', p.x, p.z); say('SALLY', pick(['Mack. MACK. That thing is the size of the Holy Glaze!', 'BIG ONE! Big rainbow one! I need a bigger rocket!']), 2.6); } }, 2500 + i * 6000);
     if (st.copters) for (let i = 0; i < st.copters; i++) later(() => { if (S && S.stage === st) { const p = spawnPoint(80, 160); addEnemy('copter', p.x, p.z); } }, 800 + i * 2500);
     if (st.roombas) for (let i = 0; i < st.roombas; i++) later(() => { if (S && S.stage === st) { const p = spawnPoint(60, 150); addEnemy('roomba', p.x, p.z); } }, 400 + i * 900);
-    if (st.portals) for (let i = 0; i < st.portals; i++) later(() => S && S.stage === st && openPortal(), 600 + i * 1600);
+    if (st.portals) for (let i = 0; i < st.portals; i++) later(() => S && S.stage === st && openPortal(null, st.spread ? { spread: true, minD: st.minD || 120, maxD: st.maxD || 480, sep: st.sep || 220 } : null), 600 + i * 1600);
+    if (st.stamp) hud.stamp(st.stamp);
+    if (st.goal.type === 'breather') {
+      S.breathT = st.goal.t;
+      S.radioT = Math.min(S.radioT, 4);
+      // whoever's left loses their nerve and runs for it
+      for (const e of S.enemies) if (e.type !== 'boss' && !e.cop) { e.scatterT = rand(4, 6); e.vanish = true; e.emergeDir = Math.atan2(e.pos.z - focus().z, e.pos.x - focus().x); }
+      if (st.banter) st.banter.forEach(([w, t], i) => later(() => S && S.stage === st && say(w, t, 3.6), 1500 + i * 3800));
+    }
     if (st.boss) spawnBoss(st.boss);
     if (st.line) { if (S.time < (S.monoUntil || 0)) later(() => S && say(st.line[0], st.line[1], 4.5), (S.monoUntil - S.time) * 1000); else say(st.line[0], st.line[1], 4.5); }
     hud.objective(st.text, S.stageIdx + 1, S.stages.length);
@@ -709,9 +723,10 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     const g = S.stage.goal;
     let prog = '';
     if (g.type === 'kill') prog = `${Math.min(S.stageKills, g.n)} / ${g.n}`;
-    else if (g.type === 'portals') prog = `${S.stagePortals} / ${g.n} closed`;
+    else if (g.type === 'portals') prog = `${S.stagePortals} / ${g.n} sealed`;
     else if (g.type === 'roombas') prog = `${S.stageRoombas} / ${g.n} scrapped`;
     else if (g.type === 'goto') prog = `${Math.round(Math.hypot(focus().x - g.x, focus().z - g.z))} m`;
+    else if (g.type === 'breather') prog = `next wave in ${Math.max(0, Math.ceil(S.breathT))}s`;
     else if (g.type === 'boss') prog = S.boss ? `${Math.ceil(S.boss.hp / S.boss.maxHp * 100)}%` : '';
     hud.progress(prog);
   }
@@ -723,6 +738,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     if (g.type === 'goto') done = Math.hypot(focus().x - g.x, focus().z - g.z) < (g.r || 20);
     if (g.type === 'kill') done = S.stageKills >= g.n;
     else if (g.type === 'portals') done = S.stagePortals >= g.n;
+    else if (g.type === 'breather') done = S.breathT <= 0;
     else if (g.type === 'roombas') done = S.stageRoombas >= g.n;
     else if (g.type === 'boss') done = S.boss && S.boss.dead;
     updateObjective();
@@ -856,9 +872,21 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     sfx.portal();
   }
 
-  function openPortal(at) {
+  function openPortal(at, o = null) {
     if (!S) return;
     let p = at;
+    if (!p && o && o.spread) {
+      // spread across the city: far from Mack and far from each other
+      for (let tries = 0; tries < 400 && !p; tries++) {
+        const relax = tries > 250 ? 0.6 : 1;
+        const ix = Math.floor(Math.random() * (C.N + 1)), iz = Math.floor(Math.random() * (C.N + 1));
+        const q = { x: roadC(ix), z: roadC(iz) };
+        const d = Math.hypot(q.x - focus().x, q.z - focus().z);
+        if (d < o.minD * relax || d > o.maxD / relax) continue;
+        if (S.portals.some((x) => Math.hypot(x.pos.x - q.x, x.pos.z - q.z) < o.sep * relax)) continue;
+        p = q;
+      }
+    }
     if (!p) {
       for (let i = 0; i < 40; i++) {
         const ix = Math.floor(Math.random() * (C.N + 1)), iz = Math.floor(Math.random() * (C.N + 1));
@@ -1691,10 +1719,11 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       if (e.scatterT > 0) {
         // running for their lives, painting as they go
         e.scatterT -= dt;
+        if (e.scatterT <= 0 && e.vanish) { S.enemies.splice(S.enemies.indexOf(e), 1); removeEnemy(e); continue; }
         e.pos.x += Math.cos(e.emergeDir) * 9 * dt; e.pos.z += Math.sin(e.emergeDir) * 9 * dt;
         if (pushOut(e.pos, e.r)) e.emergeDir += Math.PI / 2;
         e.face = Math.atan2(Math.cos(e.emergeDir), Math.sin(e.emergeDir));
-        if (e.paintCd <= 0) { e.paintCd = 0.15; splat(e.pos.x, e.pos.z, 1.2, e.color, 0.8, 2); }
+        if (e.paintCd <= 0 && !e.vanish) { e.paintCd = 0.15; splat(e.pos.x, e.pos.z, 1.2, e.color, 0.8, 2); }
         e.model.root.position.set(e.pos.x, 0, e.pos.z); e.model.root.rotation.y = e.face;
         animWalk(e.model, 12, dt);
         continue;
@@ -2151,6 +2180,29 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
   function spawner(dt) {
     const st = S.stage;
     if (!st || S.over) return;
+    if (st.goal.type === 'breather') {
+      S.breathT -= dt;
+      S.breathUi = (S.breathUi || 0) - dt;
+      if (S.breathUi <= 0) { S.breathUi = 0.25; updateObjective(); }
+      if (S.breathT <= 0) checkStage();
+      return;
+    }
+    if (st.perPortal) {
+      // each tear in the sky keeps spitting goons until it's sealed; they scatter and go paint the town
+      const cap = st.perPortal * Math.max(1, S.portals.length) + 2;
+      for (const p of S.portals) {
+        p.spawnCd -= dt;
+        if (p.spawnCd > 0 || p.cracked) continue;
+        p.spawnCd = st.interval * rand(0.8, 1.2);
+        const mine = S.enemies.filter((e) => e.src === p).length;
+        if (mine >= st.perPortal || S.enemies.filter((e) => !e.cop && e.type !== 'boss').length >= cap) continue;
+        const type = weighted(st.mix);
+        const e2 = addEnemy(type, p.pos.x, p.pos.z);
+        e2.src = p; e2.emerge = 0.7; e2.emergeDir = Math.random() * 6.28; e2.scatterT = rand(1.5, 3); e2.scattered = true;
+        if (Math.hypot(p.pos.x - focus().x, p.pos.z - focus().z) < 90) sfx.pop(0.6);
+      }
+      return;
+    }
     // goons left far behind melt back into the rain so the fight stays where Mack is
     const f = focus();
     for (const e of S.enemies.slice()) {
@@ -2162,7 +2214,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     // ramp: the longer a stage runs, the faster they come
     const interval = st.interval * (S.portals.length ? 0.8 : 1);
     // waves: every so often the sky opens wider and a crowd of goons pours out
-    if (!st.roam && st.max > 0 && st.goal.type !== 'goto') {
+    if (!st.roam && st.max > 0 && st.goal.type !== 'goto' && !st.portals) {
       S.waveT = (S.waveT ?? 22) - dt;
       if (S.waveT <= 0) {
         S.wave = (S.wave || 1) + 1;
@@ -2180,7 +2232,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       }
     }
     // every fight has at least one tear in the sky spitting goons out
-    if (!st.roam && st.max > 0 && !S.portals.length && !S.ambientOpening) { S.ambientOpening = true; later(() => { S.ambientOpening = false; if (S.stage && !S.portals.length) openPortal(); }, 1500); }
+    if (!st.roam && st.max > 0 && !st.portals && !S.portals.length && !S.ambientOpening) { S.ambientOpening = true; later(() => { S.ambientOpening = false; if (S.stage && !S.portals.length) openPortal(); }, 1500); }
     if (S.spawnT <= 0 && alive < st.max && S.enemies.length < st.max * 1.8) {
       S.spawnT = interval;
       const type = weighted(st.mix);

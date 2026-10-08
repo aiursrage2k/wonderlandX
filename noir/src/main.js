@@ -83,6 +83,7 @@ const hud = createHud();
 let office, bar, game;
 let mode = 'boot'; // boot | splash | title | board | intro | play | pause | bar | barMid | outro | result | reel
 let currentCase = null;
+let lastBar = null;
 let lastIndoor = 'office';
 let selectedCase = 1;
 
@@ -313,7 +314,14 @@ function onEnd(r) {
       } else if (next) evLines.push(['GUS', 'Nothing in your pockets, Mack? Next time pick something up off those goons. A receipt. A matchbook. I can read a city from a matchbook.']);
       lastIndoor = 'bar';
       hud.show(false); $('cross').style.display = 'none'; document.body.classList.remove('playing');
-      runDialog([...c.outro, ...evLines, ...(BAR_CLOSERS[c.id] || [])], { caseDef: c, done: () => showResult(true, { ...s, score, grade, newBest }) });
+      // the bar scene plays the first time a case closes; replays go straight to the score (rewatchable from there)
+      const barLines = [...c.outro, ...evLines, ...(BAR_CLOSERS[c.id] || [])];
+      lastBar = { c, lines: barLines };
+      save.seenBar = save.seenBar || {};
+      const seen = save.seenBar[c.id];
+      save.seenBar[c.id] = true; persist();
+      if (seen) showResult(true, { ...s, score, grade, newBest });
+      else runDialog(barLines, { caseDef: c, done: () => showResult(true, { ...s, score, grade, newBest }) });
     }, 900);
   } else {
     showResult(false, { ...r.stats, reason: r.reason });
@@ -336,6 +344,7 @@ function showResult(win, s) {
     b('Back to the Big Board', () => setMode('board'));
     const reel = loadReel(c.id);
     if (reel) b('▶ Watch the newsreel', () => playReel(c, reel));
+    if (lastBar && lastBar.c === c) b('▶ Bar scene', () => { $('result').classList.add('hidden'); mode = 'barOutro'; runDialog(lastBar.lines, { caseDef: c, done: () => setMode('result') }); });
   } else {
     b('Try again', () => fade(() => { game.stop(); startStreets(c); }));
     b('Back to the office', () => fade(() => { game.stop(); hud.clear(); setMode('board'); }));

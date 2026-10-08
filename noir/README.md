@@ -70,6 +70,12 @@ npx http-server -c-1 .     # then visit http://localhost:8080/noir/
 - **WRNC radio.** Chet Ballantine, "the Voice of the Rain," crackles in between
   the action with city news, fake news, ads, and hints: the Mayor's shady deals,
   cult flyers turning up early, all pointing at case 13.
+- **Waves.** Wave cases open portals spread across the whole city, one more
+  each wave. Every portal keeps spitting goons, who scatter and paint, until
+  it's sealed. Between waves there's a breather with a countdown, and any
+  leftover goons run for it.
+- **The bar scene** plays the first time you close a case. On replays you go
+  straight to the score, with a button to rewatch it.
 - **Wayfinding.** "Go to" objectives (start with *meet Big Pork at the Holy
   Glaze*) paint red chevrons on the road that re-route in real time, plus a
   beacon at the destination. The radar shows every objective, with an arrow on
@@ -90,7 +96,7 @@ leaves a breadcrumb for the finale: an eye painted on the pier, a hymnal called
 
 | # | Case | What happens |
 | --- | --- | --- |
-| 1 | The Blue Period | Prism pushers on the docks. Meet Big Pork at the Holy Glaze. |
+| 1 | The Blue Period | Meet Big Pork, then four waves of tears in the sky across the whole city: 1, 2, 3, then 4 portals, with a breather between each. |
 | 2 | Purple Rain Man | A blue note comes out actually blue. Vic Vermilion. The first Paintbots. |
 | 3 | The Vault of Many Colors | Bank heists; a rainbow left in the vault mocks the tellers. |
 | 4 | Holes in the Sky | Portals open over Old Town, humming show tunes. |
