@@ -72,8 +72,17 @@ npx http-server -c-1 .     # then visit http://localhost:8080/noir/
   cult flyers turning up early, all pointing at case 13.
 - **Waves.** Wave cases open portals spread across the whole city, one more
   each wave. Every portal opens with a burst of 5 goons, then spits one more
-  every 5 seconds until it's sealed, with no more than 20 goons on the streets
-  at once. Foot goons leave a thin paint snail trail wherever they walk. Between waves there's a breather with a countdown, and any
+  every 5 seconds until it's sealed. Each portal has at most 5 of its goons
+  alive at a time, and there are never more than 20 on the streets. Foot goons
+  leave a thin paint snail trail wherever they walk. Clear a wave and every
+  goon still standing goes off like a firecracker, nearest first.
+- **Sally's rockets.** She locks on by herself (red reticle), preferring the
+  biggest crowd she can see. Her rockets fire a little wide and heat-seek into
+  the target, re-acquiring if it dies. The blast hits everything nearby, throws
+  survivors back, and bursts goons into their paint, with a red shockwave
+  across the street.
+- **The Packard vs. thugs.** Foot thugs never stop the car: at anything faster
+  than a crawl you drive straight through them and they burst. Between waves there's a breather with a countdown, and any
   leftover goons run for it.
 - **The bar scene.** The first time you close a case you get the full debrief:
   Mack broods, Gus reads the evidence, Sally orders another round. After that

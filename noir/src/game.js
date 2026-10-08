@@ -13,9 +13,11 @@ import { clamp, rand, pick, weighted, wrapAngle, Deck } from './util.js';
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 // how much paint each case's bleedCap tolerates; tuned so standing idle loses in ~4 minutes
 const BLEED_SCALE = 0.65;
+// Sally's rockets: speed, how hard they turn toward a lock (rad/s), blast radius and damage
+const ROCKET_SPEED = 46, ROCKET_TURN = 3.4, BLAST_R = 9.5, BLAST_DMG = 115;
 const TRAIL_TYPES = new Set(['dauber', 'hood', 'goon', 'cultist']);
-// portals: an opening burst, then one goon every few seconds, never more than this many on the streets
-const PORTAL_BURST = 5, PORTAL_TRICKLE = 5, MAX_GOONS = 20;
+// portals: an opening burst, then one goon every few seconds; at most 5 alive per portal and 20 on the streets
+const PORTAL_BURST = 5, PORTAL_TRICKLE = 5, PORTAL_MAX = 5, MAX_GOONS = 20;
 const TYPES = {
   dauber: { hp: 30, speed: 6.5, r: 0.8, scale: 1 },
   hood: { hp: 55, speed: 7.2, r: 0.8, scale: 1 },
@@ -120,6 +122,15 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
   const rocketGeo = new THREE.CylinderGeometry(0.16, 0.16, 1.0, 8);
   rocketGeo.rotateX(Math.PI / 2);
   const rocketMat = new THREE.MeshBasicMaterial({ color: 0xff1a2a });
+  // Sally's lock-on reticle: a red ring with four ticks, drawn on top of everything
+  const lockRet = new THREE.Group();
+  {
+    const lm = new THREE.MeshBasicMaterial({ color: 0xff2030, transparent: true, opacity: 0.9, depthTest: false, depthWrite: false, side: THREE.DoubleSide });
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.0, 40), lm); ring.rotation.x = -Math.PI / 2; lockRet.add(ring);
+    for (let k = 0; k < 4; k++) { const tk = new THREE.Mesh(new THREE.PlaneGeometry(0.1, 0.45), lm); tk.rotation.x = -Math.PI / 2; tk.rotation.z = k * Math.PI / 2; tk.position.set(Math.sin(k * Math.PI / 2) * 1.12, 0, Math.cos(k * Math.PI / 2) * 1.12); lockRet.add(tk); }
+    lockRet.renderOrder = 5; lockRet.traverse((o) => { o.renderOrder = 5; });
+    lockRet.visible = false; scene.add(lockRet);
+  }
   const ballGeo = new THREE.SphereGeometry(0.32, 10, 8);
   const donutGeo = new THREE.TorusGeometry(1.1, 0.5, 10, 18);
   const pillMat = new THREE.MeshStandardMaterial({ color: 0xff8a1a, roughness: 0.3, emissive: 0x552200 });
@@ -771,7 +782,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     const sx = L.office.x, sz = L.office.z + 40;
     P.pos.set(sx - 4, 0, sz - 9); P.hp = P.maxHp; P.flasks = Math.min(P.maxFlasks, 3 + (S.fx.has('extraFlask') ? 2 : 0) + (opts.bonusFlasks || 0));
     P.inCar = false; P.focus = 0; P.roll = 0; P.focusMeter = 0.6; P.pills = 2; P.color = 0; P.ammo = 6; P.reload = 0; P.focusOn = false; P.aiming = false; NU.seeColor.value = 0;
-    SA.pos.set(sx - 7, 0, sz - 9); SA.inCar = false; SA.cd = 2; SA.hp = SA.maxHp; SA.down = false; SA.downT = 0;
+    SA.pos.set(sx - 7, 0, sz - 9); SA.inCar = false; SA.cd = 2; SA.lock = null; SA.lockT = 0; SA.hp = SA.maxHp; SA.down = false; SA.downT = 0;
     sallyM.root.rotation.set(0, 0, 0);
     // Sally brings the car round: it comes tearing down the block and skids up beside Mack
     CAR.pos.set(sx - 75, 0, sz - 7); CAR.ang = Math.PI / 2; CAR.auto = null;
@@ -839,8 +850,16 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     if (st.goal.type === 'breather') {
       S.breathT = st.goal.t;
       S.radioT = Math.min(S.radioT, 4);
-      // whoever's left loses their nerve and runs for it
-      for (const e of S.enemies) if (e.type !== 'boss' && !e.cop) { e.scatterT = rand(4, 6); e.vanish = true; e.emergeDir = Math.atan2(e.pos.z - focus().z, e.pos.x - focus().x); }
+      // wave cleared: every goon left on the streets goes off like a firecracker, nearest first
+      const f0 = focus();
+      S.enemies.filter((e) => e.type !== 'boss' && !e.cop && !e.dead)
+        .sort((a, b) => Math.hypot(a.pos.x - f0.x, a.pos.z - f0.z) - Math.hypot(b.pos.x - f0.x, b.pos.z - f0.z))
+        .forEach((e, i) => later(() => {
+          if (!S || e.dead || !S.enemies.includes(e)) return;
+          e.unloaded = true; // a truck pops with its crew still inside
+          explode(e.pos.x, 1, e.pos.z, 3 + (e.r || 1), 0);
+          hitEnemy(e, 1e6, 'rocket');
+        }, 250 + i * 140));
       if (st.banter) st.banter.forEach(([w, t], i) => later(() => S && S.stage === st && say(w, t, 3.6), 1500 + i * 3800));
     }
     if (st.boss) spawnBoss(st.boss);
@@ -1181,7 +1200,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     checkStage();
   }
 
-  function explode(x, y, z, r, dmg, friendly = true) {
+  function explode(x, y, z, r, dmg, friendly = true, civR = r * 0.8) {
     const far = clamp(1 - Math.hypot(x - focus().x, z - focus().z) / 140, 0.1, 1);
     sfx.boom(far);
     flashes.light(x, y + 2, z, 2500, 0.25);
@@ -1201,7 +1220,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     }
     if (!friendly && !P.inCar && Math.hypot(P.pos.x - x, P.pos.z - z) < r) damagePlayer(25, x, z);
     knockAt(x, z, r * 0.8, 0, 0, 30);
-    if (friendly && dmg > 0) for (const c of S.civs) if (!c.dead && Math.hypot(c.pos.x - x, c.pos.z - z) < r * 0.8) killCiv(c, true);
+    if (friendly && dmg > 0) for (const c of S.civs) if (!c.dead && Math.hypot(c.pos.x - x, c.pos.z - z) < civR) killCiv(c, true);
     if (Math.hypot(x - L.donut.x, z - L.donut.z) < 45 && S.retortT <= 0) { S.retortT = 8; later(() => S && say('COP', pick(['HEY! There\'s crullers in here!', 'Watch it, Malone! That\'s police property!', 'You almost hit the bear claws!']), 2.5), 500); }
   }
 
@@ -1300,7 +1319,9 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     const mesh = new THREE.Mesh(rocketGeo, rocketMat);
     mesh.position.copy(from);
     scene.add(mesh);
-    S.rockets.push({ mesh, pos: from.clone(), vx: dx / d * 48, vz: dz / d * 48, life: 1.6, target });
+    // with a lock, she fires a touch wide and lets the heat-seeker curve it in
+    const a = Math.atan2(dx, dz) + (target && d > 12 ? (Math.random() < 0.5 ? -1 : 1) * rand(0.25, 0.45) : 0);
+    S.rockets.push({ mesh, pos: from.clone(), vx: Math.sin(a) * ROCKET_SPEED, vz: Math.cos(a) * ROCKET_SPEED, life: 2.2, target });
     recEvent(['r', r1(from.x), r1(from.z), r1(tx), r1(tz)]);
     S.stats.rockets++;
     sfx.rocket();
@@ -1480,8 +1501,10 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     }
     // run the Syndicate over
     if (Math.abs(vf) > 8 && P.inCar) for (const c of S.civs) if (!c.dead && Math.hypot(c.pos.x - CAR.pos.x, c.pos.z - CAR.pos.z) < 2.6) killCiv(c, true);
-    if (Math.abs(vf) > 8) {
+    // foot thugs never stop the Packard: anything faster than a crawl goes straight through them
+    if (Math.abs(vf) > 3 && P.inCar) {
       for (const e of S.enemies.slice()) {
+        if (e.dead) continue;
         if (e.type === 'lowrider' || e.type === 'roomba' || e.type === 'truck' || e.type === 'copter' || e.type === 'demon') continue;
         if (e.type === 'beast' && Math.hypot(e.pos.x - CAR.pos.x, e.pos.z - CAR.pos.z) < 2.4 + e.r) { if (e.hitCd <= 0) { e.hitCd = 1; hitEnemy(e, 50); CAR.vx *= -0.4; CAR.vz *= -0.4; sfx.crash(1); fx.shake = 0.6; } continue; }
         if (Math.hypot(e.pos.x - CAR.pos.x, e.pos.z - CAR.pos.z) < 2.4 + e.r) {
@@ -1679,7 +1702,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       if (mouse.down && SA.cd <= 0) {
         SA.cd = 0.55;
         const s = Math.sin(CAR.ang), c = Math.cos(CAR.ang);
-        fireRocket(V(CAR.pos.x - c * 1.2, 1.7, CAR.pos.z + s * 1.2), aim.x, aim.z, nearestTarget(aim.x, aim.z, 10));
+        fireRocket(V(CAR.pos.x - c * 1.2, 1.7, CAR.pos.z + s * 1.2), aim.x, aim.z, nearestTarget(aim.x, aim.z, 10) || sallyPick(aim.x, aim.z, 14));
       }
       return;
     }
@@ -1739,6 +1762,51 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     for (const e of S.enemies) { const d = Math.hypot(e.pos.x - x, e.pos.z - z); if (d < bd) { bd = d; best = e; } }
     if (!best) for (const p of S.portals) { const d = Math.hypot(p.pos.x - x, p.pos.z - z); if (d < bd) { bd = d; best = p; } }
     return best;
+  }
+
+  // goons only (no cops unless Mack's wanted); used for rocket re-acquire
+  function nearestFoe(x, z, maxD) {
+    let best = null, bd = maxD;
+    for (const e of S.enemies) { if (e.dead || (e.cop && !S.wanted)) continue; const d = Math.hypot(e.pos.x - x, e.pos.z - z); if (d < bd) { bd = d; best = e; } }
+    return best;
+  }
+  // Sally's lock: whoever's standing in the biggest crowd she can see, closer is better
+  function sallyPick(x, z, maxD) {
+    let best = null, bs = 0;
+    for (const e of S.enemies) {
+      if (e.dead || e.emerge > 0 || (e.cop && !S.wanted)) continue;
+      const d = Math.hypot(e.pos.x - x, e.pos.z - z);
+      if (d > maxD || d < 4) continue;
+      let crowd = 0;
+      for (const o of S.enemies) if (o !== e && !o.dead && !o.cop && Math.hypot(o.pos.x - e.pos.x, o.pos.z - e.pos.z) < BLAST_R * 0.8) crowd++;
+      const sc = (1 + crowd * 0.7 + (e.type === 'boss' || e.type === 'beast' ? 1.5 : 0)) / (0.35 + d / maxD);
+      if (sc > bs && clearLine(x, z, e.pos.x, e.pos.z)) { bs = sc; best = e; }
+    }
+    if (!best) for (const p of S.portals) { const d = Math.hypot(p.pos.x - x, p.pos.z - z); if (!p.cracked && d < maxD && clearLine(x, z, p.pos.x, p.pos.z)) { best = p; break; } }
+    return best;
+  }
+  // a rocket lands: a big flat-bottomed blast, a shockwave across the street, and goons come apart in paint
+  function sallyBlast(x, y, z) {
+    const hit = S.enemies.filter((e) => !e.dead && Math.hypot(e.pos.x - x, e.pos.z - z) < BLAST_R + e.r);
+    explode(x, y, z, BLAST_R, BLAST_DMG, true, 5.5);
+    flashes.ball(x, Math.max(1, y), z, BLAST_R * 0.75, 0.32);
+    flashes.ring(x, z, BLAST_R * 1.5, 0xff2a3a, 0.5);
+    flashes.ring(x, z, BLAST_R * 0.9, 0xffffff, 0.3, 0.3);
+    flashes.light(x, 3, z, 3200, 0.3);
+    // embers and Sally-red sparks in a hot ring
+    for (let k = 0; k < 28; k++) { const a = Math.random() * 6.28, s = rand(14, 26); parts.spawn(x, 1, z, Math.cos(a) * s, rand(1, 5), Math.sin(a) * s, { life: rand(0.25, 0.5), size: rand(0.4, 0.8), color: [1, rand(0.15, 0.5), 0.1], drag: 3, kind: 0 }); }
+    let n = 0;
+    for (const e of hit) {
+      // whoever was in the blast bursts into the paint they were made of; survivors get thrown
+      const col = hexToRgb(e.color || pick(GANG_COLORS));
+      for (let k = 0; k < 14; k++) parts.spawn(e.pos.x, 1.4, e.pos.z, rand(-9, 9), rand(5, 14), rand(-9, 9), { life: rand(0.6, 1.1), size: rand(0.4, 0.8), color: col, grav: 22, kind: 0 });
+      if (!e.dead && e.type !== 'boss' && e.type !== 'beast' && e.type !== 'truck' && e.type !== 'copter') {
+        const dx = e.pos.x - x, dz = e.pos.z - z, d = Math.hypot(dx, dz) || 1;
+        e.pos.x += dx / d * 3; e.pos.z += dz / d * 3; pushOut(e.pos, e.r);
+      }
+      if (e.dead) n++;
+    }
+    if (n >= 3) { fx.shake = Math.max(fx.shake, 0.9); quip('SALLY', ['STRIKE!', `${n} in one! Somebody count that!`, 'Look at \'em FLY, Mack!', 'Bowling! It\'s just bowling with more screaming!'], 1, 3); }
   }
 
   function animWalk(m, speed, dt, phaseKey = 'walk') {
@@ -1823,7 +1891,31 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     }
   }
 
+  // Sally picks her mark a few times a second; a red reticle tightens on whoever she's locked
+  function updateSallyLock(dt) {
+    SA.lockT = (SA.lockT || 0) - dt;
+    if (SA.lock && (SA.lock.dead || !(S.enemies.includes(SA.lock) || S.portals.includes(SA.lock)))) SA.lock = null;
+    if (SA.lockT <= 0) {
+      SA.lockT = 0.25;
+      const o = SA.inCar ? CAR.pos : SA.pos;
+      const prev = SA.lock;
+      SA.lock = SA.down || S.over ? null : sallyPick(o.x, o.z, SA.inCar ? 48 : 42);
+      if (SA.lock && SA.lock !== prev) { SA.lockAge = 0; if (!prev && Math.random() < 0.15) quip('SALLY', ['Got one!', 'Locked!', 'Ooh, a crowd!', 'Hold still, sweetie.'], 1, 6); }
+    }
+    SA.lockAge = (SA.lockAge || 0) + dt;
+    const t = SA.lock;
+    lockRet.visible = !!t;
+    if (t) {
+      const big = t.r ? Math.max(1.6, t.r * 1.3) : 5.5;
+      const k = Math.max(0, 1 - SA.lockAge * 4);
+      lockRet.position.set(t.pos.x, S.portals.includes(t) ? 6 : 0.3, t.pos.z);
+      lockRet.scale.setScalar(big * (1 + k * 1.5));
+      lockRet.rotation.y += dt * 2.5;
+    }
+  }
+
   function updateSally(dt) {
+    updateSallyLock(dt);
     if (SA.down) {
       // she sits down in the rain, then storms off to the bar
       SA.downT += dt;
@@ -1839,8 +1931,8 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       if (!mouse.down && !S.over) {
         SA.cd -= dt;
         if (SA.cd <= 0) {
-          const t = nearestTarget(CAR.pos.x, CAR.pos.z, 42);
-          if (t && clearLine(CAR.pos.x, CAR.pos.z, t.pos.x, t.pos.z)) {
+          const t = SA.lock;
+          if (t) {
             SA.cd = 1.25;
             const s = Math.sin(CAR.ang), c = Math.cos(CAR.ang);
             fireRocket(V(CAR.pos.x - c * 1.2, 1.7, CAR.pos.z + s * 1.2), t.pos.x, t.pos.z, t);
@@ -1859,10 +1951,10 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     pushOut(SA.pos, 0.6);
     if (d > 35) SA.pos.set(P.pos.x - Math.sin(P.face) * 3, 0, P.pos.z - Math.cos(P.face) * 3);
     SA.cd -= dt;
-    const t = nearestTarget(SA.pos.x, SA.pos.z, 38);
+    const t = SA.lock;
     if (t) SA.face = Math.atan2(t.pos.x - SA.pos.x, t.pos.z - SA.pos.z);
     else if (sp > 0.5) SA.face = Math.atan2(dx, dz);
-    if (t && SA.cd <= 0 && !S.over && clearLine(SA.pos.x, SA.pos.z, t.pos.x, t.pos.z)) {
+    if (t && SA.cd <= 0 && !S.over) {
       SA.cd = 2.4;
       fireRocket(V(SA.pos.x + Math.sin(SA.face) * 1.2, 2.0, SA.pos.z + Math.cos(SA.face) * 1.2), t.pos.x, t.pos.z, t);
     }
@@ -2436,6 +2528,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
         if (p.spawnCd > 0 || p.cracked) continue;
         p.spawnCd = p.burst > 0 ? 0.5 : PORTAL_TRICKLE;
         if (S.enemies.filter((e) => !e.cop && e.type !== 'boss').length >= MAX_GOONS) continue;
+        if (S.enemies.filter((e) => e.src === p && !e.dead).length >= PORTAL_MAX) continue;
         if (p.burst > 0) p.burst--;
         // the first few stay behind and guard the portal; the rest go paint the town
         const guards = S.enemies.filter((e) => e.guard === p).length;
@@ -2529,7 +2622,16 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     for (let i = S.rockets.length - 1; i >= 0; i--) {
       const r = S.rockets[i];
       r.life -= dt;
-      if (r.target && !r.target.dead && (S.enemies.includes(r.target) || S.portals.includes(r.target))) {
+      if (!r.enemy) {
+        // heat-seeking: turn toward the lock at a limited rate; if the lock dies, sniff out the next warm body
+        if (r.target && (r.target.dead || !(S.enemies.includes(r.target) || S.portals.includes(r.target)))) r.target = null;
+        if (!r.target && (r.seekT = (r.seekT || 0) - dt) <= 0) { r.seekT = 0.15; r.target = nearestFoe(r.pos.x + r.vx * 0.25, r.pos.z + r.vz * 0.25, 16); }
+        if (r.target) {
+          const cur = Math.atan2(r.vx, r.vz), want = Math.atan2(r.target.pos.x - r.pos.x, r.target.pos.z - r.pos.z);
+          const a = cur + clamp(wrapAngle(want - cur), -ROCKET_TURN * dt, ROCKET_TURN * dt);
+          r.vx = Math.sin(a) * ROCKET_SPEED; r.vz = Math.cos(a) * ROCKET_SPEED;
+        }
+      } else if (r.target && !r.target.dead && (S.enemies.includes(r.target) || S.portals.includes(r.target))) {
         const dx = r.target.pos.x - r.pos.x, dz = r.target.pos.z - r.pos.z, d = Math.hypot(dx, dz) || 1;
         r.vx += (dx / d * 48 - r.vx) * Math.min(1, dt * 3);
         r.vz += (dz / d * 48 - r.vz) * Math.min(1, dt * 3);
@@ -2558,7 +2660,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       if (!boom) for (const e of S.enemies) if (Math.hypot(e.pos.x - r.pos.x, e.pos.z - r.pos.z) < e.r + 1) { boom = true; break; }
       if (!boom) for (const p of S.portals) if (Math.hypot(p.pos.x - r.pos.x, p.pos.z - r.pos.z) < 4.5) { boom = true; break; }
       if (boom) {
-        explode(r.pos.x, r.pos.y, r.pos.z, 7, 95);
+        sallyBlast(r.pos.x, r.pos.y, r.pos.z);
         scene.remove(r.mesh);
         S.rockets.splice(i, 1);
       }

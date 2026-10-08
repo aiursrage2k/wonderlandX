@@ -173,6 +173,20 @@ export class Flashes {
       this.balls.push({ m, t: 0, max: 1, r: 1 });
     }
     this.bk = 0;
+    // flat shockwave rings that race out across the wet street
+    this.rings = [];
+    const rg = new THREE.RingGeometry(0.82, 1, 48);
+    rg.rotateX(-Math.PI / 2);
+    for (let i = 0; i < 8; i++) {
+      const m = new THREE.Mesh(rg, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+      m.visible = false; scene.add(m);
+      this.rings.push({ m, t: 0, max: 1, r: 1 });
+    }
+    this.rk = 0;
+  }
+  ring(x, z, r, color = 0xffffff, life = 0.45, y = 0.25) {
+    const b = this.rings[this.rk]; this.rk = (this.rk + 1) % this.rings.length;
+    b.m.position.set(x, y, z); b.m.visible = true; b.m.material.color.set(color); b.t = life; b.max = life; b.r = r;
   }
   light(x, y, z, intensity = 400, life = 0.12) {
     const s = this.lights[this.k]; this.k = (this.k + 1) % this.lights.length;
@@ -190,6 +204,14 @@ export class Flashes {
       const k = 1 - b.t / b.max;
       b.m.scale.setScalar(b.r * (0.4 + k));
       b.m.material.opacity = Math.max(0, 1 - k);
+      if (b.t <= 0) b.m.visible = false;
+    }
+    for (const b of this.rings) {
+      if (b.t <= 0) continue;
+      b.t -= dt;
+      const k = 1 - b.t / b.max, e = 1 - (1 - k) * (1 - k);
+      b.m.scale.setScalar(b.r * (0.15 + e));
+      b.m.material.opacity = Math.max(0, 1 - k) * 0.9;
       if (b.t <= 0) b.m.visible = false;
     }
   }
