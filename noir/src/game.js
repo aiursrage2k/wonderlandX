@@ -955,7 +955,10 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
   }
 
   function win() {
-    S.over = true; S.result = 'win'; S.endT = 3.2;
+    S.over = true; S.result = 'win'; S.endT = 3.6;
+    sfx.victory();
+    S.hush = true; hud.hush(); // no more talk on the street: the card says it
+    if (!S.caseDef.patrol) hud.wasted(true, pick([`${S.caseDef.title}. The color washed down the gutters and the city went back to grey.`, 'Rain City is grey again. For tonight.', 'The Technicolor Syndicate just lost a round. First drink\'s on Sally.']), 'CASE CLOSED');
     P.focus = 3;
     for (const e of S.enemies.slice()) killEnemy(e, true);
     for (const p of S.portals.slice()) closePortal(p);
@@ -983,7 +986,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
   }
 
   // ===================================================================== dialogue
-  function say(who, text, dur = 3.5) { hud.say(who, text, dur); }
+  function say(who, text, dur = 3.5) { if (S && S.hush) return; hud.say(who, text, dur); }
   function quip(who, deck, chance = 1, gap = 5) {
     if (S.quipT > 0 || Math.random() > chance) return;
     S.quipT = gap;

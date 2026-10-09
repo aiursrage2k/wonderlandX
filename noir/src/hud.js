@@ -279,11 +279,13 @@ export function createHud() {
 
   return {
     show, say, stamp, floater, update,
+    hush() { caps.splice(0).forEach((c) => c.wrap.remove()); },
     wasted(on, sub = '', word = 'WASTED') {
       const w = document.getElementById('wasted');
       document.getElementById('wasted-sub').textContent = sub;
       w.querySelector('.w-word').textContent = word;
-      w.classList.toggle('painted', word !== 'WASTED');
+      w.classList.toggle('painted', word === 'PAINTED THE TOWN');
+      w.classList.toggle('victory', word === 'CASE CLOSED');
       w.classList.toggle('hidden', !on);
       if (on) { w.style.animation = 'none'; void w.offsetWidth; w.style.animation = ''; }
     },

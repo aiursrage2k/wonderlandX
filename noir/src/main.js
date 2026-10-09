@@ -330,7 +330,7 @@ function onEnd(r) {
       lastIndoor = 'bar';
       hud.show(false); $('cross').style.display = 'none'; document.body.classList.remove('playing');
       // the bar scene plays the first time a case closes; replays go straight to the score (rewatchable from there)
-      const barLines = [...c.outro, ...evLines, ...(BAR_CLOSERS[c.id] || [])];
+      const barLines = [...evLines, ...(BAR_CLOSERS[c.id] || [])]; // one monologue only: the bar closer
       lastBar = { c, lines: barLines };
       save.seenBar = save.seenBar || {};
       const seen = save.seenBar[c.id];

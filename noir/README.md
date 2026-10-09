@@ -86,6 +86,9 @@ npx http-server -c-1 .     # then visit http://localhost:8080/noir/
   slides over and runs down every foot thug within about 30m of Mack, braking
   for Mack. With nothing to hit she does zig-zag laps around him with rocket
   boost bursts. Press E (or Z) to call her over, then E again to climb in.
+- **CASE CLOSED.** Win a case and a silver CASE CLOSED card slams down on the
+  street with a big-band stab, and all street chatter stops. The bar debrief
+  then has just one Mack monologue (the bar closer).
 - **PAINTED THE TOWN.** Lose to the color and a rainbow card slams down over
   Mack's puke scene, before the result screen.
 - **Breathers wash the city.** Between waves the rain gets a chance: City

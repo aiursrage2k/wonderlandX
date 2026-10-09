@@ -283,6 +283,12 @@ export const sfx = {
     const t2 = t + scale.length * 0.055 + 0.08;
     [...scale].reverse().forEach((s, i) => { const f = base * Math.pow(2, s / 12); tone(t2 + i * 0.05, f, 1.6, { type: 'triangle', gain: 0.05, attack: 0.004 }); });
   },
+  victory() {
+    // a big-band stab: a bright major-ninth chord with a cymbal swell
+    if (!ctx) return; const t = at();
+    [196, 246.9, 293.7, 370, 440].forEach((f, i) => { tone(t + i * 0.012, f, 1.6, { type: 'sawtooth', gain: 0.05, attack: 0.01 }); tone(t + 0.5, f * 2, 1.4, { type: 'triangle', gain: 0.03, attack: 0.02 }); });
+    noise(t, 1.8, { type: 'highpass', freq: 5000, gain: 0.12, attack: 0.3 });
+  },
   wasted() {
     if (!ctx) return; const t = at();
     noise(t, 0.25, { type: 'lowpass', freq: 600, gain: 0.7 });
