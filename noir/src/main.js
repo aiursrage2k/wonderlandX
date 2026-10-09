@@ -28,9 +28,9 @@ renderer.toneMappingExposure = 1.3;
 
 // film grain, vignette, rain on the lens, lightning, hurt and flask focus
 const NoirShader = {
-  uniforms: { tDiffuse: { value: null }, time: { value: 0 }, grain: { value: 0.05 }, vign: { value: 1.0 }, flash: { value: 0 }, focus: { value: 0 }, drops: { value: 1 }, res: { value: new THREE.Vector2(1, 1) }, scratch: { value: 1 } },
+  uniforms: { tDiffuse: { value: null }, time: { value: 0 }, grain: { value: 0.05 }, vign: { value: 1.0 }, flash: { value: 0 }, focus: { value: 0 }, drops: { value: 1 }, res: { value: new THREE.Vector2(1, 1) }, scratch: { value: 1 }, dream: { value: 0 } },
   vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
-  fragmentShader: `uniform sampler2D tDiffuse; uniform float time, grain, vign, flash, focus, drops, scratch; uniform vec2 res; varying vec2 vUv;
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float time, grain, vign, flash, focus, drops, scratch, dream; uniform vec2 res; varying vec2 vUv;
     float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     void main(){
       vec2 uv = vUv;
@@ -46,7 +46,17 @@ const NoirShader = {
         float m = r > 0.72 ? smoothstep(0.11, 0.0, d) : 0.0;
         off = (f - c) * m * 0.06 * drops;
       }
+      // dream wipe: the picture ripples like a reflection in a puddle
+      if (dream > 0.0) {
+        off.x += (sin(uv.y * 38.0 + time * 7.0) * 0.010 + sin(uv.y * 9.0 - time * 3.0) * 0.018) * dream;
+        off.y += sin(uv.x * 22.0 + time * 5.0) * 0.006 * dream;
+      }
       vec3 col = texture2D(tDiffuse, uv + off).rgb;
+      if (dream > 0.0) {
+        vec3 ghost = texture2D(tDiffuse, uv + off * 2.5 + vec2(0.012, 0.0) * dream).rgb;
+        col = mix(col, ghost, 0.35 * dream);
+        col = mix(col, vec3(0.92) * (0.55 + 0.45 * dot(col, vec3(0.333))), dream * dream * 0.85); // a soft white haze at the peak
+      }
       // focus (flask slow-mo): harder contrast
       col = mix(col, smoothstep(0.02, 0.9, col), focus * 0.6);
       // lightning
@@ -326,7 +336,8 @@ function onEnd(r) {
       const seen = save.seenBar[c.id];
       save.seenBar[c.id] = true; persist();
       // first close: the full debrief. After that: a quick toast. Either way, the door walks you out.
-      runDialog(seen ? pick(TOASTS) : barLines, { caseDef: c, door: true, done: () => showResult(true, { ...s, score, grade, newBest }) });
+      bar.setBooth(true);
+      runDialog(seen ? pick(TOASTS) : barLines, { caseDef: c, door: true, done: () => wakeAtDesk(() => showResult(true, { ...s, score, grade, newBest })) });
     }, 900);
   } else if (r.reason === 'dead') {
     // WASTED -> the Last Drop: Mack's stool empty, Sally drinking, then back out to the same case
@@ -345,6 +356,20 @@ function onEnd(r) {
   }
 }
 
+// after the debrief: the booth shimmers away and Mack comes to with his face on the desk
+function wakeAtDesk(then) {
+  mode = 'dream';
+  dreamWipe(() => {
+    bar.setBooth(false);
+    lastIndoor = 'office';
+    office.dreamWake();
+    playlist('office');
+  }, () => {
+    office.cut.act('wake');
+    setTimeout(then, 900);
+  });
+}
+
 function showResult(win, s) {
   setMode('result');
   const c = currentCase;
@@ -352,7 +377,7 @@ function showResult(win, s) {
   $('res-sub').innerHTML = win ? `${c.title} — ${c.dame.name} can sleep tonight. Nobody else in Rain City can.` : s.reason === 'bleed' ? 'The city went Technicolor. Mack Malone took one look at a turquoise sky, lost his lunch in the gutter, and gave up. Somewhere a saxophone turned pink and wept.' : `Mack Malone, face down in a puddle. The rain didn't care. The rain never does.<br><br><span class="who-sally">Crazy Sally:</span> ${pick(['Well. That\'s that. I\'m going to the Last Drop to get drunk. Somebody scrape him up and bring him by.', 'Get up, Mack. ...No? Fine. I\'ll be at the bar. Getting drunk. Very drunk. In your honor.', 'Gus! GUS! Pour me everything! Mack\'s taking a nap in a puddle again!'])}`;
   const row = (a, b) => `<div><span>${a}</span><span>${b}</span></div>`;
   $('res-stats').innerHTML = (win ? `<div class="grade">GRADE ${s.grade} · ${s.score.toLocaleString()}${s.newBest ? ' ★ NEW BEST' : ''}</div>` : '') +
-    (win ? row('Score on the streets', Math.round(s.score || 0).toLocaleString()) + row('Clean-close bonus', (s.bonus || 0).toLocaleString()) : '') +
+    (win ? row('Score on the streets', Math.round((s.score || 0) - (s.bonus || 0)).toLocaleString()) + row('Clean-close bonus', (s.bonus || 0).toLocaleString()) : '') +
     row('Syndicate put down', s.kills) + (s.evidenceTotal ? row('Evidence found', `${s.evidence} / ${s.evidenceTotal}`) : '') + row('Portals closed', s.portals) + row('Rockets Sally fired', s.rockets) + row('Flasks emptied', s.flasks) + row('Peak city color', `${Math.round(s.peak * 100)}%`) + row('Time on the streets', fmtTime(s.time)) +
     (win && s.newBest ? row('Newsreel', 'recorded — find it on the Big Board') : '');
   const btns = $('res-btns');
@@ -362,7 +387,7 @@ function showResult(win, s) {
     b('Back to the Big Board', () => setMode('board'));
     const reel = loadReel(c.id);
     if (reel) b('▶ Watch the newsreel', () => playReel(c, reel));
-    if (lastBar && lastBar.c === c) b('▶ Full bar scene', () => { $('result').classList.add('hidden'); mode = 'barOutro'; runDialog(lastBar.lines, { caseDef: c, door: true, done: () => setMode('result') }); });
+    if (lastBar && lastBar.c === c) b('▶ Full bar scene', () => { $('result').classList.add('hidden'); mode = 'barOutro'; bar.setBooth(true); runDialog(lastBar.lines, { caseDef: c, door: true, done: () => wakeAtDesk(() => setMode('result')) }); });
   } else {
     b('Try again', () => fade(() => { game.stop(); startStreets(c); }));
     b('Back to the office', () => fade(() => { game.stop(); hud.clear(); setMode('board'); }));
@@ -482,6 +507,23 @@ function resize() {
 }
 addEventListener('resize', resize);
 
+// ------------------------------------------------------------------ dream wipe
+// wavy shimmer + harp: mid() swaps the scene at the peak, end() runs when the picture settles
+let dreamFx = null;
+function dreamWipe(mid, end, dur = 2.8) {
+  sfx.harp();
+  dreamFx = { t: 0, dur, mid, end, midDone: false };
+}
+function tickDream(dt) {
+  if (!dreamFx) { noirPass.uniforms.dream.value = 0; return; }
+  const D = dreamFx;
+  D.t += dt;
+  const k = Math.min(1, D.t / D.dur);
+  noirPass.uniforms.dream.value = Math.sin(k * Math.PI);
+  if (!D.midDone && k >= 0.5) { D.midDone = true; D.mid && D.mid(); }
+  if (k >= 1) { dreamFx = null; noirPass.uniforms.dream.value = 0; D.end && D.end(); }
+}
+
 // ------------------------------------------------------------------ loop
 let last = performance.now(), time = 0;
 function frame(now) {
@@ -490,6 +532,7 @@ function frame(now) {
   last = now;
   time += dt;
   tickDialog(dt);
+  tickDream(dt);
   let scene, camera;
   if (mode === 'play' || mode === 'reel') {
     game.update(dt);
@@ -497,7 +540,7 @@ function frame(now) {
     if (game.state && game.state.boss && !game.state.boss.dead) playlist('boss');
   } else if (mode === 'pause' || (mode === 'result' && game.running === false && game.state)) {
     scene = game.scene; camera = game.camera;
-  } else if (mode === 'bar' || mode === 'barMid' || mode === 'barOutro' || (mode === 'result' && lastIndoor === 'bar')) {
+  } else if (mode === 'bar' || mode === 'barMid' || mode === 'barOutro' || ((mode === 'result' || mode === 'dream') && lastIndoor === 'bar')) {
     bar.update(dt); scene = bar.scene; camera = bar.camera;
   } else if (office) {
     office.update(dt); scene = office.scene; camera = office.camera;

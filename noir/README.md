@@ -93,8 +93,11 @@ npx http-server -c-1 .     # then visit http://localhost:8080/noir/
 - **The Packard vs. thugs.** Foot thugs never stop the car: at anything faster
   than a crawl you drive straight through them and they burst. Between waves there's a breather with a countdown, and any
   leftover goons run for it.
-- **The bar scene.** The first time you close a case you get the full debrief:
-  Mack broods, Gus reads the evidence, Sally orders another round. After that
+- **The bar scene.** Case-close debriefs happen in the corner booth at the
+  Last Drop. The first time you close a case you get the full debrief:
+  Mack broods, Gus reads the evidence, Sally orders another round. Then a dream
+  wipe (a wavy shimmer and a harp glissando) and Mack wakes up face down on his
+  desk in the office, where the results come up. After that
   it's just a quick toast. Walk out the door to skip either one; the full scene
   can be rewatched from the results screen.
 - **WASTED.** Go down and the world slows, Mack hits the pavement, and a big

@@ -274,6 +274,15 @@ export const sfx = {
     if (!ctx) return; const t = at();
     tone(t, 330, 0.45, { type: 'sawtooth', gain: 0.06 }); tone(t, 415, 0.45, { type: 'sawtooth', gain: 0.05 });
   },
+  harp() {
+    // dream harp: a glissando up two octaves and back down, strings left ringing
+    if (!ctx) return; const t = at();
+    const scale = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24, 26, 28, 31];
+    const base = 261.6;
+    scale.forEach((s, i) => { const f = base * Math.pow(2, s / 12); tone(t + i * 0.055, f, 1.8, { type: 'triangle', gain: 0.07, attack: 0.004 }); tone(t + i * 0.055, f * 2, 1.0, { type: 'sine', gain: 0.025, attack: 0.004 }); });
+    const t2 = t + scale.length * 0.055 + 0.08;
+    [...scale].reverse().forEach((s, i) => { const f = base * Math.pow(2, s / 12); tone(t2 + i * 0.05, f, 1.6, { type: 'triangle', gain: 0.05, attack: 0.004 }); });
+  },
   wasted() {
     if (!ctx) return; const t = at();
     noise(t, 0.25, { type: 'lowpass', freq: 600, gain: 0.7 });

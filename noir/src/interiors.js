@@ -332,6 +332,12 @@ export function buildOffice() {
   return {
     scene, camera, board, flasks, smokeOrigin, cut,
     setView(v) { view = v; },
+    // the dream wipe lands here: face down on the desk, camera already on him
+    dreamWake() {
+      resetActors();
+      sleep = 1; view = 'desk';
+      curPos.copy(views.desk.pos); curLook.copy(views.desk.look);
+    },
     // episode close-ups: frame an actor's face from the direction they're looking
     shot(who, dist = 2.6) {
       const m = who === 'MACK' ? mack : who === 'SALLY' ? sally : who === 'DOTTIE' ? dottie : who === 'DAME' ? dame : null;
@@ -488,6 +494,22 @@ export function buildBar() {
     bottle(g, -7.0, 0.9, z, 0.45);
     const f = makeFlask(0.4); f.position.set(-6.7, 0.9, z + 0.3); g.add(f);
   }
+  // the corner booth, back left: where every case gets its debrief
+  const boothG = new THREE.Group(); boothG.position.set(-7.2, 0, -4.4); g.add(boothG);
+  const leather = M(0x2e1a16, { kind: 'std', rough: 0.35 });
+  part(box, leather, -1.0, 0.45, 0, 0.9, 0.9, 2.6, boothG); // bench along the side wall
+  part(box, leather, -1.4, 1.25, 0, 0.25, 1.1, 2.6, boothG);
+  part(box, leather, 0.3, 0.45, -1.0, 2.0, 0.9, 0.9, boothG); // bench along the back wall
+  part(box, leather, 0.3, 1.25, -1.4, 2.0, 1.1, 0.25, boothG);
+  part(cyl, M(0x111111, { kind: 'std', metal: 0.7, rough: 0.3 }), 0.2, 0.45, 0.1, 0.12, 0.9, 0.12, boothG);
+  part(cyl, wood, 0.2, 0.92, 0.1, 1.3, 0.07, 1.3, boothG); // round table
+  bottle(boothG, 0.5, 0.96, 0.3, 0.5);
+  part(cyl, M(0xaaaaaa, { kind: 'std', rough: 0.05, transparent: true, opacity: 0.55 }), -0.1, 1.04, 0.5, 0.11, 0.16, 0.11, boothG);
+  part(cyl, M(0xeeeeee), 0.2, 1.02, -0.2, 0.06, 0.14, 0.06, boothG); // a candle
+  const candle = new THREE.PointLight(0xffd6a0, 2.2, 5, 1.6); candle.position.set(0.2, 1.3, -0.2); boothG.add(candle);
+  part(cyl, M(0x111111), 0.2, H - 0.6, 0.1, 0.02, 1.2, 0.02, boothG);
+  part(new THREE.ConeGeometry(0.4, 0.35, 16, 1, true), M(0x1e1e1e, { side: THREE.DoubleSide }), 0.2, H - 1.25, 0.1, 1, 1, 1, boothG);
+  const boothLamp = new THREE.PointLight(0xffe6c0, 7, 6, 1.6); boothLamp.position.set(0.2, H - 1.5, 0.1); boothG.add(boothLamp);
   // the piano and a piano player who never stops
   const piano = new THREE.Group(); piano.position.set(6, 0, 1.2); piano.rotation.y = -0.6; g.add(piano);
   part(box, M(0x0a0a0a, { kind: 'std', rough: 0.08 }), 0, 0.9, 0, 2.2, 1.2, 0.8, piano);
@@ -522,11 +544,28 @@ export function buildBar() {
   const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
   const pos = new THREE.Vector3(-5.2, 2.4, 3.6).add(OFF), look = new THREE.Vector3(0.2, 1.5, -2.2).add(OFF);
   const home = { pos: pos.clone(), look: look.clone() };
+  const STOOL_CAM = { pos: pos.clone(), look: look.clone() };
+  const BOOTH_CAM = { pos: new THREE.Vector3(-3.6, 2.5, -1.2).add(OFF), look: new THREE.Vector3(-7.4, 1.0, -4.7).add(OFF) };
   const curP = pos.clone(), curL = look.clone();
   let time = 0;
   return {
     scene, camera,
     smokeOrigin: new THREE.Vector3(-1.4, 1.2, -1.8).add(OFF),
+    // debrief: Mack and Sally slide into the corner booth; the camera settles on it
+    setBooth(on) {
+      if (on) {
+        mack.root.position.set(-8.25, -0.45, -4.3); mack.root.rotation.y = Math.PI / 2 + 0.15;
+        sally.root.position.set(-6.9, -0.4, -5.45); sally.root.rotation.y = -0.25;
+        sally.legL.rotation.x = sally.legR.rotation.x = -1.45;
+        home.pos.copy(BOOTH_CAM.pos); home.look.copy(BOOTH_CAM.look);
+      } else {
+        mack.root.position.set(-1.6, -0.1, -1.0); mack.root.rotation.y = Math.PI + 0.25;
+        sally.root.position.set(-0.25, 0.05, -1.0); sally.root.rotation.y = Math.PI - 0.5;
+        sally.legL.rotation.x = sally.legR.rotation.x = -1.2;
+        home.pos.copy(STOOL_CAM.pos); home.look.copy(STOOL_CAM.look);
+      }
+      pos.copy(home.pos); look.copy(home.look); curP.copy(pos); curL.copy(look);
+    },
     // Mack's stool sits empty when he's face down in a puddle across town
     setMack(on) { mack.root.visible = on; },
     sallyDrink(on) {
