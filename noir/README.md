@@ -93,6 +93,16 @@ npx http-server -c-1 .     # then visit http://localhost:8080/noir/
   Mack's puke scene, before the result screen.
 - **Breathers wash the city.** Between waves the rain gets a chance: City
   Color drifts down by about a quarter over a breather.
+- **Street-level camera.** A third-person chase cam sits behind Mack or the
+  Packard and looks down the street. On foot, W walks away from the camera and
+  A/D strafe; the camera swings round as you walk forward or push your aim to
+  the edge of the screen. C switches to the old overhead view (remembered).
+- **Deco HUD.** A pinned parchment case card (wave, objective), score and time
+  boxes, a City Color panel, a gold-framed survival panel with a speedometer, a
+  WRNC radio set for Chet's broadcasts, and a brass radar that rotates so your
+  heading is always up. The radar shows the city blocks, the paint, a diamond
+  for every goon, pulsing portals, and rim arrows with distances. The route to
+  the objective is a glowing neon line with magenta chevrons painted on the street.
 - **The Packard vs. thugs.** Foot thugs never stop the car: at anything faster
   than a crawl you drive straight through them and they burst. Between waves there's a breather with a countdown, and any
   leftover goons run for it.

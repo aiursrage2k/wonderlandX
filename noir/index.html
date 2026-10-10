@@ -40,7 +40,7 @@
         <b>On foot</b> WASD move · Hold right mouse to draw &amp; aim the big red revolver, left mouse to fire · R tuck &amp; roll · E car / doors · Mouse wheel zoom<br />
         <b>Survival</b> F Focus on/off: slows time, burns the color you've stolen · Q flask · G pain pills (full heal, but you see in color)<br />
         <b>Driving</b> W/S gas &amp; brake · A/D steer · Shift rocket boost · Space handbrake drift · Click: Sally fires where you point · E get out · Z whistle for the car<br />
-        <b>Anytime</b> N next jazz track · Esc pause
+        <b>Anytime</b> C chase cam / overhead cam · N next jazz track · Esc pause
       </div>
     </div>
   </div>
@@ -103,7 +103,7 @@
       <div id="pills-row"><span class="pill-ico"></span> <span id="pills-n">2</span> <span class="hud-label">PAIN PILLS</span> <span id="color-warn" class="hidden">· SEEING COLOR</span></div>
       <div class="hud-label">STOLEN COLOR · F FOCUS</div>
       <div class="bar focusbar"><div id="focus-fill"></div></div>
-      <div id="car-row" class="hidden"><div class="hud-label">THE PACKARD</div><div class="bar car"><div id="car-fill"></div></div><div class="hud-label">ROCKET BOOST · SHIFT</div><div class="bar boostbar"><div id="boost-fill"></div></div></div>
+      <div id="car-row" class="hidden"><div class="speedo"><small>SPEED</small><b id="speed">0</b><i>KM/H</i></div><div class="hud-label">THE PACKARD</div><div class="bar car"><div id="car-fill"></div></div><div class="hud-label">ROCKET BOOST · SHIFT</div><div class="bar boostbar"><div id="boost-fill"></div></div></div>
     </div>
     <div id="hud-top">
       <div id="case-no"></div>
@@ -113,12 +113,17 @@
       <div id="bossbar" class="hidden"><div id="boss-name"></div><div class="bar boss"><div id="boss-fill"></div></div><div id="boss-sub"></div></div>
     </div>
     <div id="hud-tr">
-      <div id="scorebox"><div class="hud-label">SCORE</div><div><span id="score">0</span><span id="mult">×1</span></div><div class="bar combobar"><div id="combo-fill"></div></div></div>
-      <canvas id="minimap" width="200" height="200"></canvas>
       <div class="hud-label bleed-label">CITY COLOR <span id="bleed-pct">0%</span></div>
       <div class="stomach">MACK'S STOMACH: <span id="stomach">FINE</span></div>
       <div class="bar bleed"><div id="bleed-fill"></div></div>
     </div>
+    <div id="topboxes">
+      <div class="tbox"><label>SCORE</label><div><span id="score">0</span><span id="mult">×1</span></div><div class="bar combobar"><div id="combo-fill"></div></div></div>
+      <div class="tbox"><label>TIME</label><div><span id="clock">00:00</span></div></div>
+    </div>
+    <div id="radar"><canvas id="minimap" width="240" height="240"></canvas><div id="compass"><b style="left:50%;top:0">N</b><b style="left:100%;top:50%">E</b><b style="left:50%;top:100%">S</b><b style="left:0;top:50%">W</b></div></div>
+    <div id="radio" class="hidden"><div class="radio-dial"></div><div><div class="radio-who">WRNC · CHET BALLANTINE</div><div id="radio-text"></div></div></div>
+    <div id="keys">RIGHT-CLICK aim · CLICK fire · F focus · E car · Z call car · C camera · Esc pause</div>
     <div id="wanted" class="hidden">WANTED BY THE CITY</div>
     <div id="captions"></div>
     <div id="hint"></div>

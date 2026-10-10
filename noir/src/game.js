@@ -656,8 +656,13 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
   const chevGeo = new THREE.ShapeGeometry(chevShape);
   chevGeo.rotateX(-Math.PI / 2);
   chevGeo.rotateY(Math.PI);
-  const chevMat = new THREE.MeshBasicMaterial({ color: 0xff2a3a, transparent: true, opacity: 0.85, depthWrite: false, blending: THREE.AdditiveBlending });
+  const chevMat = new THREE.MeshBasicMaterial({ color: 0xff3fb4, transparent: true, opacity: 0.85, depthWrite: false, blending: THREE.AdditiveBlending });
   const chevrons = new THREE.InstancedMesh(chevGeo, chevMat, 90);
+  // a glowing neon line painted down the route, under the chevrons
+  const pathGeo = new THREE.PlaneGeometry(1, 1); pathGeo.rotateX(-Math.PI / 2);
+  const pathMat = new THREE.MeshBasicMaterial({ color: 0xc040ff, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending });
+  const pathLine = new THREE.InstancedMesh(pathGeo, pathMat, 64);
+  pathLine.frustumCulled = false; pathLine.count = 0; scene.add(pathLine);
   chevrons.frustumCulled = false; chevrons.count = 0;
   scene.add(chevrons);
   const beacon = new THREE.Group();
@@ -678,7 +683,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       g = best ? { type: 'lead', x: best.pos.x, z: best.pos.z } : null;
       if (best && (!S.leadP || S.leadP !== best)) { S.leadP = best; S.route = null; }
     }
-    if (!g || (g.type !== 'goto' && g.type !== 'lead') || S.over) { chevrons.count = 0; beacon.visible = false; return; }
+    if (!g || (g.type !== 'goto' && g.type !== 'lead') || S.over) { chevrons.count = 0; pathLine.count = 0; beacon.visible = false; return; }
     S.routeT -= dt;
     if (S.routeT <= 0 || !S.route) { S.routeT = 0.25; S.route = route(f.x, f.z, g.x, g.z); S.route[0] = { x: f.x, z: f.z }; }
     S.route[0] = { x: f.x, z: f.z };
@@ -698,7 +703,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
           const far = total + acc;
           _cp.set(a.x + dx / len * acc, 0.09, a.z + dz / len * acc);
           _cq.setFromAxisAngle(_up, yaw);
-          const sc = far > 220 ? 0 : (far < 10 ? far / 10 : 1) * (1.2 + Math.sin(S.time * 6 - far * 0.3) * 0.15);
+          const sc = far > 220 ? 0 : (far < 10 ? far / 10 : 1) * (1.7 + Math.sin(S.time * 6 - far * 0.3) * 0.2);
           _cs.set(sc, 1, sc);
           chevrons.setMatrixAt(n++, _cm.compose(_cp, _cq, _cs));
         }
@@ -708,6 +713,20 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     }
     chevrons.count = n;
     chevrons.instanceMatrix.needsUpdate = true;
+    let m = 0, run = 0;
+    for (let i = 0; i < S.route.length - 1 && m < 64 && run < 220; i++) {
+      const a = S.route[i], b = S.route[i + 1];
+      const dx = b.x - a.x, dz = b.z - a.z, len = Math.hypot(dx, dz);
+      if (len < 0.01) continue;
+      _cp.set((a.x + b.x) / 2, 0.07, (a.z + b.z) / 2);
+      _cq.setFromAxisAngle(_up, Math.atan2(dx, dz));
+      _cs.set(0.7, 1, len + 0.7);
+      pathLine.setMatrixAt(m++, _cm.compose(_cp, _cq, _cs));
+      run += len;
+    }
+    pathLine.count = m;
+    pathLine.instanceMatrix.needsUpdate = true;
+    pathMat.opacity = 0.45 + Math.sin(S.time * 3) * 0.1;
     chevMat.opacity = 0.7 + Math.sin(S.time * 5) * 0.15;
     if (g.type === 'goto') { updateObjective(); if (Math.hypot(f.x - g.x, f.z - g.z) < (g.r || 20)) checkStage(); }
   }
@@ -1630,7 +1649,15 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
 
     // aim on the ground plane
     ray.setFromCamera(new THREE.Vector2(mouse.x, mouse.y), camera);
-    ray.ray.intersectPlane(plane, aim);
+    if (!ray.ray.intersectPlane(plane, aim)) {
+      // looking at the sky: aim far down the line of sight instead
+      const d = ray.ray.direction, f0 = focus(), hl = Math.hypot(d.x, d.z) || 1;
+      aim.set(f0.x + d.x / hl * 120, 1.4, f0.z + d.z / hl * 120);
+    } else if (camMode === 'chase') {
+      // keep the aim point within sensible range
+      const f0 = focus(), dx = aim.x - f0.x, dz = aim.z - f0.z, dd = Math.hypot(dx, dz);
+      if (dd > 140) aim.set(f0.x + dx / dd * 140, 1.4, f0.z + dz / dd * 140);
+    }
 
     if (S.over) {
       S.endT -= rdt;
@@ -1704,7 +1731,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       boost: CAR.boost, hp: P.hp / P.maxHp, flasks: P.flasks, maxFlasks: P.maxFlasks, bleed: Math.min(1, S.bleed), focus: P.focus > 0 || P.focusHeld, focusMeter: P.focusMeter, pills: P.pills, ammo: P.ammo, reloading: P.reload > 0, seeColor: P.color > 0,
       inCar: P.inCar, carHp: CAR.alive ? CAR.hp / 400 : 0, carAlive: CAR.alive,
       player: focus(), enemies: S.enemies, portals: S.portals, car: CAR, sally: SA, boss: S.boss && !S.boss.dead ? S.boss : null,
-      civs: S.civs, aim, hint: currentHint(), camera, time: S.time, objectives: objectiveMarks(), sallyHp: SA.hp / SA.maxHp, sallyDown: SA.down,
+      civs: S.civs, aim, hint: currentHint(), camera, time: S.time, heading: camMode === 'chase' ? camYaw : Math.PI, speed: Math.abs(CAR.speed), clock: S.time, stageText: S.stage ? S.stage.text : '', objectives: objectiveMarks(), sallyHp: SA.hp / SA.maxHp, sallyDown: SA.down,
     });
     recFrame(rdt);
     pressed.clear();
@@ -1749,6 +1776,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
 
   function handleInput(rdt, pdt) {
     if (pressed.has('KeyZ')) summonCar();
+    if (pressed.has('KeyC')) toggleCam();
     if (pressed.has('KeyE') && !(!P.inCar && nearestCracked())) {
       if (P.inCar) exitCar(false, true);
       else if (CAR.alive && P.pos.distanceTo(CAR.pos) < (SA.driving ? 7 : 5)) enterCar();
@@ -1801,6 +1829,12 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     if (keys.has('KeyS') || keys.has('ArrowDown')) mz += 1;
     if (keys.has('KeyA') || keys.has('ArrowLeft')) mx -= 1;
     if (keys.has('KeyD') || keys.has('ArrowRight')) mx += 1;
+    P.moveFwd = mz < 0;
+    if (camMode === 'chase' && (mx || mz)) {
+      // W walks away from the camera, A/D strafe across it
+      const iy = -mz, ix = mx, fx0 = Math.sin(camYaw), fz0 = Math.cos(camYaw), rx = -Math.cos(camYaw), rz = Math.sin(camYaw);
+      mx = fx0 * iy + rx * ix; mz = fz0 * iy + rz * ix;
+    }
     const ml = Math.hypot(mx, mz);
     if (ml) { mx /= ml; mz /= ml; }
     if ((pressed.has('KeyR') || pressed.has('Space') || pressed.has('ShiftLeft')) && P.rollCd <= 0) {
@@ -2883,8 +2917,46 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
   }
 
   // ---- camera
+  // 'chase': third person behind Mack or the Packard, looking down the street (default)
+  // 'top':   the old high overhead view. C toggles; the choice is remembered.
   const camPos = V(), camLook = V();
+  let camMode = 'chase';
+  try { camMode = localStorage.getItem('gcb-cam') || 'chase'; } catch (e) { /* private window */ }
+  let camYaw = 0;
+  function toggleCam() {
+    camMode = camMode === 'chase' ? 'top' : 'chase';
+    try { localStorage.setItem('gcb-cam', camMode); } catch (e) { /* ignore */ }
+    snapCamera();
+    say('MACK', camMode === 'chase' ? 'Down at street level. Where the rain lives.' : 'Bird\'s-eye. Like a pigeon with a pension.', 2);
+  }
+  function camYawTarget() {
+    if (P.inCar) return Math.abs(CAR.speed) > 2 || !S.camInit ? CAR.ang : camYaw;
+    if (S.down !== undefined || S.puke !== undefined) return camYaw;
+    if (P.aiming) {
+      // aiming steers the camera only when you push the sights well off-center
+      const d = wrapAngle(P.face - camYaw);
+      return Math.abs(d) > 0.55 ? camYaw + d - Math.sign(d) * 0.55 : camYaw;
+    }
+    return P.moveFwd ? P.face : camYaw;
+  }
+  function chaseTargets() {
+    const f = focus();
+    const fx0 = Math.sin(camYaw), fz0 = Math.cos(camYaw), rx = -Math.cos(camYaw), rz = Math.sin(camYaw);
+    const down = S && S.down !== undefined ? Math.max(0.5, 1 - S.down * 0.4) : 1;
+    if (P.inCar) {
+      const sp = Math.abs(CAR.speed);
+      const dist = (11 + Math.min(7, sp * 0.09)) * zoom, h = (4.4 + Math.min(1.5, sp * 0.02)) * zoom;
+      return { pos: V(f.x - fx0 * dist, h, f.z - fz0 * dist), look: V(f.x + fx0 * 10, 1.4, f.z + fz0 * 10) };
+    }
+    const aimK = P.aimT || 0;
+    const dist = (7.5 - aimK * 2.2) * zoom * down, h = (3.7 - aimK * 0.7) * zoom * down, sh = aimK * 1.3;
+    return {
+      pos: V(f.x - fx0 * dist + rx * sh, h, f.z - fz0 * dist + rz * sh),
+      look: V(f.x + fx0 * (5 + aimK * 6) + rx * sh * 0.6, 1.5, f.z + fz0 * (5 + aimK * 6) + rz * sh * 0.6),
+    };
+  }
   function camTargets() {
+    if (camMode === 'chase') return chaseTargets();
     const f = focus();
     const lead = P.inCar ? 0.55 : 0;
     const lx = f.x + CAR.vx * lead * (P.inCar ? 1 : 0), lz = f.z + CAR.vz * lead * (P.inCar ? 1 : 0);
@@ -2892,10 +2964,14 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     const h = (P.inCar ? 46 + Math.min(18, Math.abs(CAR.speed) * 0.35) : 28) * zoom * (S && S.down !== undefined ? Math.max(0.45, 1 - S.down * 0.5) : 1);
     return { pos: V(lx + ax, h, lz + az + h * 0.62), look: V(lx + ax, 0, lz + az - 2) };
   }
-  function snapCamera() { const t = camTargets(); camPos.copy(t.pos); camLook.copy(t.look); }
+  function snapCamera() { if (S) { camYaw = camYawTarget(); S.camInit = true; } const t = camTargets(); camPos.copy(t.pos); camLook.copy(t.look); }
   function updateCamera(dt) {
+    if (camMode === 'chase') {
+      const rate = P.inCar ? 3.2 : P.aiming ? 1.6 : 2.4;
+      camYaw += wrapAngle(camYawTarget() - camYaw) * Math.min(1, dt * rate);
+    }
     const t = camTargets();
-    const k = 1 - Math.exp(-dt * 5);
+    const k = 1 - Math.exp(-dt * (camMode === 'chase' ? (P.inCar ? 9 : 7) : 5));
     camPos.lerp(t.pos, k); camLook.lerp(t.look, k);
     camera.position.copy(camPos);
     fx.shake = Math.max(0, fx.shake - dt * 2.5);

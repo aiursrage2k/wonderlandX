@@ -28,7 +28,15 @@ export function createHud() {
 
   function show(on) { el.hud.classList.toggle('hidden', !on); }
 
+  let radioT = 0;
   function say(who, text, dur = 3.5) {
+    if (who === 'RADIO') {
+      // the radio gets its own little set on the left, not a caption
+      document.getElementById('radio-text').textContent = text;
+      document.getElementById('radio').classList.remove('hidden');
+      radioT = dur + text.length * 0.03;
+      return;
+    }
     const c = CAST[who] || { name: who, cls: 'dame' };
     const d = document.createElement('div');
     d.className = 'cap';
@@ -37,7 +45,7 @@ export function createHud() {
     wrap.appendChild(d);
     el.captions.appendChild(wrap);
     caps.push({ wrap, t: dur + text.length * 0.02 });
-    while (caps.length > 3) caps.shift().wrap.remove();
+    while (caps.length > 2) caps.shift().wrap.remove();
   }
 
   function stamp(text) {
@@ -78,8 +86,14 @@ export function createHud() {
     el.sallyState.textContent = s.sallyDown ? '· AT THE BAR' : '';
     el.ptSally.classList.toggle('down', !!s.sallyDown);
     el.carRow.classList.toggle('hidden', !s.inCar);
+    if (radioT > 0) { radioT -= dt; if (radioT <= 0) document.getElementById('radio').classList.add('hidden'); }
+    if (s.clock !== undefined) {
+      const m = Math.floor(s.clock / 60), sec = Math.floor(s.clock % 60);
+      document.getElementById('clock').textContent = `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+    }
+    if (s.inCar && s.speed !== undefined) document.getElementById('speed').textContent = Math.round(s.speed * 2.2);
     if (s.score !== undefined) {
-      el.score.textContent = Math.round(s.score).toLocaleString();
+      el.score.textContent = String(Math.round(s.score)).padStart(7, '0');
       el.mult.textContent = `×${s.mult.toFixed(2).replace(/\.?0+$/, '')}`;
       el.mult.classList.toggle('hot', s.mult >= 4);
       el.combo.style.transform = `scaleX(${Math.max(0, s.combo || 0)})`;
@@ -204,54 +218,84 @@ export function createHud() {
     });
   }
 
+  // the radar: heading always up, city blocks, paint, every goon and portal, a compass ring that turns
   function minimap(s) {
-    const W = 200, R = 70; // world radius shown
+    const W = 240, R = 95; // world radius shown
+    if (mctx.canvas.width !== W) { mctx.canvas.width = mctx.canvas.height = W; }
     if (!mapImg) {
       mapImg = document.createElement('canvas');
       mapImg.width = mapImg.height = C.span;
       drawCityMap(mapImg.getContext('2d'), C.span, C.span);
     }
-    const p = s.player;
-    const sc = W / (R * 2);
+    const p = s.player, sc = W / (R * 2), c0 = W / 2;
+    // rotate so the way you're facing points up
+    const hd = s.heading ?? Math.PI;
+    const rot = -Math.PI / 2 - Math.atan2(Math.cos(hd), Math.sin(hd));
+    const t = performance.now() / 1000;
     mctx.save();
     mctx.clearRect(0, 0, W, W);
-    mctx.beginPath(); mctx.arc(W / 2, W / 2, W / 2, 0, Math.PI * 2); mctx.clip();
-    mctx.fillStyle = '#111'; mctx.fillRect(0, 0, W, W);
-    const sx = (p.x - R + C.span / 2), sz = (p.z - R + C.span / 2);
-    mctx.drawImage(mapImg, sx, sz, R * 2, R * 2, 0, 0, W, W);
+    mctx.beginPath(); mctx.arc(c0, c0, c0 - 2, 0, Math.PI * 2); mctx.clip();
+    mctx.fillStyle = '#16130f'; mctx.fillRect(0, 0, W, W);
+    mctx.save();
+    mctx.translate(c0, c0); mctx.rotate(rot); mctx.translate(-c0, -c0);
+    const ext = R * 1.45; // draw a bit wider than the radius so the corners stay filled while turning
+    const sx = (p.x - ext + C.span / 2), sz = (p.z - ext + C.span / 2);
+    const off = (ext - R) * sc;
+    mctx.globalAlpha = 0.85;
+    mctx.drawImage(mapImg, sx, sz, ext * 2, ext * 2, -off, -off, W + off * 2, W + off * 2);
     mctx.globalAlpha = 0.9;
     const ps = PAINT.res / PAINT.size;
-    mctx.drawImage(paintCanvas, (p.x - R - PAINT.origin) * ps, (p.z - R - PAINT.origin) * ps, R * 2 * ps, R * 2 * ps, 0, 0, W, W);
+    mctx.drawImage(paintCanvas, (p.x - ext - PAINT.origin) * ps, (p.z - ext - PAINT.origin) * ps, ext * 2 * ps, ext * 2 * ps, -off, -off, W + off * 2, W + off * 2);
     mctx.globalAlpha = 1;
+    // sepia wash so it reads as an old street map
+    mctx.fillStyle = 'rgba(70, 52, 30, 0.28)'; mctx.fillRect(-off, -off, W + off * 2, W + off * 2);
     const P = (x, z) => [(x - p.x + R) * sc, (z - p.z + R) * sc];
-    // landmarks
-    const mark = (lm, txt, col) => { const [x, y] = P(lm.x, lm.z); mctx.fillStyle = col; mctx.font = 'bold 12px Georgia'; mctx.textAlign = 'center'; mctx.fillText(txt, x, y); };
+    const upright = (x, y, fn) => { mctx.save(); mctx.translate(x, y); mctx.rotate(-rot); fn(); mctx.restore(); };
+    const mark = (lm, txt, col) => { const [x, y] = P(lm.x, lm.z); upright(x, y, () => { mctx.fillStyle = col; mctx.font = 'bold 12px Georgia'; mctx.textAlign = 'center'; mctx.fillText(txt, 0, 4); }); };
     mark(L.donut, '🍩', '#ff6fb5');
-    if (L.bar.door) mark(L.bar.door, 'BAR', '#4fa8ff');
-    for (const e of s.enemies) { const [x, y] = P(e.pos.x, e.pos.z); mctx.fillStyle = e.color; mctx.beginPath(); mctx.arc(x, y, e.type === 'boss' ? 7 : e.type === 'roomba' ? 8 : e.type === 'lowrider' ? 4.5 : 3, 0, 7); mctx.fill(); }
-    for (const q of s.portals) { const [x, y] = P(q.pos.x, q.pos.z); mctx.strokeStyle = '#fff'; mctx.lineWidth = 3; mctx.beginPath(); mctx.arc(x, y, 7, 0, 7); mctx.stroke(); }
-    if (s.carAlive && !s.inCar) { const [x, y] = P(s.car.pos.x, s.car.pos.z); mctx.fillStyle = '#ddd'; mctx.fillRect(x - 3, y - 3, 6, 6); }
+    if (L.bar.door) mark(L.bar.door, 'BAR', '#e8c98a');
+    // goons: little diamonds in their own color; portals: a pulsing pink eye
+    for (const e of s.enemies) {
+      if (e.dead) continue;
+      const [x, y] = P(e.pos.x, e.pos.z);
+      const r = e.type === 'boss' ? 7 : e.type === 'roomba' || e.type === 'truck' ? 6 : 3.4;
+      mctx.fillStyle = e.cop ? '#5a8cff' : e.color || '#ff2a3a';
+      mctx.beginPath(); mctx.moveTo(x, y - r); mctx.lineTo(x + r, y); mctx.lineTo(x, y + r); mctx.lineTo(x - r, y); mctx.closePath(); mctx.fill();
+    }
+    for (const q of s.portals) {
+      const [x, y] = P(q.pos.x, q.pos.z);
+      mctx.strokeStyle = '#ff2d95'; mctx.lineWidth = 2.5;
+      mctx.beginPath(); mctx.arc(x, y, 7 + Math.sin(t * 5) * 1.5, 0, 7); mctx.stroke();
+      mctx.fillStyle = q.cracked ? '#fff' : '#ff2d95'; mctx.beginPath(); mctx.arc(x, y, 3, 0, 7); mctx.fill();
+    }
+    if (s.carAlive && !s.inCar) { const [x, y] = P(s.car.pos.x, s.car.pos.z); upright(x, y, () => { mctx.fillStyle = '#e8e2d4'; mctx.font = 'bold 11px Georgia'; mctx.textAlign = 'center'; mctx.fillText('P', 0, 4); }); }
     if (!s.sally.inCar) { const [x, y] = P(s.sally.pos.x, s.sally.pos.z); mctx.fillStyle = '#ff2a3a'; mctx.beginPath(); mctx.arc(x, y, 3, 0, 7); mctx.fill(); }
-    mctx.fillStyle = '#fff'; mctx.beginPath(); mctx.arc(W / 2, W / 2, 4, 0, 7); mctx.fill();
-    // objectives: icon inside radar range, arrow on the rim when outside
-    const t = performance.now() / 1000;
+    mctx.restore(); // back to screen space (heading up)
+    // objectives: icon inside range, arrow + distance on the rim outside it
     for (const o of s.objectives || []) {
       const dx = o.x - p.x, dz = o.z - p.z, d = Math.hypot(dx, dz);
+      const a = Math.atan2(dz, dx) + rot;
       mctx.fillStyle = o.c; mctx.strokeStyle = o.c;
-      if (d < R * 0.92) {
-        const [x, y] = P(o.x, o.z);
-        mctx.lineWidth = 2.5; mctx.beginPath(); mctx.arc(x, y, 7 + Math.sin(t * 5) * 2, 0, 7); mctx.stroke();
-        mctx.beginPath(); mctx.arc(x, y, 3, 0, 7); mctx.fill();
+      if (d < R * 0.9) {
+        const x = c0 + Math.cos(a) * d * sc, y = c0 + Math.sin(a) * d * sc;
+        mctx.lineWidth = 2.5; mctx.beginPath(); mctx.arc(x, y, 8 + Math.sin(t * 5) * 2, 0, 7); mctx.stroke();
       } else {
-        const a = Math.atan2(dz, dx), rr = W / 2 - 10;
-        const x = W / 2 + Math.cos(a) * rr, y = W / 2 + Math.sin(a) * rr;
+        const rr = c0 - 16, x = c0 + Math.cos(a) * rr, y = c0 + Math.sin(a) * rr;
         mctx.save(); mctx.translate(x, y); mctx.rotate(a);
         mctx.beginPath(); mctx.moveTo(9, 0); mctx.lineTo(-6, -7); mctx.lineTo(-3, 0); mctx.lineTo(-6, 7); mctx.closePath(); mctx.fill();
         mctx.restore();
-        if (o.k === 'goto') { mctx.font = 'bold 10px Georgia'; mctx.textAlign = 'center'; mctx.fillText(`${Math.round(d)}m`, W / 2 + Math.cos(a) * (rr - 18), W / 2 + Math.sin(a) * (rr - 18) + 3); }
+        if (o.k === 'goto' || o.k === 'portal') { mctx.font = 'bold 10px Georgia'; mctx.textAlign = 'center'; mctx.fillText(`${Math.round(d)}m`, c0 + Math.cos(a) * (rr - 18), c0 + Math.sin(a) * (rr - 18) + 3); }
       }
     }
+    // you: an arrow pointing up
+    mctx.fillStyle = '#fff'; mctx.strokeStyle = '#000'; mctx.lineWidth = 1.5;
+    mctx.beginPath(); mctx.moveTo(c0, c0 - 9); mctx.lineTo(c0 + 6, c0 + 6); mctx.lineTo(c0, c0 + 2); mctx.lineTo(c0 - 6, c0 + 6); mctx.closePath(); mctx.fill(); mctx.stroke();
     mctx.restore();
+    // compass letters ride the brass ring
+    const ring = document.getElementById('compass');
+    if (ring) ring.style.transform = `rotate(${rot}rad)`;
+    const lab = ring && ring.children;
+    if (lab) for (const d of lab) d.style.transform = `translate(-50%, -50%) rotate(${-rot}rad)`;
   }
 
   // little painted portraits: Mack in his fedora, Sally in her red dress
@@ -307,6 +351,7 @@ export function createHud() {
       barEls.forEach((d) => (d.style.display = 'none'));
       tagEls.forEach((d) => (d.style.display = 'none'));
       el.bossbar.classList.add('hidden');
+      radioT = 0; document.getElementById('radio').classList.add('hidden');
       document.getElementById('wasted').classList.add('hidden');
       lastFlasks = -1; lastAmmo = -1;
     },
