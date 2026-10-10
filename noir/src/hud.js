@@ -28,7 +28,7 @@ export function createHud() {
 
   function show(on) { el.hud.classList.toggle('hidden', !on); }
 
-  let radioT = 0;
+  let radioT = 0, tutT = 0;
   function say(who, text, dur = 3.5) {
     if (who === 'RADIO') {
       // the radio gets its own little set on the left, not a caption
@@ -86,6 +86,7 @@ export function createHud() {
     el.sallyState.textContent = s.sallyDown ? '· AT THE BAR' : '';
     el.ptSally.classList.toggle('down', !!s.sallyDown);
     el.carRow.classList.toggle('hidden', !s.inCar);
+    if (tutT > 0) { tutT -= dt; if (tutT <= 0) document.getElementById('tutorial').classList.add('hidden'); }
     if (radioT > 0) { radioT -= dt; if (radioT <= 0) document.getElementById('radio').classList.add('hidden'); }
     if (s.clock !== undefined) {
       const m = Math.floor(s.clock / 60), sec = Math.floor(s.clock % 60);
@@ -149,7 +150,11 @@ export function createHud() {
   function enemyBars(s, w, h) {
     const list = [];
     for (const e of s.enemies) if (!e.dead && e.hp < e.maxHp && e.type !== 'boss' && !(e.emerge > 0)) list.push([e.pos, e.hp / e.maxHp, e.type === 'copter' ? 26 : e.type === 'roomba' || e.type === 'truck' ? 7 : e.type === 'lowrider' ? 4.5 : 3.4 * (e.model.root.scale.x || 1), e.type === 'roomba' || e.type === 'truck' || e.type === 'copter' ? 70 : 40]);
-    for (const p of s.portals) if (p.hp < p.maxHp) list.push([p.pos, p.hp / p.maxHp, 13, 80]);
+    for (const p of s.portals) {
+      if (p.walker) { if (!p.toppled) { const t = p.legs.reduce((a, l) => a + Math.max(0, l.alive ? l.hp : 0), 0) / (p.legs.length * 150); if (t < 1) list.push([p.pos, t, p.y + 7, 110]); } }
+      else if (p.hp < p.maxHp) list.push([p.pos, p.hp / p.maxHp, 13, 80]);
+    }
+    smashPcts(s, w, h);
     while (barEls.length < Math.min(list.length, 30)) { const d = document.createElement('div'); d.appendChild(document.createElement('i')); ebars.appendChild(d); barEls.push(d); }
     barEls.forEach((d, i) => {
       const it = list[i];
@@ -161,6 +166,26 @@ export function createHud() {
       d.style.width = `${it[3]}px`;
       d.style.setProperty('--w', `${it[3]}px`);
       d.firstChild.style.width = `${Math.max(0, it[1]) * 100}%`;
+    });
+  }
+
+  // Smash-style % over a toppled walker eye: white, warming to red the more it's been hit
+  const pctEls = [];
+  const pctBox = document.getElementById('pcts');
+  function smashPcts(s, w, h) {
+    const list = s.portals.filter((p) => p.walker && p.toppled);
+    while (pctEls.length < list.length) { const d = document.createElement('div'); pctBox.appendChild(d); pctEls.push(d); }
+    pctEls.forEach((d, i) => {
+      const p = list[i];
+      if (!p) { d.style.display = 'none'; return; }
+      v.set(p.pos.x, p.y + 6, p.pos.z).project(s.camera);
+      if (v.z > 1 || Math.abs(v.x) > 1.05 || Math.abs(v.y) > 1.05) { d.style.display = 'none'; return; }
+      d.style.display = 'block';
+      d.style.left = `${(v.x * 0.5 + 0.5) * w}px`; d.style.top = `${(-v.y * 0.5 + 0.5) * h}px`;
+      const k = Math.min(1, p.pct / 150);
+      d.style.color = `rgb(255, ${Math.round(255 - k * 215)}, ${Math.round(255 - k * 225)})`;
+      d.style.fontSize = `${34 + k * 26}px`;
+      d.textContent = `${Math.round(p.pct)}%`;
     });
   }
 
@@ -324,6 +349,13 @@ export function createHud() {
   return {
     show, say, stamp, floater, update,
     hush() { caps.splice(0).forEach((c) => c.wrap.remove()); },
+    // a how-to card pinned beside the case card: a title and numbered steps
+    tutorial(lines, sec = 14) {
+      const t = document.getElementById('tutorial');
+      t.innerHTML = `<div class="tut-head">${lines[0]}</div>` + lines.slice(1).map((l, i) => `<div class="tut-step"><b>${i + 1}</b><span>${l}</span></div>`).join('');
+      t.classList.remove('hidden');
+      tutT = sec;
+    },
     wasted(on, sub = '', word = 'WASTED') {
       const w = document.getElementById('wasted');
       document.getElementById('wasted-sub').textContent = sub;
@@ -350,8 +382,10 @@ export function createHud() {
       floaters.splice(0).forEach((f) => f.d.remove());
       barEls.forEach((d) => (d.style.display = 'none'));
       tagEls.forEach((d) => (d.style.display = 'none'));
+      pctEls.forEach((d) => (d.style.display = 'none'));
       el.bossbar.classList.add('hidden');
       radioT = 0; document.getElementById('radio').classList.add('hidden');
+      tutT = 0; document.getElementById('tutorial').classList.add('hidden');
       document.getElementById('wasted').classList.add('hidden');
       lastFlasks = -1; lastAmmo = -1;
     },

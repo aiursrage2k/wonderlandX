@@ -103,6 +103,22 @@ npx http-server -c-1 .     # then visit http://localhost:8080/noir/
   heading is always up. The radar shows the city blocks, the paint, a diamond
   for every goon, pulsing portals, and rim arrows with distances. The route to
   the objective is a glowing neon line with magenta chevrons painted on the street.
+- **Case 1 teaches sealing.** Its eyes stay put, and a how-to card walks you
+  through shoot, crack, walk up, hold E.
+- **Walker eyes (case 2 on).** The eye stands on four iron spider legs and stalks
+  the road grid toward Mack, stomping color with every step. Shoot or ram the
+  legs (each one you break makes it limp), and with all four gone it topples.
+  Then a Smash-style % rises with every hit. Ram it with the Packard (boost hits
+  hardest) to launch it: slam it into a building or knock it far enough and it
+  bursts. You can still seal a toppled eye on foot.
+- **Skating thugs.** Walker eyes spit roller-skating painters who weave down the
+  streets at speed, streaking paint and swerving from the Packard.
+- **Demon tanks (case 3).** Black tanks with horns and a pink demon eye on the
+  turret. They hunt Mack along the roads and fire three-rocket rainbow salvos.
+  You can't run them over, and ramming one hurts.
+- **Don Lorenzo Lazuli (case 3 boss).** The Syndicate's banker, in a white fedora
+  and lapis pinstripes. He sweeps a tommy gun, lobs cash bombs, and calls in
+  his boys.
 - **Demon-eye portals.** Every tear in the sky is a giant eye in a pink vortex,
   ringed in black spikes and neon. It turns to watch Mack, glances about, blinks,
   and gets more bloodshot as you crack it.
@@ -155,8 +171,8 @@ leaves a breadcrumb for the finale: an eye painted on the pier, a hymnal called
 | # | Case | What happens |
 | --- | --- | --- |
 | 1 | The Blue Period | Meet Big Pork, then four waves of tears in the sky across the whole city: 1, 2, 3, then 4 portals, with a breather between each. |
-| 2 | Purple Rain Man | A blue note comes out actually blue. Vic Vermilion. The first Paintbots. |
-| 3 | The Vault of Many Colors | Bank heists; a rainbow left in the vault mocks the tellers. |
+| 2 | Purple Rain Man | A blue note comes out actually blue. Three waves: walker eyes on spider legs that stalk Little Saxophone spitting skating thugs (shoot the legs, topple it, bonk it with the Packard), then Vic Vermilion. |
+| 3 | The Vault of Many Colors | Bank heists; a rainbow left in the vault mocks the tellers. Three waves: heist crews, demon tanks firing rainbow rocket salvos, then the mob boss Don Lorenzo Lazuli. |
 | 4 | Holes in the Sky | Portals open over Old Town, humming show tunes. |
 | 5 | Snake Eyes on the Strip | Jellybean jackpots, Paintbot fleets, Chartreuse Charlie. |
 | 6 | Glazed and Confused | The Police Commissioner becomes a thirty-foot frosted cruller. |

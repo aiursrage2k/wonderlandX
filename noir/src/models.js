@@ -830,3 +830,43 @@ export function makeCivilian(seed = Math.random()) {
 export function setInfected(m, on) {
   m.root.traverse((o) => { if (o.isMesh) o.material = on ? rainbowCoat() : o.userData.civMat; });
 }
+
+// ---------------------------------------------------------------- demon tank
+// A squat black tank on treads. The turret has horns and a pink demon eye where the hatch should be,
+// and the barrel spits rainbow rockets.
+export function makeDemonTank(color) {
+  const root = new THREE.Group();
+  const body = new THREE.Group(); root.add(body);
+  const iron = nmat(0x141214, { kind: 'std', rough: 0.4, metal: 0.6, keep: 1, paint: false });
+  const tread = nmat(0x0a0a0a, { kind: 'std', rough: 0.8 });
+  const trim = nmat(color, { kind: 'std', rough: 0.3, metal: 0.4, keep: 1, paint: false, emissive: color, ei: 0.25 });
+  const eyeM = nmat(0xff3fb0, { kind: 'basic', keep: 1, paint: false });
+  part(G.box, iron, 0, 1.1, 0, 3.6, 1.1, 5.6, body); // hull
+  part(G.box, iron, 0, 1.4, 2.6, 3.2, 0.7, 1.0, body).rotation.x = -0.5; // sloped glacis
+  for (const s of [-1, 1]) {
+    part(G.box, tread, s * 1.95, 0.6, 0, 0.75, 1.2, 6.0, body);
+    for (let k = 0; k < 5; k++) part(G.wheel, iron, s * 1.95, 0.55, -2.2 + k * 1.1, 0.9, 0.5, 0.9, body).rotation.z = Math.PI / 2;
+    part(G.box, trim, s * 1.85, 1.75, 0, 0.12, 0.12, 5.4, body); // a stripe of gang color down each side
+  }
+  const turret = new THREE.Group(); turret.position.set(0, 1.9, -0.2); body.add(turret);
+  part(G.cyl, iron, 0, 0.45, 0, 2.6, 0.9, 2.6, turret);
+  part(G.sph, iron, 0, 0.9, 0, 2.2, 1.0, 2.2, turret);
+  const barrel = part(G.cyl, iron, 0, 0.6, 2.2, 0.38, 2.8, 0.38, turret); barrel.rotation.x = Math.PI / 2;
+  part(G.cyl, trim, 0, 0.6, 3.6, 0.55, 0.3, 0.55, turret).rotation.x = Math.PI / 2; // muzzle ring
+  for (const s of [-1, 1]) { const h = part(G.cone, iron, s * 0.9, 1.5, -0.2, 0.35, 1.3, 0.35, turret); h.rotation.z = -s * 0.6; h.rotation.x = -0.3; } // horns
+  const eye = part(G.sph, eyeM, 0, 0.95, 1.05, 0.7, 0.55, 0.3, turret); // the demon eye, staring forward
+  part(G.sph, nmat(0x050005, { kind: 'basic' }), 0, 0.95, 1.2, 0.12, 0.4, 0.1, turret); // slit pupil
+  const muzzle = new THREE.Object3D(); muzzle.position.set(0, 0.6, 3.8); turret.add(muzzle);
+  return { root, body, turret, muzzle, eye };
+}
+
+// roller skates for the skating thugs: a boot, a plate, four little wheels
+export function addSkates(model) {
+  const wheel = nmat(0xff3fb0, { kind: 'std', rough: 0.3, keep: 1, paint: false });
+  const boot = nmat(0xeeeeee, { kind: 'std', rough: 0.5 });
+  for (const leg of [model.legL, model.legR]) {
+    if (!leg) continue;
+    part(G.box, boot, 0, -0.98, 0.05, 0.3, 0.22, 0.48, leg);
+    for (const z of [-0.16, 0.2]) for (const x of [-0.11, 0.11]) part(G.wheel, wheel, x, -1.13, z, 0.16, 0.08, 0.16, leg).rotation.z = Math.PI / 2;
+  }
+}
