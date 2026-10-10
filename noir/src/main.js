@@ -524,6 +524,35 @@ function tickDream(dt) {
   if (k >= 1) { dreamFx = null; noirPass.uniforms.dream.value = 0; D.end && D.end(); }
 }
 
+// ------------------------------------------------------------------ perf overlay
+// FPS, frame time, draw calls and triangles for the whole frame (every pass), refreshed twice a second.
+// F3 hides/shows it; the choice is remembered.
+renderer.info.autoReset = false;
+const perfEl = $('perf');
+let perfOn = true;
+try { perfOn = localStorage.getItem('gcb-perf') !== '0'; } catch (e) { /* private window */ }
+perfEl.classList.toggle('hidden', !perfOn);
+addEventListener('keydown', (e) => {
+  if (e.code !== 'F3') return;
+  e.preventDefault();
+  perfOn = !perfOn; perfEl.classList.toggle('hidden', !perfOn);
+  try { localStorage.setItem('gcb-perf', perfOn ? '1' : '0'); } catch (err) { /* ignore */ }
+});
+const perf = { frames: 0, t0: performance.now(), last: performance.now(), worst: 0 };
+const fmtK = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(2)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : `${n}`);
+function perfStats(now) {
+  perf.frames++;
+  perf.worst = Math.max(perf.worst, now - perf.last);
+  perf.last = now;
+  if (!perfOn || now - perf.t0 < 500) return;
+  const fps = (perf.frames * 1000) / (now - perf.t0);
+  const r = renderer.info.render;
+  perfEl.innerHTML = `<b class="${fps < 30 ? 'bad' : fps < 50 ? 'meh' : ''}">${Math.round(fps)} FPS</b> ${(1000 / fps).toFixed(1)} ms <i>(worst ${perf.worst.toFixed(0)})</i>`
+    + ` · ${r.calls} draw calls · ${fmtK(r.triangles)} tris`
+    + (r.points ? ` · ${fmtK(r.points)} pts` : '') + ` · ${renderer.info.memory.geometries} geo · ${renderer.info.memory.textures} tex`;
+  perf.frames = 0; perf.t0 = now; perf.worst = 0;
+}
+
 // ------------------------------------------------------------------ loop
 let last = performance.now(), time = 0;
 function frame(now) {
@@ -552,7 +581,9 @@ function frame(now) {
   noirPass.uniforms.focus.value = mode === 'play' && (game.debug.player.focus > 0 || game.debug.player.focusHeld) ? 1 : mode === 'reel' ? 0.5 : 0;
   noirPass.uniforms.grain.value = mode === 'reel' ? 0.13 : 0.05;
   noirPass.uniforms.scratch.value = mode === 'reel' ? 3 : 1;
+  renderer.info.reset();
   composer.render();
+  perfStats(now);
 }
 
 // ------------------------------------------------------------------ boot
