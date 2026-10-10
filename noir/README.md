@@ -103,6 +103,14 @@ npx http-server -c-1 .     # then visit http://localhost:8080/noir/
   heading is always up. The radar shows the city blocks, the paint, a diamond
   for every goon, pulsing portals, and rim arrows with distances. The route to
   the objective is a glowing neon line with magenta chevrons painted on the street.
+- **Demon-eye portals.** Every tear in the sky is a giant eye in a pink vortex,
+  ringed in black spikes and neon. It turns to watch Mack, glances about, blinks,
+  and gets more bloodshot as you crack it.
+- **Big Pork's.** The Holy Glaze has a giant pink-frosted donut on the roof, with
+  sprinkles, neon rings and a pink glow over the lot full of cruisers, plus a lit
+  BIG PORK'S DONUTS sign.
+- **Perf overlay.** FPS, frame time, draw calls and triangles in the top-left
+  corner. F3 hides or shows it.
 - **The Packard vs. thugs.** Foot thugs never stop the car: at anything faster
   than a crawl you drive straight through them and they burst. Between waves there's a breather with a countdown, and any
   leftover goons run for it.

@@ -599,7 +599,7 @@ function boot() {
   $('splash-status').textContent = 'Click to light a cigarette';
   requestAnimationFrame(frame);
   if (params.has('debug')) window.__noir = {
-    game, office, bar, save, setMode, beginCase, startStreets, CASES, playReel, loadReel, get mode() { return mode; },
+    game, office, bar, save, setMode, beginCase, startStreets, CASES, L, playReel, loadReel, get mode() { return mode; },
     // fast-forward the streets without rendering (headless testing)
     step(sec, dt = 1 / 30) { for (let t = 0; t < sec && mode === 'play'; t += dt) game.update(dt); },
   };

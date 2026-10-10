@@ -816,13 +816,34 @@ export function buildCity(scene) {
       Wm.roof.flat(cx - 12, z0 + 6, cx + 12, z0 + 18, 7, 10);
       Wm.trim.box(cx - 13, 6.5, z0 + 17, cx + 13, 7.3, z0 + 21, 8); // awning
       addBox(cx - 12, z0 + 6, cx + 12, z0 + 18, 7, 'bldg');
-      const donut = new THREE.Mesh(new THREE.TorusGeometry(4.2, 1.8, 16, 40), nmat(0xd9a35e, { kind: 'std', rough: 0.5, keep: 1, paint: false }));
-      donut.position.set(cx, 13.5, z0 + 12);
-      sc.add(donut); signs.push(donut); donut.userData.spin = 0.4; donut.castShadow = true;
-      const icing = new THREE.Mesh(new THREE.TorusGeometry(4.2, 1.85, 16, 40, Math.PI), nmat(0xff6fb5, { kind: 'std', rough: 0.15, keep: 1, paint: false, emissive: 0xff3f9a, ei: 0.35 }));
-      donut.add(icing);
-      Wm.dark.box(cx - 0.3, 7, z0 + 11.7, cx + 0.3, 9.4, z0 + 12.3, 4);
-      sign('HOLY GLAZE DONUTS', cx, 8.6, z0 + 21.2, 0, 22, 2.6, 'bold 56px Georgia', '#ff6fb5');
+      // the giant pink donut on the roof: standing up, frosted, sprinkled, ringed in neon, turning slowly
+      const donut = new THREE.Group(); donut.position.set(cx - 4, 15.5, z0 + 13); sc.add(donut); signs.push(donut); donut.userData.spin = 0.35;
+      const DR = 5.2, TR = 2.5;
+      const dough = new THREE.Mesh(new THREE.TorusGeometry(DR, TR, 18, 48), nmat(0xc98a4a, { kind: 'std', rough: 0.6, keep: 1, paint: false }));
+      dough.castShadow = true; donut.add(dough);
+      const icingM = nmat(0xff4fae, { kind: 'std', rough: 0.12, keep: 1, paint: false, emissive: 0xff2f96, ei: 0.55 });
+      for (const side of [1, -1]) { const ic = new THREE.Mesh(new THREE.TorusGeometry(DR, TR * 1.04, 18, 48), icingM); ic.scale.z = 0.62; ic.position.z = side * TR * 0.42; donut.add(ic); }
+      // sprinkles on both frosted faces
+      const sprG = new THREE.BoxGeometry(0.16, 0.6, 0.16);
+      const sprM = [0x1a1a1a, 0x3a1f10, 0xffe11a, 0x18e0ff, 0xffffff].map((c) => nmat(c, { keep: 1, paint: false }));
+      for (let i = 0; i < 140; i++) {
+        const th = r() * Math.PI * 2, ph = (0.2 + r() * 0.6) * (Math.PI / 2), side = i % 2 ? 1 : -1;
+        const rr = DR + Math.cos(ph) * TR * (r() < 0.5 ? 1 : -1) * 0.85;
+        const sp = new THREE.Mesh(sprG, sprM[i % sprM.length]);
+        sp.position.set(Math.cos(th) * rr, Math.sin(th) * rr, side * (Math.sin(ph) * TR * 0.62 + TR * 0.42 + 0.02));
+        sp.rotation.set(r() * 3, r() * 3, r() * 3);
+        donut.add(sp);
+      }
+      // neon tubes round the outer and inner edge
+      const neonM = nmat(0xff5fc0, { kind: 'basic', keep: 1, paint: false });
+      for (const rad of [DR + TR + 0.35, DR - TR - 0.3]) for (const side of [1, -1]) { const t = new THREE.Mesh(new THREE.TorusGeometry(rad, 0.14, 6, 64), neonM); t.position.z = side * 0.9; donut.add(t); }
+      // its glow on the lot and the wet street
+      const glow = new THREE.PointLight(0xff3fa8, 140, 46, 1.6); glow.position.set(cx - 4, 12, z0 + 24); sc.add(glow);
+      Wm.dark.box(cx - 4.4, 7, z0 + 12.6, cx - 3.6, 10, z0 + 13.4, 4); // the post
+      // the roof sign, lit and buzzing: BIG PORK'S DONUTS
+      Wm.dark.box(cx + 1.5, 7, z0 + 17.4, cx + 2.1, 12, z0 + 17.9, 4); Wm.dark.box(cx + 11.4, 7, z0 + 17.4, cx + 12, 12, z0 + 17.9, 4); // sign posts
+      sign('BIG PORK\'S DONUTS', cx + 6.75, 12.6, z0 + 18.0, 0, 12, 3.4, 'bold 74px Impact', '#ff4fb8');
+      sign('HOLY GLAZE', cx, 8.6, z0 + 21.2, 0, 14, 2.4, 'italic bold 60px Georgia', '#ffe6f2');
       sign('COPS EAT FREE', cx + 16, 3.5, z0 + 6, 0, 8, 1.6, 'bold 46px Georgia');
       // the cruisers, nose to the shop
       let n = 0;

@@ -388,34 +388,67 @@ export function makeCop() {
 
 // ---------------------------------------------------------------- portal
 export function makePortal(radius = 4) {
+  // the tear in the sky is an EYE: a pink vortex with a demon eye in the middle, ringed in black spikes
   const g = new THREE.Group();
-  const uni = { t: { value: 0 }, open: { value: 0 } };
+  const uni = { t: { value: 0 }, open: { value: 0 }, blink: { value: 0 }, look: { value: new THREE.Vector2() }, hurt: { value: 0 } };
   const disc = new THREE.Mesh(
-    new THREE.CircleGeometry(radius, 48),
+    new THREE.CircleGeometry(radius, 64),
     new THREE.ShaderMaterial({
       uniforms: uni, transparent: true, side: THREE.DoubleSide, depthWrite: false,
       vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
-      fragmentShader: `uniform float t, open; varying vec2 vUv;
+      fragmentShader: `uniform float t, open, blink, hurt; uniform vec2 look; varying vec2 vUv;
+        float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
         void main(){
           vec2 p = vUv * 2.0 - 1.0; float r = length(p); float a = atan(p.y, p.x);
-          float sw = a + 6.0 / (r + 0.25) - t * 2.5;
-          vec3 c = 0.55 + 0.45 * cos(6.2831 * (vec3(0.0, 0.33, 0.67) + sw * 0.16 + r));
-          float bands = 0.6 + 0.4 * sin(sw * 5.0);
-          float core = smoothstep(0.35, 0.0, r);
-          float a2 = smoothstep(1.0, 0.85, r) * open;
-          gl_FragColor = vec4(mix(c * bands * 1.6, vec3(1.0), core), a2);
+          // the vortex: hot pink and violet bands swirling inward
+          float sw = a + 5.0 / (r + 0.3) - t * 2.2;
+          vec3 vort = mix(vec3(0.55, 0.0, 0.35), vec3(1.0, 0.25, 0.75), 0.5 + 0.5 * sin(sw * 6.0));
+          vort *= 0.6 + 0.6 * smoothstep(1.0, 0.4, r);
+          // the eye: an almond that blinks
+          float lid = 0.56 * (1.0 - p.x * p.x / 0.62) * (1.0 - blink);
+          float inEye = step(abs(p.x), 0.79) * smoothstep(0.0, 0.03, lid - abs(p.y));
+          vec2 q = p - look;
+          float ir = length(q);
+          // sclera: sick pink-white with veins that thicken as it's hurt
+          float vein = smoothstep(0.92, 1.0, sin(atan(p.y, p.x) * 23.0 + h(floor(p * 9.0)) * 6.0) * 0.5 + 0.5) * smoothstep(0.25, 0.75, length(p));
+          vec3 scl = mix(vec3(1.0, 0.9, 0.93), vec3(1.0, 0.15, 0.3), clamp(vein * (0.5 + hurt * 1.5), 0.0, 1.0));
+          // iris: magenta with radial streaks and a gold ring
+          float streak = 0.75 + 0.25 * sin(atan(q.y, q.x) * 40.0);
+          vec3 iris = mix(vec3(1.0, 0.1, 0.55), vec3(0.45, 0.0, 0.3), smoothstep(0.05, 0.3, ir)) * streak;
+          iris = mix(iris, vec3(1.0, 0.85, 0.2), smoothstep(0.26, 0.29, ir) * smoothstep(0.32, 0.29, ir));
+          vec3 eye = mix(scl, iris, smoothstep(0.31, 0.29, ir));
+          // a slit pupil, like a goat's or the Mayor's
+          float pup = smoothstep(0.075, 0.06, abs(q.x) / (1.0 - smoothstep(0.0, 0.24, abs(q.y)) + 0.001) * 0.6) * step(abs(q.y), 0.25);
+          eye = mix(eye, vec3(0.02, 0.0, 0.02), pup);
+          eye += vec3(1.0) * smoothstep(0.05, 0.0, length(q - vec2(-0.08, 0.09))) * 0.9; // the glint
+          // lash line
+          float lash = smoothstep(0.05, 0.0, abs(lid - abs(p.y))) * step(abs(p.x), 0.79);
+          vec3 c = mix(vort, eye, inEye);
+          c = mix(c, vec3(0.05, 0.0, 0.04), lash * 0.9);
+          float alpha = smoothstep(1.0, 0.9, r) * open;
+          gl_FragColor = vec4(c, alpha);
         }`,
     }),
   );
   g.add(disc);
-  const ringMat = new THREE.ShaderMaterial({
-    uniforms: uni,
-    vertexShader: 'varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
-    fragmentShader: `uniform float t; varying vec3 vP;
-      void main(){ float a = atan(vP.y, vP.x); gl_FragColor = vec4(0.6 + 0.5 * cos(6.2831 * (vec3(0.0,0.33,0.67) + a * 0.32 + t * 0.6)), 1.0); }`,
-  });
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(radius, radius * 0.08, 10, 64), ringMat);
-  g.add(ring);
+  // a neon pink rim and a black iron ring
+  const neon = new THREE.Mesh(new THREE.TorusGeometry(radius * 1.0, radius * 0.045, 8, 72), new THREE.MeshBasicMaterial({ color: 0xff3fb0 }));
+  g.add(neon);
+  const iron = nmat(0x0c0a0c, { kind: 'std', rough: 0.35, metal: 0.6, keep: 1, paint: false });
+  g.add(new THREE.Mesh(new THREE.TorusGeometry(radius * 1.12, radius * 0.09, 10, 72), iron));
+  // black spikes all the way round, like a sea urchin with a grudge
+  const spikeG = new THREE.ConeGeometry(radius * 0.09, radius * 0.42, 6);
+  for (let k = 0; k < 28; k++) {
+    const a = (k / 28) * Math.PI * 2, len = k % 2 ? 1 : 0.7;
+    const sp = new THREE.Mesh(spikeG, iron);
+    sp.position.set(Math.cos(a) * radius * (1.2 + 0.18 * len), Math.sin(a) * radius * (1.2 + 0.18 * len), 0);
+    sp.scale.set(1, len, 1);
+    sp.rotation.z = a - Math.PI / 2;
+    g.add(sp);
+  }
+  // a faint glassy shell around it all
+  const shell = new THREE.Mesh(new THREE.TorusGeometry(radius * 1.55, radius * 0.02, 6, 72), new THREE.MeshBasicMaterial({ color: 0xffd6ee, transparent: true, opacity: 0.45 }));
+  g.add(shell);
   g.userData.uni = uni;
   return g;
 }

@@ -1134,7 +1134,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       if (!p) p = spawnPoint(50, 160);
     }
     const g = makePortal(5);
-    g.position.set(p.x, 6.5, p.z);
+    g.position.set(p.x, 7.6, p.z); // high enough that the spikes clear the street
     scene.add(g);
     const hp = S.fx.has('portalWeak') ? 240 : 450;
     if (!S.replay) recEvent(['po', r1(p.x), r1(p.z)]);
@@ -2620,7 +2620,15 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       p.g.scale.setScalar((0.2 + p.open * 0.8) * (p.flash > 0 ? 1.06 : 1) * (p.cracked ? 0.85 + Math.sin(S.time * 30) * 0.04 - (p.seal || 0) * 0.15 : 1));
       p.flash -= dt;
       p.age = (p.age || 0) + dt;
-      p.g.rotation.y = Math.sin(S.time * 0.3) * 0.2;
+      // the eye turns to face Mack, glances about, blinks, and goes bloodshot as it's cracked
+      const fo = focus(), u = p.g.userData.uni;
+      p.g.rotation.y += wrapAngle(Math.atan2(fo.x - p.pos.x, fo.z - p.pos.z) - p.g.rotation.y) * Math.min(1, dt * 2);
+      p.blinkT = (p.blinkT ?? rand(2, 5)) - dt;
+      if (p.blinkT <= 0) { p.blinkT = rand(2.5, 6); p.blinkK = 0.22; }
+      p.blinkK = Math.max(0, (p.blinkK || 0) - dt);
+      u.blink.value = p.blinkK > 0 ? Math.sin((p.blinkK / 0.22) * Math.PI) : (p.cracked ? 0.35 + Math.sin(S.time * 9) * 0.1 : 0);
+      u.look.value.set(Math.sin(S.time * 0.9 + p.pos.x) * 0.12, Math.cos(S.time * 0.7) * 0.06 + clamp((1.5 - 6.5) / 30, -0.1, 0.1));
+      u.hurt.value = 1 - p.hp / p.maxHp;
       p.paintCd -= dt;
       if (p.paintCd <= 0) {
         p.paintCd = 0.35;
@@ -3000,6 +3008,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       killCiv(c) { killCiv(c, true); },
       spawn(type, x, z) { const p = { x, z }; pushOut(p, 3); return addEnemy(type, p.x, p.z); },
       tp(x, z) { P.pos.set(x, 0, z); if (P.inCar) CAR.pos.set(x, 0, z); snapCamera(); },
+      camYaw(a) { camYaw = a; P.face = a; snapCamera(); },
     },
   };
 }
