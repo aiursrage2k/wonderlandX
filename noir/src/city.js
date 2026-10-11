@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { nmat, noirify } from './paint.js';
 import { mulberry32 } from './util.js';
-import { makeCar, makeCop, makeMayor, rainbowCoat } from './models.js';
+import { makeCar, makeCop, makeMayor, rainbowCoat, compactModel } from './models.js';
 
 export const C = { N: 16, B: 56, R: 24, P: 80, half: 652, edge: 648, span: 1400 };
 export const roadC = (i) => -640 + i * C.P; // road centerline, i = 0..16
@@ -189,6 +189,35 @@ class Merger {
     return g;
   }
 }
+// perf: the city's detail layers (fences, fire escapes, trim, road paint, baked props) are split
+// into a 4x4 grid of tiles, so the camera's frustum, the shadow pass and the LOD switch can skip
+// whole tiles instead of drawing every detail in the city every frame.
+const TILES = 4, TILE_W = 1400 / TILES;
+const tileOf = (x, z) => {
+  const tx = Math.max(0, Math.min(TILES - 1, Math.floor((x + 700) / TILE_W)));
+  const tz = Math.max(0, Math.min(TILES - 1, Math.floor((z + 700) / TILE_W)));
+  return tz * TILES + tx;
+};
+class TiledMerger {
+  constructor() { this.t = new Map(); }
+  at(x, z) { const k = tileOf(x, z); if (!this.t.has(k)) this.t.set(k, new Merger()); return this.t.get(k); }
+  quad(a, ...r) { this.at(a[0], a[2]).quad(a, ...r); }
+  box(x0, y0, z0, x1, ...r) { this.at((x0 + x1) / 2, (z0 + r[1]) / 2).box(x0, y0, z0, x1, ...r); }
+  flat(x0, z0, x1, z1, ...r) { this.at((x0 + x1) / 2, (z0 + z1) / 2).flat(x0, z0, x1, z1, ...r); }
+  geo(g, m) { this.at(m.elements[12], m.elements[14]).geo(g, m); }
+  get p() { let n = 0; for (const m of this.t.values()) n += m.p.length; return { length: n }; }
+}
+// tiles past this distance (from the camera to the tile's nearest edge) drop their detail layer
+export const LOD_FAR = 260;
+export const lodTiles = []; // { mesh, x0, z0, x1, z1 }
+function tileBounds(k) { const tx = k % TILES, tz = Math.floor(k / TILES); return { x0: -700 + tx * TILE_W, z0: -700 + tz * TILE_W, x1: -700 + (tx + 1) * TILE_W, z1: -700 + (tz + 1) * TILE_W }; }
+export function updateCityLOD(cx, cz) {
+  for (const t of lodTiles) {
+    const dx = Math.max(t.x0 - cx, 0, cx - t.x1), dz = Math.max(t.z0 - cz, 0, cz - t.z1);
+    t.mesh.visible = dx * dx + dz * dz < LOD_FAR * LOD_FAR;
+  }
+}
+
 const M4 = new THREE.Matrix4();
 const tr = (x, y, z, sx = 1, sy = 1, sz = 1, ry = 0) =>
   M4.compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, ry, 0)), new THREE.Vector3(sx, sy, sz));
@@ -291,7 +320,7 @@ function bake(root) {
     let v = o; let shown = true;
     while (v) { if (!v.visible) shown = false; v = v.parent; }
     if (!shown) return;
-    if (!bakers.has(o.material)) bakers.set(o.material, new Merger());
+    if (!bakers.has(o.material)) bakers.set(o.material, new TiledMerger());
     bakers.get(o.material).geo(o.geometry, o.matrixWorld);
   });
 }
@@ -365,7 +394,9 @@ export function buildCity(scene) {
   mats.mark = nmat(0xcfcfc8, { kind: 'std', rough: 0.4 });
   mats.yellow = nmat(0xd8c060, { kind: 'std', rough: 0.4 });
 
-  const W = { brick: new Merger(), conc: new Merger(), strip: new Merger(), roof: new Merger(), trim: new Merger(), dark: new Merger(), pave: new Merger(), grass: new Merger(), dirt: new Merger(), mark: new Merger(), yellow: new Merger() };
+  // building shells and ground stay as single meshes (cheap); the detail layers are tiled for culling + LOD
+  const W = { brick: new Merger(), conc: new Merger(), strip: new Merger(), roof: new Merger(), trim: new TiledMerger(), dark: new TiledMerger(), pave: new Merger(), grass: new Merger(), dirt: new Merger(), mark: new TiledMerger(), yellow: new TiledMerger() };
+  lodTiles.length = 0;
 
   // ---- ground: asphalt everywhere, raised sidewalks on blocks
   asphalt.repeat.set(1, 1);
@@ -494,20 +525,28 @@ export function buildCity(scene) {
     else building(off, t, off + w, t + w, h, 'conc', W, rnd, false);
   }
 
-  // ---- baked props
-  for (const [mat, mg] of bakers) {
-    const m = new THREE.Mesh(mg.build(), mat);
-    m.castShadow = true; m.receiveShadow = true;
-    scene.add(m);
-  }
+  // ---- baked props and the tiled detail layers
+  const addTiled = (tm, mat, name, cast) => {
+    for (const [k, mg] of tm.t) {
+      if (!mg.p.length) continue;
+      const m = new THREE.Mesh(mg.build(), mat);
+      m.name = name; m.castShadow = cast; m.receiveShadow = true;
+      scene.add(m);
+      lodTiles.push({ mesh: m, ...tileBounds(k) });
+    }
+  };
+  for (const [mat, tm] of bakers) addTiled(tm, mat, 'bake', true);
   bakers.clear();
   // ---- finish merged meshes
   const out = {};
   for (const k in W) {
     if (!W[k].p.length) continue;
+    const cast = k !== 'mark' && k !== 'yellow' && k !== 'pave' && k !== 'grass' && k !== 'dirt';
+    if (W[k] instanceof TiledMerger) { addTiled(W[k], mats[k], 'W:' + k, cast); continue; }
     const m = new THREE.Mesh(W[k].build(), mats[k]);
+    m.name = 'W:' + k;
     m.receiveShadow = true;
-    m.castShadow = k !== 'mark' && k !== 'yellow' && k !== 'pave' && k !== 'grass' && k !== 'dirt';
+    m.castShadow = cast;
     scene.add(m);
     out[k] = m;
   }
@@ -838,7 +877,11 @@ export function buildCity(scene) {
       const neonM = nmat(0xff5fc0, { kind: 'basic', keep: 1, paint: false });
       for (const rad of [DR + TR + 0.35, DR - TR - 0.3]) for (const side of [1, -1]) { const t = new THREE.Mesh(new THREE.TorusGeometry(rad, 0.14, 6, 64), neonM); t.position.z = side * 0.9; donut.add(t); }
       // its glow on the lot and the wet street
-      const glow = new THREE.PointLight(0xff3fa8, 140, 46, 1.6); glow.position.set(cx - 4, 12, z0 + 24); sc.add(glow);
+      compactModel({ root: donut }); // perf: 140 sprinkles + neon in a handful of draw calls
+      // its glow: a soft additive pool on the lot rather than a real light (a light costs every pixel in the city)
+      const glowTex = canvasTex(128, 128, (g2, w, h) => { const gr = g2.createRadialGradient(64, 64, 0, 64, 64, 64); gr.addColorStop(0, 'rgba(255,80,180,0.55)'); gr.addColorStop(1, 'rgba(255,80,180,0)'); g2.fillStyle = gr; g2.fillRect(0, 0, w, h); }, false);
+      const glow = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshBasicMaterial({ map: glowTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+      glow.rotation.x = -Math.PI / 2; glow.position.set(cx - 4, 0.4, z0 + 24); sc.add(glow);
       Wm.dark.box(cx - 4.4, 7, z0 + 12.6, cx - 3.6, 10, z0 + 13.4, 4); // the post
       // the roof sign, lit and buzzing: BIG PORK'S DONUTS
       Wm.dark.box(cx + 1.5, 7, z0 + 17.4, cx + 2.1, 12, z0 + 17.9, 4); Wm.dark.box(cx + 11.4, 7, z0 + 17.4, cx + 12, 12, z0 + 17.9, 4); // sign posts
@@ -863,7 +906,7 @@ export function buildCity(scene) {
         n++;
       }
       for (let k = 0; k < 6; k++) {
-        const cop = makeCop();
+        const cop = compactModel(makeCop());
         cop.root.position.set(cx - 14 + k * 5.5 + r(), 0.3, z0 + 23 + r() * 2);
         cop.root.rotation.y = r() * 0.8 - 0.4;
         sc.add(cop.root);

@@ -5,10 +5,11 @@ import { nmat, noirify, NU } from './paint.js';
 
 const G = {
   box: new THREE.BoxGeometry(1, 1, 1),
-  cyl: new THREE.CylinderGeometry(0.5, 0.5, 1, 14),
-  cone: new THREE.CylinderGeometry(0.25, 0.5, 1, 16),
-  sph: new THREE.SphereGeometry(0.5, 16, 12),
-  wheel: new THREE.CylinderGeometry(0.5, 0.5, 0.4, 16),
+  // perf: segment counts tuned for a camera that's never closer than a few metres
+  cyl: new THREE.CylinderGeometry(0.5, 0.5, 1, 10),
+  cone: new THREE.CylinderGeometry(0.25, 0.5, 1, 10),
+  sph: new THREE.SphereGeometry(0.5, 12, 8),
+  wheel: new THREE.CylinderGeometry(0.5, 0.5, 0.4, 12),
 };
 
 export function part(geo, mat, x = 0, y = 0, z = 0, sx = 1, sy = 1, sz = 1, parent) {
@@ -869,4 +870,49 @@ export function addSkates(model) {
     part(G.box, boot, 0, -0.98, 0.05, 0.3, 0.22, 0.48, leg);
     for (const z of [-0.16, 0.2]) for (const x of [-0.11, 0.11]) part(G.wheel, wheel, x, -1.13, z, 0.16, 0.08, 0.16, leg).rotation.z = Math.PI / 2;
   }
+}
+
+// perf: merge a character's same-material parts that move together into one mesh per joint.
+// A gangster drops from ~16 draw calls to ~6. Anything the model hands out by name (gun, eye, arm...)
+// and anything with children of its own is left alone, so animation and material swaps still work.
+export function compactModel(model) {
+  const keep = new Set();
+  for (const v of Object.values(model)) if (v && v.isObject3D) keep.add(v);
+  const nodes = [];
+  model.root.traverse((o) => nodes.push(o));
+  for (const node of nodes) {
+    const byMat = new Map();
+    for (const c of node.children) {
+      if (!c.isMesh || c.isInstancedMesh || c.isSkinnedMesh || c.children.length || keep.has(c) || !c.visible) continue;
+      c.updateMatrix();
+      if (c.matrix.determinant() < 0) continue; // mirrored parts would turn inside out
+      if (!byMat.has(c.material)) byMat.set(c.material, []);
+      byMat.get(c.material).push(c);
+    }
+    for (const [mat, list] of byMat) {
+      if (list.length < 2) continue;
+      const geos = list.map((c) => { const g = c.geometry.index ? c.geometry.toNonIndexed() : c.geometry.clone(); g.applyMatrix4(c.matrix); return g; });
+      const n = geos.reduce((a, g) => a + g.attributes.position.count, 0);
+      const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), uv = new Float32Array(n * 2);
+      let o = 0;
+      for (const g of geos) {
+        const cnt = g.attributes.position.count;
+        pos.set(g.attributes.position.array, o * 3);
+        if (g.attributes.normal) nor.set(g.attributes.normal.array, o * 3);
+        if (g.attributes.uv) uv.set(g.attributes.uv.array, o * 2);
+        o += cnt; g.dispose();
+      }
+      const mg = new THREE.BufferGeometry();
+      mg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      mg.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+      mg.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+      mg.computeBoundingSphere();
+      const m = new THREE.Mesh(mg, mat);
+      m.castShadow = list[0].castShadow; m.receiveShadow = list[0].receiveShadow;
+      m.userData = { ...list[0].userData };
+      for (const c of list) node.remove(c);
+      node.add(m);
+    }
+  }
+  return model;
 }

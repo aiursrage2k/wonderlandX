@@ -125,8 +125,21 @@ npx http-server -c-1 .     # then visit http://localhost:8080/noir/
 - **Big Pork's.** The Holy Glaze has a giant pink-frosted donut on the roof, with
   sprinkles, neon rings and a pink glow over the lot full of cruisers, plus a lit
   BIG PORK'S DONUTS sign.
-- **Perf overlay.** FPS, frame time, draw calls and triangles in the top-left
-  corner. F3 hides or shows it.
+- **Perf overlay.** FPS, frame time, draw calls, triangles and render resolution
+  in the top-left corner. F3 hides or shows it.
+- **Performance.**
+  - The city's detail layers (trim, fences, fire escapes, rooftop tanks, road paint,
+    baked props) are split into a 4x4 grid of tiles. That lets the camera frustum
+    and the shadow pass skip them, and as an LOD each tile drops its detail past
+    260 units, leaving the building shells.
+  - Characters merge their same-material parts per joint. The crowd and foot
+    soldiers don't cast shadows, and people past the fog aren't drawn.
+  - One shadow pass instead of two, PCF shadows, 7 point lights instead of 14,
+    and one headlight beam.
+  - The paint canvas uploads only the 128 px tiles that changed, and the rain's
+    slow fade is batched, so there are no full 16 MB uploads.
+  - Resolution adapts: it steps down when frames run long and back up when there's
+    headroom (shown as res % in the overlay).
 - **The Packard vs. thugs.** Foot thugs never stop the car: at anything faster
   than a crawl you drive straight through them and they burst. Between waves there's a breather with a countdown, and any
   leftover goons run for it.

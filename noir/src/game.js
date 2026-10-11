@@ -2,9 +2,9 @@
 // Technicolor Syndicate painting the town, portals, bosses and the case logic.
 import * as THREE from 'three';
 import { NU, splat, stroke, wash, fadeAll, clearPaint, flushPaint, coverage, nmat } from './paint.js';
-import { buildCity, knock, L, C, DISTRICTS, roadC, nodeIndex, pushOut, rayDist, clearLine, roadPoint, lamps, vents, cops, copCars, flaskSpots, signs } from './city.js';
+import { buildCity, updateCityLOD, knock, L, C, DISTRICTS, roadC, nodeIndex, pushOut, rayDist, clearLine, roadPoint, lamps, vents, cops, copCars, flaskSpots, signs } from './city.js';
 import { rainbowCoat as rainbowMatLocal } from './models.js';
-import { makeDetective, makeSally, makeGangster, makeCar, makePortal, makePrismKing, makeMayor, makeFlask, makeRainbowGoon, makeRoomba, makeTruck, makeCopter, makeMech, makeCultist, makeImp, makeBeast, makeRobot, makeCivilian, setInfected, makeCop, drainModel, GANG_COLORS, gangMat, makeDemonTank, addSkates } from './models.js';
+import { makeDetective, makeSally, makeGangster, makeCar, makePortal, makePrismKing, makeMayor, makeFlask, makeRainbowGoon, makeRoomba, makeTruck, makeCopter, makeMech, makeCultist, makeImp, makeBeast, makeRobot, makeCivilian, setInfected, makeCop, drainModel, GANG_COLORS, gangMat, makeDemonTank, addSkates, compactModel } from './models.js';
 import { makeRain, Particles, Tracers, Flashes, hexToRgb, fx } from './fx.js';
 import { sfx, setEngine } from './audio.js';
 import { BOSSES, LINES, DONUT_LINES, COP_RETORTS, MONOLOGUES, EVIDENCE, RADIO, RADIO_FILLER } from './story.js';
@@ -41,7 +41,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x24272c);
   scene.fog = new THREE.FogExp2(0x24272c, 0.0058);
-  const camera = new THREE.PerspectiveCamera(50, 1, 0.5, 900);
+  const camera = new THREE.PerspectiveCamera(50, 1, 0.5, 460); // perf: past ~400 the fog has swallowed everything anyway
 
   // environment for wet reflections: a dim city glow
   const envScene = new THREE.Scene();
@@ -80,12 +80,10 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
   }
   // a hard pool of light that follows Mack, like every noir hero gets
   const heroSpot = new THREE.SpotLight(0xfff4e6, 2600, 70, 0.42, 0.75, 1.4);
-  heroSpot.castShadow = true;
-  heroSpot.shadow.mapSize.set(1024, 1024);
-  heroSpot.shadow.bias = -0.0006;
+  heroSpot.castShadow = false; // perf: one shadow pass (the moon) is plenty; a second one redrew the whole street
   scene.add(heroSpot, heroSpot.target);
   const lampPool = [];
-  for (let i = 0; i < 8; i++) { const l = new THREE.PointLight(0xfff1d8, 0, 34, 1.6); scene.add(l); lampPool.push(l); }
+  for (let i = 0; i < 4; i++) { const l = new THREE.PointLight(0xfff1d8, 0, 34, 1.6); scene.add(l); lampPool.push(l); } // perf: every light costs every lit pixel
 
   const city = buildCity(scene);
   scene.add(skids);
@@ -95,12 +93,13 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
   scene.add(parts.mesh);
   const tracers = new Tracers(300);
   scene.add(tracers.mesh);
-  const flashes = new Flashes(scene, 5);
+  const flashes = new Flashes(scene, 3);
 
   // headlights for Mack's car
-  const headL = new THREE.SpotLight(0xffffff, 0, 60, 0.45, 0.5, 1.2);
-  const headR = headL.clone();
-  scene.add(headL, headR, headL.target, headR.target);
+  // one wide headlight beam (two spots cost twice per pixel and look the same through the rain)
+  const headL = new THREE.SpotLight(0xffffff, 0, 60, 0.6, 0.5, 1.2);
+  const headR = { intensity: 0, position: new THREE.Vector3(), target: { position: new THREE.Vector3() } }; // a stand-in, not a light
+  scene.add(headL, headL.target);
 
   // ---- persistent actors
   const mack = makeDetective();
@@ -263,7 +262,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     world(rdt, rdt); updateCamera(rdt);
     S.bleedT -= rdt;
     if (S.bleedT <= 0) { S.bleedT = 0.5; S.bleed = clamp(coverage(S.area) / S.caseDef.bleedCap, 0, 1); NU.paintH.value = 6 + S.bleed * 24; }
-    flushPaint(rdt);
+    flushPaint(rdt, renderer);
     hud.update({ hp: 1, flasks: 0, maxFlasks: 0, focusMeter: 1, pills: 0, ammo: 6, bleed: Math.min(1, S.bleed), focus: false, inCar: P.inCar, carHp: 1, carAlive: true, player: focus(), enemies: S.enemies, portals: S.portals, car: CAR, sally: SA, boss: null, hint: '', camera, time: S.time });
     if (S.time > F[F.length - 1][0] + 1.5 || pressed.has('Escape')) { S.running = false; onEnd({ replay: true }); }
     pressed.clear();
@@ -516,7 +515,8 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       const live = S.civs.filter((c) => !c.dead);
       if (live.length < 24) {
         const p = sidewalkPoint(f, 50, 120);
-        const model = makeCivilian(Math.random());
+        const model = compactModel(makeCivilian(Math.random()));
+        model.root.traverse((o) => { o.castShadow = false; }); // perf: no shadow pass for the crowd
         scene.add(model.root);
         const node = nearestCorner(p.x, p.z), lane = rand(-1.2, 1.2);
         const np = cornerPos(node, lane);
@@ -1058,6 +1058,11 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     else if (type === 'tank') model = makeDemonTank(color);
     else if (type === 'skater') { model = makeGangster(color, 'dauber', 1); addSkates(model); }
     else model = makeGangster(color, type === 'roller' ? 'roller' : type === 'dauber' ? 'dauber' : 'hood', t.scale);
+    if (!BIG.has(type) && type !== 'tank' && type !== 'imp' && type !== 'demon') {
+      // perf: foot soldiers get merged parts and no shadow pass
+      compactModel(model);
+      model.root.traverse((o) => { o.castShadow = false; });
+    }
     scene.add(model.root);
     const e = {
       type, model, color, rgb: hexToRgb(color), pos: V(x, 0, z), face: Math.random() * 6, hp: t.hp, maxHp: t.hp, speed: t.speed * rand(0.9, 1.1), r: t.r,
@@ -1765,7 +1770,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     if (P.inCar) setEngine(true, vf);
     const on = P.inCar ? 160 : 0;
     headL.intensity = headR.intensity = on;
-    for (const [l, side] of [[headL, 0.8], [headR, -0.8]]) {
+    for (const [l, side] of [[headL, 0], [headR, -0.8]]) {
       l.position.set(CAR.pos.x + nfX * 2.6 + nrX * side, 1.0, CAR.pos.z + nfZ * 2.6 + nrZ * side);
       l.target.position.set(CAR.pos.x + nfX * 22 + nrX * side, 0, CAR.pos.z + nfZ * 22 + nrZ * side);
     }
@@ -1889,6 +1894,8 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     spawner(dt);
     world(rdt, dt);
     updateCamera(rdt);
+    cullActors();
+    updateCityLOD(camera.position.x, camera.position.z);
     // bleed
     S.bleedT -= rdt;
     if (S.bleedT <= 0) {
@@ -1905,7 +1912,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       if (lvl < (S.sickLvl || 0) - 1) S.sickLvl = lvl + 1;
       if (S.bleed >= 1 && !S.over) lose('bleed');
     }
-    flushPaint(rdt);
+    flushPaint(rdt, renderer);
     // HUD
     hud.update({
       score: S.score, mult: S.mult, combo: S.comboT / 5, wave: waveInfo(),
@@ -3223,6 +3230,17 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     const ax = P.inCar ? 0 : (aim.x - f.x) * 0.18, az = P.inCar ? 0 : (aim.z - f.z) * 0.18;
     const h = (P.inCar ? 46 + Math.min(18, Math.abs(CAR.speed) * 0.35) : 28) * zoom * (S && S.down !== undefined ? Math.max(0.45, 1 - S.down * 0.5) : 1);
     return { pos: V(lx + ax, h, lz + az + h * 0.62), look: V(lx + ax, 0, lz + az - 2) };
+  }
+  // perf: people and goons past the fog aren't drawn (each one is a dozen-plus draw calls).
+  // Big things (tanks, trucks, copters, beasts, the boss) stay visible further out.
+  const BIG = new Set(['boss', 'tank', 'truck', 'copter', 'beast', 'roomba', 'copcar', 'lowrider']);
+  function cullActors() {
+    const cx = camera.position.x, cz = camera.position.z;
+    for (const e of S.enemies) {
+      const d = Math.abs(e.pos.x - cx) + Math.abs(e.pos.z - cz);
+      e.model.root.visible = d < (BIG.has(e.type) ? 420 : 230);
+    }
+    for (const c of S.civs) c.model.root.visible = Math.abs(c.pos.x - cx) + Math.abs(c.pos.z - cz) < 190;
   }
   function snapCamera() { if (S) { camYaw = camYawTarget(); S.camInit = true; } const t = camTargets(); camPos.copy(t.pos); camLook.copy(t.look); }
   function updateCamera(dt) {

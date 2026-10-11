@@ -19,10 +19,14 @@ const params = new URLSearchParams(location.search);
 
 // ------------------------------------------------------------------ renderer
 const renderer = new THREE.WebGLRenderer({ canvas: $('c'), antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
+// perf: resolution starts at the screen's (capped) and adapts: it steps down when frames run long
+// and climbs back when there's headroom. The film grain hides the difference.
+const DPR_MAX = Math.min(devicePixelRatio, 1.5), DPR_MIN = Math.min(0.7, DPR_MAX);
+let dpr = DPR_MAX;
+renderer.setPixelRatio(dpr);
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = THREE.PCFShadowMap; // perf: soft PCF samples the map many more times per pixel
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.3;
 
@@ -500,7 +504,9 @@ addEventListener('mousemove', (e) => { const c = $('cross'); c.style.left = `${e
 
 function resize() {
   const w = innerWidth, h = innerHeight;
+  renderer.setPixelRatio(dpr);
   renderer.setSize(w, h);
+  composer.setPixelRatio(dpr);
   composer.setSize(w, h);
   noirPass.uniforms.res.value.set(w, h);
   for (const cam of [office?.camera, bar?.camera, game?.camera]) if (cam) { cam.aspect = w / h; cam.updateProjectionMatrix(); }
@@ -538,18 +544,29 @@ addEventListener('keydown', (e) => {
   perfOn = !perfOn; perfEl.classList.toggle('hidden', !perfOn);
   try { localStorage.setItem('gcb-perf', perfOn ? '1' : '0'); } catch (err) { /* ignore */ }
 });
-const perf = { frames: 0, t0: performance.now(), last: performance.now(), worst: 0 };
+const perf = { frames: 0, t0: performance.now(), last: performance.now(), worst: 0, slow: 0, fast: 0 };
+function adaptResolution(ms) {
+  if (document.hidden || mode !== 'play') return;
+  if (ms > 21) { perf.slow++; perf.fast = 0; } else if (ms < 14) { perf.fast++; perf.slow = 0; } else { perf.slow = perf.fast = 0; }
+  let next = dpr;
+  if (perf.slow >= 2) next = Math.max(DPR_MIN, dpr - 0.15);       // a full second running slow: step down
+  else if (perf.fast >= 8) next = Math.min(DPR_MAX, dpr + 0.1);   // four seconds of headroom: step back up
+  if (next !== dpr) { dpr = next; perf.slow = perf.fast = 0; resize(); }
+}
 const fmtK = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(2)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : `${n}`);
 function perfStats(now) {
   perf.frames++;
   perf.worst = Math.max(perf.worst, now - perf.last);
   perf.last = now;
-  if (!perfOn || now - perf.t0 < 500) return;
+  if (now - perf.t0 < 500) return;
   const fps = (perf.frames * 1000) / (now - perf.t0);
+  adaptResolution(1000 / fps);
+  if (!perfOn) { perf.frames = 0; perf.t0 = now; perf.worst = 0; return; }
   const r = renderer.info.render;
+  perfEl.dataset.dpr = dpr.toFixed(2);
   perfEl.innerHTML = `<b class="${fps < 30 ? 'bad' : fps < 50 ? 'meh' : ''}">${Math.round(fps)} FPS</b> ${(1000 / fps).toFixed(1)} ms <i>(worst ${perf.worst.toFixed(0)})</i>`
     + ` · ${r.calls} draw calls · ${fmtK(r.triangles)} tris`
-    + (r.points ? ` · ${fmtK(r.points)} pts` : '') + ` · ${renderer.info.memory.geometries} geo · ${renderer.info.memory.textures} tex`;
+    + (r.points ? ` · ${fmtK(r.points)} pts` : '') + ` · ${renderer.info.memory.geometries} geo · ${renderer.info.memory.textures} tex · res ${Math.round(dpr * 100)}%`;
   perf.frames = 0; perf.t0 = now; perf.worst = 0;
 }
 
@@ -599,7 +616,7 @@ function boot() {
   $('splash-status').textContent = 'Click to light a cigarette';
   requestAnimationFrame(frame);
   if (params.has('debug')) window.__noir = {
-    game, office, bar, save, setMode, beginCase, startStreets, CASES, L, playReel, loadReel, get mode() { return mode; },
+    game, office, bar, save, setMode, beginCase, startStreets, CASES, L, renderer, composer, playReel, loadReel, get mode() { return mode; },
     // fast-forward the streets without rendering (headless testing)
     step(sec, dt = 1 / 30) { for (let t = 0; t < sec && mode === 'play'; t += dt) game.update(dt); },
   };

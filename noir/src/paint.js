@@ -110,9 +110,19 @@ export function nmat(color, o = {}) {
 }
 
 // ---- drawing ---------------------------------------------------------------
-let dirty = false;
+// The GPU copy is updated in 128px tiles: every draw marks the tiles it touched, and
+// flushPaint() re-uploads only those (a full 2048px upload is 16 MB, and goons paint constantly).
+let dirty = false, fullDirty = false;
 const toPx = (w) => ((w - PAINT.origin) / PAINT.size) * PAINT.res;
 const scale = PAINT.res / PAINT.size;
+const TILE = 128, NT = PAINT.res / TILE;
+const dirtyTiles = new Set();
+function markPx(x0, y0, x1, y1) {
+  const tx0 = Math.max(0, Math.floor(Math.min(x0, x1) / TILE)), tx1 = Math.min(NT - 1, Math.floor(Math.max(x0, x1) / TILE));
+  const ty0 = Math.max(0, Math.floor(Math.min(y0, y1) / TILE)), ty1 = Math.min(NT - 1, Math.floor(Math.max(y0, y1) / TILE));
+  for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) dirtyTiles.add(ty * NT + tx);
+  dirty = true;
+}
 
 export function splat(x, z, r, color, alpha = 0.9, drops = 5) {
   const px = toPx(x), py = toPx(z), pr = Math.max(1.2, r * scale);
@@ -130,7 +140,7 @@ export function splat(x, z, r, color, alpha = 0.9, drops = 5) {
     ctx.fill();
   }
   ctx.globalAlpha = 1;
-  dirty = true;
+  markPx(px - pr * 2.5, py - pr * 2.5, px + pr * 2.5, py + pr * 2.5);
 }
 
 // A painted stroke (rollers, lowriders, beams).
@@ -145,7 +155,8 @@ export function stroke(x0, z0, x1, z1, w, color, alpha = 0.85) {
   ctx.lineTo(toPx(x1), toPx(z1));
   ctx.stroke();
   ctx.globalAlpha = 1;
-  dirty = true;
+  const hw = ctx.lineWidth / 2 + 1;
+  markPx(Math.min(toPx(x0), toPx(x1)) - hw, Math.min(toPx(z0), toPx(z1)) - hw, Math.max(toPx(x0), toPx(x1)) + hw, Math.max(toPx(z0), toPx(z1)) + hw);
 }
 
 // Rain washes the color out: a soft erase around a point.
@@ -159,30 +170,57 @@ export function wash(x, z, r, strength = 1) {
   ctx.fillStyle = g;
   ctx.fillRect(px - pr, py - pr, pr * 2, pr * 2);
   ctx.globalCompositeOperation = 'source-over';
-  dirty = true;
+  markPx(px - pr, py - pr, px + pr, py + pr);
 }
 
+// Tiny fades (the rain's slow wash) are banked and applied in one go once they add up,
+// so the whole canvas isn't redrawn and re-uploaded twice a second for an invisible change.
+let fadeBank = 0;
 export function fadeAll(a) {
+  fadeBank = 1 - (1 - fadeBank) * (1 - a);
+  if (fadeBank < 0.02) return;
   ctx.globalCompositeOperation = 'destination-out';
-  ctx.fillStyle = `rgba(0,0,0,${a})`;
+  ctx.fillStyle = `rgba(0,0,0,${fadeBank})`;
   ctx.fillRect(0, 0, PAINT.res, PAINT.res);
   ctx.globalCompositeOperation = 'source-over';
-  dirty = true;
+  fadeBank = 0;
+  fullDirty = dirty = true;
 }
 
 export function clearPaint() {
   ctx.clearRect(0, 0, PAINT.res, PAINT.res);
-  dirty = true;
+  fadeBank = 0;
+  fullDirty = dirty = true;
 }
 
 let uploadT = 0;
-export function flushPaint(dt) {
+const tileCanvas = document.createElement('canvas');
+tileCanvas.width = tileCanvas.height = TILE;
+const tctx = tileCanvas.getContext('2d');
+export function flushPaint(dt, renderer) {
   uploadT -= dt;
-  if (dirty && uploadT <= 0) {
+  if (!dirty || uploadT > 0) return;
+  uploadT = 1 / 15;
+  const props = renderer && renderer.properties.get(paintTex);
+  // a full upload when we must (first time, a wipe, a big fade, or lots of tiles at once)
+  if (fullDirty || !props || !props.__webglTexture || dirtyTiles.size > 48) {
     paintTex.needsUpdate = true;
-    dirty = false;
-    uploadT = 1 / 9;
+  } else {
+    const gl = renderer.getContext();
+    renderer.state.bindTexture(gl.TEXTURE_2D, props.__webglTexture);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+    if (gl.UNPACK_COLORSPACE_CONVERSION_WEBGL) gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
+    for (const t of dirtyTiles) {
+      const x = (t % NT) * TILE, y = Math.floor(t / NT) * TILE;
+      tctx.clearRect(0, 0, TILE, TILE);
+      tctx.drawImage(canvas, x, y, TILE, TILE, 0, 0, TILE, TILE);
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, x, y, gl.RGBA, gl.UNSIGNED_BYTE, tileCanvas);
+    }
   }
+  dirtyTiles.clear();
+  dirty = fullDirty = false;
 }
 
 // Fraction of the city covered in paint (0..1), sampled on a small copy.
