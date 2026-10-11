@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { initAudio, audio, playlist, skipTrack, setIndoors, sfx, setEngine } from './audio.js';
 import { buildOffice, buildBar } from './interiors.js';
@@ -81,6 +82,9 @@ const composer = new EffectComposer(renderer);
 const renderPass = new RenderPass(new THREE.Scene(), new THREE.PerspectiveCamera());
 const noirPass = new ShaderPass(NoirShader);
 composer.addPass(renderPass);
+// bloom: only the brightest things (neon, bulbs, lamp heads, lit windows, muzzle flashes) bleed light
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.5, 0.3, 1.8); // threshold 1.8: only things deliberately brighter than white (HDR neon, bulbs) bloom
+composer.addPass(bloomPass);
 composer.addPass(noirPass);
 composer.addPass(new OutputPass());
 

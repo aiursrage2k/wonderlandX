@@ -274,10 +274,17 @@ function facade(style, lit) {
         if (rnd() < 0.5) for (let k = 0; k < hh; k += 7) g.fillRect(x, y + k, ww, 3); // blinds
         else if (rnd() < 0.3) g.fillRect(x + 10, y + 30, 20, 50); // a silhouette
       } else {
+        // lintel shadow, frame, glass, mullions, a pale stone sill, and grime running down from it
+        g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillRect(x - 8, y - 12, ww + 16, 7);
         g.fillStyle = '#1a1b1d'; g.fillRect(x - 5, y - 5, ww + 10, hh + 10);
         g.fillStyle = on ? '#b8b3a6' : '#24272b'; g.fillRect(x, y, ww, hh);
+        if (!on && rnd() < 0.35) { g.fillStyle = 'rgba(70,68,64,0.9)'; g.fillRect(x, y, ww * (0.25 + rnd() * 0.3), hh); g.fillRect(x + ww * (0.7 + rnd() * 0.2), y, ww, hh); } // drawn curtains
+        if (!on && rnd() < 0.25) { g.fillStyle = 'rgba(40,40,42,0.95)'; for (let k = 0; k < hh * 0.6; k += 6) g.fillRect(x, y + k, ww, 3); } // half-drawn blinds
         g.fillStyle = '#1a1b1d'; g.fillRect(x + ww / 2 - 2, y, 4, hh); g.fillRect(x, y + hh / 2 - 2, ww, 4);
         g.fillStyle = 'rgba(255,255,255,0.08)'; g.fillRect(x, y, ww * 0.4, hh);
+        g.fillStyle = 'rgba(255,255,255,0.22)'; g.fillRect(x - 9, y + hh + 5, ww + 18, 6);
+        g.fillStyle = 'rgba(0,0,0,0.12)'; g.fillRect(x + rnd() * ww, y + hh + 11, 3 + rnd() * 4, 18 + rnd() * 40);
+        if (rnd() < 0.06) { g.fillStyle = '#3a3b3e'; g.fillRect(x + 8, y + hh - 22, 32, 20); g.fillStyle = 'rgba(0,0,0,0.5)'; for (let k = 0; k < 20; k += 4) g.fillRect(x + 10, y + hh - 20 + k, 28, 1.5); } // window AC unit
       }
     }
   });
@@ -393,9 +400,17 @@ export function buildCity(scene) {
   mats.dirt = noirify(new THREE.MeshLambertMaterial({ map: dirt }));
   mats.mark = nmat(0xcfcfc8, { kind: 'std', rough: 0.4 });
   mats.yellow = nmat(0xd8c060, { kind: 'std', rough: 0.4 });
+  // lit shopfronts: warm glass that glows through the rain (grey like everything else, bright enough to bloom a little)
+  mats.shop = nmat(0xc8bca4, { kind: 'basic', cut: true });
+  // neon tubes keep their color: the only color in Rain City the Syndicate didn't bring
+  mats.neonP = nmat(0xff3fb0, { kind: 'basic', keep: 1, paint: false });
+  mats.neonV = nmat(0xa64bff, { kind: 'basic', keep: 1, paint: false });
+  mats.neonG = nmat(0xffc23a, { kind: 'basic', keep: 1, paint: false });
+  mats.beacon = nmat(0xff2020, { kind: 'basic', keep: 1, paint: false });
+  for (const k of ['neonP', 'neonV', 'neonG', 'beacon']) { mats[k].fog = false; mats[k].color.multiplyScalar(9); } // neon cuts through the murk, HDR-bright so it blooms
 
   // building shells and ground stay as single meshes (cheap); the detail layers are tiled for culling + LOD
-  const W = { brick: new Merger(), conc: new Merger(), strip: new Merger(), roof: new Merger(), trim: new TiledMerger(), dark: new TiledMerger(), pave: new Merger(), grass: new Merger(), dirt: new Merger(), mark: new TiledMerger(), yellow: new TiledMerger() };
+  const W = { brick: new Merger(), conc: new Merger(), strip: new Merger(), roof: new Merger(), trim: new TiledMerger(), dark: new TiledMerger(), pave: new Merger(), grass: new Merger(), dirt: new Merger(), mark: new TiledMerger(), yellow: new TiledMerger(), shop: new TiledMerger(), neonP: new Merger(), neonV: new Merger(), neonG: new Merger(), beacon: new Merger() };
   lodTiles.length = 0;
 
   // ---- ground: asphalt everywhere, raised sidewalks on blocks
@@ -465,11 +480,12 @@ export function buildCity(scene) {
       else if (dist === 'The Strip') h = 22 + rnd() * 40;
       else h = 12 + rnd() * 26;
       const style = dist === 'The Strip' ? 'strip' : dist === 'Financial District' || dist === 'Civic Center' ? (rnd() < 0.7 ? 'conc' : 'brick') : rnd() < 0.7 ? 'brick' : 'conc';
-      building(lx0, lz0, lx1, lz1, h, style, W, rnd);
+      building(lx0, lz0, lx1, lz1, h, style, W, rnd, true, dist);
     }
   }
 
   // ---- the Strip: neon signs and marquee arches along z = 0 (road 6)
+  const neonSmear = canvasTex(64, 256, (g, w, h) => { const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, 'rgba(255,255,255,0.9)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, w, h); const gx = g.createLinearGradient(0, 0, w, 0); gx.addColorStop(0, 'rgba(0,0,0,1)'); gx.addColorStop(0.5, 'rgba(0,0,0,0)'); gx.addColorStop(1, 'rgba(0,0,0,1)'); g.globalCompositeOperation = 'destination-out'; g.fillStyle = gx; g.fillRect(0, 0, w, h); for (let y = 0; y < h; y += 6) { g.fillStyle = `rgba(0,0,0,${Math.random() * 0.5})`; g.fillRect(0, y, w, 3); } }, false);
   const neonWords = ['CASINO', 'LUCKY 7', 'HOTEL', 'COCKTAILS', 'GIRLS GIRLS', 'JACKPOT', 'DINE & DANCE', 'BINGO', 'GOLD RUSH', 'STARDUST', 'HIGH ROLLER', 'NITE CLUB'];
   let wi = 0;
   for (let bx = 5; bx < C.N; bx++) {
@@ -477,16 +493,21 @@ export function buildCity(scene) {
       const x = blockMin(bx) + 14 + rnd() * 28;
       const z = side * 13.5;
       const word = neonWords[wi++ % neonWords.length];
-      const sgn = new THREE.Mesh(new THREE.PlaneGeometry(12, 3), noirify(new THREE.MeshBasicMaterial({ map: textTex(word, { font: 'bold 74px Georgia', border: true }), transparent: true }), {}));
+      const col = ['#ff3fb0', '#b46bff', '#ffc23a', '#3fe0ff'][wi % 4];
+      const sgn = new THREE.Mesh(new THREE.PlaneGeometry(12, 3), noirify(new THREE.MeshBasicMaterial({ map: textTex(word, { font: 'bold 74px Georgia', border: true, fg: col }), color: new THREE.Color(5, 5, 5), transparent: true, fog: false }), { keep: 1, paint: false }));
       sgn.position.set(x, 9 + rnd() * 3, z);
       scene.add(sgn);
+      // its reflection: a long smear of the same color down the wet street
+      const rm = new THREE.Mesh(new THREE.PlaneGeometry(9, 16), new THREE.MeshBasicMaterial({ map: neonSmear, color: col, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.5 }));
+      rm.rotation.x = -Math.PI / 2; rm.position.set(x, 0.07, z - side * 8.5); rm.rotation.z = side > 0 ? Math.PI : 0;
+      scene.add(rm);
       W.dark.box(x - 0.2, 0.3, z - 0.6, x + 0.2, sgn.position.y - 1.4, z - 0.2, 4);
       signs.push(sgn);
     }
   }
   // marquee light strings over the Strip
   const bulbGeo = new THREE.SphereGeometry(0.18, 6, 4);
-  const bulbs = new THREE.InstancedMesh(bulbGeo, nmat(0xffffff, { kind: 'basic' }), 1400);
+  const bulbs = new THREE.InstancedMesh(bulbGeo, (() => { const m = nmat(0xfff2d0, { kind: 'basic' }).clone(); m.color.multiplyScalar(2.2); return m; })(), 1400);
   let bi = 0;
   for (let bx = 5; bx <= C.N; bx++) {
     const x = roadC(bx);
@@ -541,7 +562,7 @@ export function buildCity(scene) {
   const out = {};
   for (const k in W) {
     if (!W[k].p.length) continue;
-    const cast = k !== 'mark' && k !== 'yellow' && k !== 'pave' && k !== 'grass' && k !== 'dirt';
+    const cast = !['mark', 'yellow', 'pave', 'grass', 'dirt', 'shop', 'neonP', 'neonV', 'neonG', 'beacon'].includes(k);
     if (W[k] instanceof TiledMerger) { addTiled(W[k], mats[k], 'W:' + k, cast); continue; }
     const m = new THREE.Mesh(W[k].build(), mats[k]);
     m.name = 'W:' + k;
@@ -556,9 +577,14 @@ export function buildCity(scene) {
   const headGeo = new THREE.BoxGeometry(1.2, 0.3, 0.7);
   const poles = new THREE.InstancedMesh(poleGeo, nmat(0x2c2c2c, { kind: 'std', rough: 0.5, metal: 0.6 }), lamps.length);
   const arms = new THREE.InstancedMesh(new THREE.BoxGeometry(1.6, 0.12, 0.12), nmat(0x2c2c2c), lamps.length);
-  const heads = new THREE.InstancedMesh(headGeo, nmat(0xffffff, { kind: 'basic', paint: false }), lamps.length);
+  const heads = new THREE.InstancedMesh(headGeo, (() => { const m = nmat(0xfff6e8, { kind: 'basic', paint: false }).clone(); m.color.multiplyScalar(3.4); return m; })(), lamps.length); // HDR bulbs bloom
   const streakTex = canvasTex(32, 256, (g, w, h) => { const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, 'rgba(255,255,255,0.9)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, w, h); const gx = g.createLinearGradient(0, 0, w, 0); gx.addColorStop(0, 'rgba(0,0,0,1)'); gx.addColorStop(0.5, 'rgba(0,0,0,0)'); gx.addColorStop(1, 'rgba(0,0,0,1)'); g.globalCompositeOperation = 'destination-out'; g.fillStyle = gx; g.fillRect(0, 0, w, h); }, false);
   const streaks = new THREE.InstancedMesh(new THREE.PlaneGeometry(2.2, 16), new THREE.MeshBasicMaterial({ map: streakTex, transparent: true, opacity: 0.42, depthWrite: false, blending: THREE.AdditiveBlending }), lamps.length);
+  // a faint cone of light under every lamp, rain catching in it; brightest at the bulb, gone at the street
+  const coneTex = canvasTex(8, 128, (g, w, h) => { const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, 'rgba(255,244,222,0.55)'); gr.addColorStop(0.5, 'rgba(255,244,222,0.14)'); gr.addColorStop(1, 'rgba(255,244,222,0)'); g.fillStyle = gr; g.fillRect(0, 0, w, h); }, false);
+  const coneGeo = new THREE.CylinderGeometry(0.35, 3.4, 7.7, 14, 1, true);
+  const cones = new THREE.InstancedMesh(coneGeo, new THREE.MeshBasicMaterial({ map: coneTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, opacity: 0.2 }), lamps.length);
+  cones.renderOrder = 2;
   lamps.forEach((l, i) => {
     poles.setMatrixAt(i, tr(l.x, 4, l.z));
     const hx = l.x + l.dx * 1.2;
@@ -568,9 +594,10 @@ export function buildCity(scene) {
     const s = new THREE.Matrix4().makeRotationX(-Math.PI / 2);
     s.setPosition(hx + l.dx * 1.5, 0.05, l.z + 8.2);
     streaks.setMatrixAt(i, s);
+    cones.setMatrixAt(i, tr(hx, 3.85, l.z));
   });
-  for (const m of [poles, arms, heads, streaks]) scene.add(m);
-  knock.lamps = { poles, arms, heads, streaks, orig: lamps.map((l, i) => { const a = new THREE.Matrix4(), b = new THREE.Matrix4(), c = new THREE.Matrix4(), d = new THREE.Matrix4(); poles.getMatrixAt(i, a); arms.getMatrixAt(i, b); heads.getMatrixAt(i, c); streaks.getMatrixAt(i, d); return [a, b, c, d]; }) };
+  for (const m of [poles, arms, heads, streaks, cones]) scene.add(m);
+  knock.lamps = { poles, arms, heads, streaks, cones, orig: lamps.map((l, i) => { const a = new THREE.Matrix4(), b = new THREE.Matrix4(), c = new THREE.Matrix4(), d = new THREE.Matrix4(), e = new THREE.Matrix4(); poles.getMatrixAt(i, a); arms.getMatrixAt(i, b); heads.getMatrixAt(i, c); streaks.getMatrixAt(i, d); cones.getMatrixAt(i, e); return [a, b, c, d, e]; }) };
 
   // ---- street furniture: hydrants, trash cans, newspaper boxes, mailboxes, parking meters
   const steel = nmat(0x4a4c50, { kind: 'std', rough: 0.4, metal: 0.6 });
@@ -647,36 +674,84 @@ export function buildCity(scene) {
   return { mats, out, ground };
 
   // ---------------------------------------------------------------- helpers
-  function building(bx0, bz0, bx1, bz1, h, style, Wm, r, collide = true) {
+  function building(bx0, bz0, bx1, bz1, h, style, Wm, r, collide = true, dist = '') {
     const uo = Math.floor(r() * 8) / 8, vo = Math.floor(r() * 8) / 8;
-    Wm[style].box(bx0, 0.3, bz0, bx1, h, bz1, 32, uo, vo, false);
-    Wm.roof.flat(bx0, bz0, bx1, bz1, h, 10);
+    const w = bx1 - bx0, d = bz1 - bz0;
+    // tall towers step back in tiers, art-deco wedding-cake style, each tier capped with a cornice
+    const tall = h > 38 && w > 14 && d > 14;
+    let tiers = [[bx0, bz0, bx1, bz1, h]];
+    if (tall) {
+      const m = Math.min(w, d), i1 = m * 0.12, i2 = m * 0.25;
+      tiers = [[bx0, bz0, bx1, bz1, h * 0.62], [bx0 + i1, bz0 + i1, bx1 - i1, bz1 - i1, h * 0.85], [bx0 + i2, bz0 + i2, bx1 - i2, bz1 - i2, h]];
+    }
+    let y0 = 0.3;
+    for (let t = 0; t < tiers.length; t++) {
+      const [tx0, tz0, tx1, tz1, th] = tiers[t];
+      Wm[style].box(tx0, y0, tz0, tx1, th, tz1, 32, uo, vo, false);
+      if (t < tiers.length - 1) { Wm.trim.box(tx0 - 0.4, th - 0.5, tz0 - 0.4, tx1 + 0.4, th + 0.4, tz1 + 0.4, 8); Wm.roof.flat(tx0, tz0, tx1, tz1, th + 0.42, 10); }
+      y0 = th;
+    }
+    const [rx0, rz0, rx1, rz1] = tiers[tiers.length - 1];
+    Wm.roof.flat(rx0, rz0, rx1, rz1, h, 10);
     // parapet
     const p = 0.5;
-    Wm.trim.box(bx0, h, bz0, bx1, h + 1.2, bz0 + p, 8);
-    Wm.trim.box(bx0, h, bz1 - p, bx1, h + 1.2, bz1, 8);
-    Wm.trim.box(bx0, h, bz0, bx0 + p, h + 1.2, bz1, 8);
-    Wm.trim.box(bx1 - p, h, bz0, bx1, h + 1.2, bz1, 8);
+    Wm.trim.box(rx0, h, rz0, rx1, h + 1.2, rz0 + p, 8);
+    Wm.trim.box(rx0, h, rz1 - p, rx1, h + 1.2, rz1, 8);
+    Wm.trim.box(rx0, h, rz0, rx0 + p, h + 1.2, rz1, 8);
+    Wm.trim.box(rx1 - p, h, rz0, rx1, h + 1.2, rz1, 8);
+    // street level: a stone band over the shopfronts, lit shop windows, the odd awning
+    if (h > 12 && dist !== 'The Docks' && dist !== 'Rail Yards') {
+      Wm.trim.box(bx0 - 0.3, 4.0, bz0 - 0.3, bx1 + 0.3, 4.7, bz1 + 0.3, 8);
+      const lit = r() < 0.55 ? Wm.shop : Wm.dark;
+      for (const [ax, az, bx2, bz2, n] of [[bx0, bz1 + 0.06, bx1, bz1 + 0.06, [0, 0, 1]], [bx1, bz0 - 0.06, bx0, bz0 - 0.06, [0, 0, -1]], [bx1 + 0.06, bz1, bx1 + 0.06, bz0, [1, 0, 0]], [bx0 - 0.06, bz0, bx0 - 0.06, bz1, [-1, 0, 0]]]) {
+        const len = Math.hypot(bx2 - ax, bz2 - az), ux = (bx2 - ax) / len, uz = (bz2 - az) / len;
+        for (let s2 = 1.5; s2 + 4 < len - 1; s2 += 6.5) {
+          const a0 = [ax + ux * s2, 0.9, az + uz * s2], a1 = [ax + ux * (s2 + 4.5), 0.9, az + uz * (s2 + 4.5)];
+          lit.quad(a0, a1, [a1[0], 3.4, a1[2]], [a0[0], 3.4, a0[2]], n, [0, 0], [1, 0], [1, 1], [0, 1]);
+        }
+      }
+      if (r() < 0.4) Wm.trim.box(bx0 + 1, 3.55, bz1, bx1 - 1, 3.85, bz1 + 1.8, 8);
+    }
+    // neon: tubes up the corners and round the crown, on the Strip and the money towers
+    const neonP = dist === 'The Strip' ? 0.75 : dist === 'Financial District' ? (tall ? 0.6 : 0.2) : tall ? 0.15 : 0;
+    if (r() < neonP) {
+      const nm = [Wm.neonP, Wm.neonV, Wm.neonG][Math.floor(r() * 3)];
+      const [cx0, cz0, cx1, cz1] = tiers[tall ? 1 : 0];
+      const top = tall ? tiers[1][4] : h, q = 0.22;
+      for (const [x, z] of [[cx0, cz0], [cx1, cz0], [cx0, cz1], [cx1, cz1]]) nm.box(x - q, 5, z - q, x + q, top, z + q, 8);
+      const nm2 = tall ? nm : nm;
+      nm2.box(rx0 - 0.1, h + 1.2, rz0 - 0.1, rx1 + 0.1, h + 1.5, rz0 + 0.1, 8);
+      nm2.box(rx0 - 0.1, h + 1.2, rz1 - 0.1, rx1 + 0.1, h + 1.5, rz1 + 0.1, 8);
+      nm2.box(rx0 - 0.1, h + 1.2, rz0, rx0 + 0.1, h + 1.5, rz1, 8);
+      nm2.box(rx1 - 0.1, h + 1.2, rz0, rx1 + 0.1, h + 1.5, rz1, 8);
+    }
+    // the tallest get a spire with a red air-warning light
+    if (tall && h > 75) {
+      const sx = (rx0 + rx1) / 2, sz = (rz0 + rz1) / 2;
+      Wm.trim.geo(new THREE.CylinderGeometry(0.3, 3.2, 14, 6), tr(sx, h + 7.2, sz));
+      Wm.dark.geo(new THREE.CylinderGeometry(0.08, 0.2, 9, 4), tr(sx, h + 18.5, sz));
+      Wm.beacon.box(sx - 0.35, h + 23, sz - 0.35, sx + 0.35, h + 23.7, sz + 0.35, 8);
+    }
     // rooftop clutter: water tower, AC units, stair hut
-    const w = bx1 - bx0, d = bz1 - bz0;
-    if (w > 10 && d > 10) {
+    const rw = rx1 - rx0, rd = rz1 - rz0;
+    if (rw > 10 && rd > 10 && !(tall && h > 75)) {
       if (r() < 0.45) {
-        const tx = bx0 + 3 + r() * (w - 6), tz = bz0 + 3 + r() * (d - 6);
+        const tx = rx0 + 3 + r() * (rw - 6), tz = rz0 + 3 + r() * (rd - 6);
         for (const [ox, oz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) Wm.dark.box(tx + ox * 1.2 - 0.1, h, tz + oz * 1.2 - 0.1, tx + ox * 1.2 + 0.1, h + 3, tz + oz * 1.2 + 0.1, 4);
-        Wm.dark.geo(new THREE.CylinderGeometry(1.8, 1.8, 3.2, 12), tr(tx, h + 4.6, tz));
-        Wm.dark.geo(new THREE.ConeGeometry(2, 1.4, 12), tr(tx, h + 6.9, tz));
+        Wm.dark.geo(new THREE.CylinderGeometry(1.8, 1.8, 3.2, 10), tr(tx, h + 4.6, tz));
+        Wm.dark.geo(new THREE.ConeGeometry(2, 1.4, 10), tr(tx, h + 6.9, tz));
       }
       for (let k = 0; k < 2; k++) if (r() < 0.6) {
-        const ax = bx0 + 2 + r() * (w - 6), az = bz0 + 2 + r() * (d - 6);
+        const ax = rx0 + 2 + r() * (rw - 6), az = rz0 + 2 + r() * (rd - 6);
         Wm.trim.box(ax, h, az, ax + 2 + r() * 2, h + 1.4, az + 2, 4);
       }
-      if (r() < 0.5) { const sx = bx0 + 2 + r() * (w - 8); const sz = bz0 + 2 + r() * (d - 8); Wm.brick.box(sx, h, sz, sx + 4, h + 3, sz + 4, 32, uo, vo); }
+      if (r() < 0.5) { const sx = rx0 + 2 + r() * (rw - 8); const sz = rz0 + 2 + r() * (rd - 8); Wm.brick.box(sx, h, sz, sx + 4, h + 3, sz + 4, 32, uo, vo); }
     }
     // fire escapes on the long faces facing roads (just slats)
-    if (style === 'brick' && h > 14 && r() < 0.5) {
+    if (style === 'brick' && h > 14 && !tall && r() < 0.5) {
       const fx = bx0 + 2 + r() * Math.max(1, w - 8);
-      for (let y = 4; y < h - 2; y += 4) Wm.dark.box(fx, y, bz1, fx + 5, y + 0.15, bz1 + 1.4, 4);
-      Wm.dark.box(fx, 3, bz1 + 1.3, fx + 0.12, h - 2, bz1 + 1.42, 4);
+      for (let y = 6; y < h - 2; y += 4) Wm.dark.box(fx, y, bz1, fx + 5, y + 0.15, bz1 + 1.4, 4);
+      Wm.dark.box(fx, 5, bz1 + 1.3, fx + 0.12, h - 2, bz1 + 1.42, 4);
     }
     if (collide) addBox(bx0, bz0, bx1, bz1, h, 'bldg');
   }

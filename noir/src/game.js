@@ -57,9 +57,9 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
   scene.environment = pmrem.fromScene(envScene, 0.02).texture;
   scene.environmentIntensity = 0.7;
 
-  const hemi = new THREE.HemisphereLight(0x9aa6b8, 0x2a2a2e, 1.15);
+  const hemi = new THREE.HemisphereLight(0x8e9bb0, 0x1c1c20, 0.95); // a touch darker: more noir contrast, lamps and neon carry the street
   scene.add(hemi);
-  const moon = new THREE.DirectionalLight(0xc8d4e6, 1.5);
+  const moon = new THREE.DirectionalLight(0xc4d2ea, 1.75);
   moon.castShadow = true;
   moon.shadow.mapSize.set(2048, 2048);
   Object.assign(moon.shadow.camera, { left: -70, right: 70, top: 70, bottom: -70, near: 10, far: 220 });
@@ -79,11 +79,62 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     skids.instanceMatrix.needsUpdate = true;
   }
   // a hard pool of light that follows Mack, like every noir hero gets
-  const heroSpot = new THREE.SpotLight(0xfff4e6, 2600, 70, 0.42, 0.75, 1.4);
+  const heroSpot = new THREE.SpotLight(0xfff4e6, 1300, 70, 0.42, 0.75, 1.4);
   heroSpot.castShadow = false; // perf: one shadow pass (the moon) is plenty; a second one redrew the whole street
   scene.add(heroSpot, heroSpot.target);
   const lampPool = [];
   for (let i = 0; i < 4; i++) { const l = new THREE.PointLight(0xfff1d8, 0, 34, 1.6); scene.add(l); lampPool.push(l); } // perf: every light costs every lit pixel
+
+  // ---- the sky: a low lid of rain cloud lit from below by the city, a smudge of moon, lightning in it
+  const skyU = { t: { value: 0 }, flash: { value: 0 }, haze: { value: new THREE.Color(0x24272c) } };
+  const sky = new THREE.Mesh(new THREE.SphereGeometry(440, 32, 16), new THREE.ShaderMaterial({
+    uniforms: skyU, side: THREE.BackSide, depthWrite: false, fog: false,
+    vertexShader: 'varying vec3 vD; void main(){ vD = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+    fragmentShader: `uniform float t, flash; uniform vec3 haze; varying vec3 vD;
+      float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float n(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(h(i), h(i + vec2(1, 0)), f.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), f.x), f.y); }
+      float fbm(vec2 p){ float s = 0.0, a = 0.5; for (int i = 0; i < 5; i++) { s += a * n(p); p *= 2.03; a *= 0.5; } return s; }
+      void main(){
+        float y = vD.y;
+        vec2 uv = vD.xz / (max(y, 0.02) + 0.35) * 1.6 + vec2(t * 0.012, t * 0.004);
+        float c = fbm(uv), c2 = fbm(uv * 2.3 + 7.0);
+        vec3 top = vec3(0.035, 0.04, 0.05);
+        vec3 col = mix(haze * 1.15, top, smoothstep(0.0, 0.55, y));
+        // cloud undersides catching the city's sodium glow, brighter toward the horizon
+        col += vec3(0.11, 0.105, 0.1) * smoothstep(0.45, 0.85, c) * (1.0 - smoothstep(0.1, 0.7, y));
+        col -= vec3(0.03) * smoothstep(0.5, 0.8, c2);
+        // the moon, smothered: a soft halo where it ought to be
+        float m = max(dot(vD, normalize(vec3(0.45, 0.55, 0.3))), 0.0);
+        col += vec3(0.16, 0.17, 0.19) * pow(m, 40.0) * (1.0 - smoothstep(0.55, 0.85, c) * 0.7) + vec3(0.05) * pow(m, 6.0);
+        // lightning lights the cloud from inside
+        col += vec3(0.5, 0.52, 0.6) * flash * (0.35 + smoothstep(0.3, 0.8, c));
+        gl_FragColor = vec4(col, 1.0);
+      }`,
+  }));
+  sky.renderOrder = -10; sky.frustumCulled = false;
+  scene.add(sky);
+  // the far skyline: the rest of Rain City, flat as a stage flat, windows lit, the odd neon cross
+  const skylineTex = (() => {
+    const c = document.createElement('canvas'); c.width = 4096; c.height = 256; const g = c.getContext('2d');
+    const rs = (s => () => (s = (s * 16807) % 2147483647) / 2147483647)(91);
+    for (let layer = 0; layer < 2; layer++) {
+      let x = 0;
+      while (x < 4096) {
+        const w = 30 + rs() * 120, hgt = (layer ? 60 : 90) + rs() * (layer ? 90 : 150);
+        g.fillStyle = layer ? '#141619' : '#1b1d21';
+        g.fillRect(x, 256 - hgt, w, hgt);
+        if (rs() < 0.25) { g.fillRect(x + w * 0.3, 256 - hgt - 30, w * 0.4, 30); if (rs() < 0.5) g.fillRect(x + w * 0.48, 256 - hgt - 60, 3, 30); } // setbacks and spires
+        if (layer) for (let wy = 256 - hgt + 8; wy < 250; wy += 9) for (let wx = x + 4; wx < x + w - 4; wx += 8) if (rs() < 0.2) { const b = 120 + rs() * 100; g.fillStyle = `rgba(${b},${b * 0.94},${b * 0.8},0.85)`; g.fillRect(wx, wy, 3, 4); }
+        if (layer && rs() < 0.12) { g.fillStyle = ['#ff3fb0', '#b46bff', '#ffc23a'][Math.floor(rs() * 3)]; g.fillRect(x + w * 0.2, 256 - hgt + 10, w * 0.6, 3); }
+        g.fillStyle = layer ? '#141619' : '#1b1d21';
+        x += w + rs() * 10;
+      }
+    }
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping; t.repeat.x = 2; return t;
+  })();
+  const skyline = new THREE.Mesh(new THREE.CylinderGeometry(420, 420, 150, 64, 1, true), new THREE.MeshBasicMaterial({ map: skylineTex, transparent: true, side: THREE.BackSide, depthWrite: false, fog: false }));
+  skyline.renderOrder = -9; skyline.frustumCulled = false;
+  scene.add(skyline);
 
   const city = buildCity(scene);
   scene.add(skids);
@@ -411,8 +462,8 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
   const _zero = new THREE.Matrix4().makeScale(0, 0, 0);
   function resetKnocks() {
     const K = knock.lamps;
-    if (K) lamps.forEach((l, i) => { if (!l.down) return; l.down = false; K.poles.setMatrixAt(i, K.orig[i][0]); K.arms.setMatrixAt(i, K.orig[i][1]); K.heads.setMatrixAt(i, K.orig[i][2]); K.streaks.setMatrixAt(i, K.orig[i][3]); });
-    if (K) for (const m of [K.poles, K.arms, K.heads, K.streaks]) m.instanceMatrix.needsUpdate = true;
+    if (K) lamps.forEach((l, i) => { if (!l.down) return; l.down = false; K.poles.setMatrixAt(i, K.orig[i][0]); K.arms.setMatrixAt(i, K.orig[i][1]); K.heads.setMatrixAt(i, K.orig[i][2]); K.streaks.setMatrixAt(i, K.orig[i][3]); K.cones.setMatrixAt(i, K.orig[i][4]); });
+    if (K) for (const m of [K.poles, K.arms, K.heads, K.streaks, K.cones]) m.instanceMatrix.needsUpdate = true;
     for (const p of knock.props) if (p.down) { p.down = false; p.mesh.setMatrixAt(p.i, p.orig); p.mesh.instanceMatrix.needsUpdate = true; }
     if (knock.meterHeads) { let j = 0; for (const p of knock.props) if (p.type === 'meter') knock.meterHeads.setMatrixAt(j++, new THREE.Matrix4().makeTranslation(p.x, 0.3, p.z)); knock.meterHeads.instanceMatrix.needsUpdate = true; }
   }
@@ -430,7 +481,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     const l = lamps[i], K = knock.lamps;
     if (l.down) return;
     l.down = true;
-    for (const m of [K.poles, K.arms, K.heads, K.streaks]) { m.setMatrixAt(i, _zero); m.instanceMatrix.needsUpdate = true; }
+    for (const m of [K.poles, K.arms, K.heads, K.streaks, K.cones]) { m.setMatrixAt(i, _zero); m.instanceMatrix.needsUpdate = true; }
     // the post topples as a single piece: pole, arm and head
     const g = new THREE.Group();
     const pole = new THREE.Mesh(K.poles.geometry, K.poles.material); pole.position.y = 4; g.add(pole);
@@ -1896,6 +1947,8 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     updateCamera(rdt);
     cullActors();
     updateCityLOD(camera.position.x, camera.position.z);
+    sky.position.copy(camera.position); skyline.position.set(camera.position.x, 66, camera.position.z);
+    skyU.t.value = S.time; skyU.flash.value = fx.flash; skyU.haze.value.copy(scene.background);
     // bleed
     S.bleedT -= rdt;
     if (S.bleedT <= 0) {
@@ -3141,7 +3194,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     near.sort((a, b) => a[0] - b[0]);
     lampPool.forEach((pl, i) => {
       const l = near[i] && near[i][1];
-      if (l) { pl.position.set(l.hx, 7.4, l.z); pl.intensity = 260; } else pl.intensity = 0;
+      if (l) { pl.position.set(l.hx, 7.4, l.z); pl.intensity = 150; } else pl.intensity = 0;
     });
     // cop cars flash red/blue, cops eat
     const blink = Math.floor(S.time * 6) % 2;
@@ -3169,8 +3222,8 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       sfx.thunder(rand(0.3, 1.4));
     }
     fx.flash = Math.max(0, fx.flash - rdt * 3);
-    hemi.intensity = 1.15 + fx.flash * 2.5;
-    moon.intensity = 1.5 + fx.flash * 3;
+    hemi.intensity = 0.95 + fx.flash * 2.5;
+    moon.intensity = 1.75 + fx.flash * 3;
     rain.userData.uni.flash.value = fx.flash * 0.2;
     // particles etc
     parts.update(dt);

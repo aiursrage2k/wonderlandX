@@ -127,6 +127,22 @@ npx http-server -c-1 .     # then visit http://localhost:8080/noir/
   BIG PORK'S DONUTS sign.
 - **Perf overlay.** FPS, frame time, draw calls, triangles and render resolution
   in the top-left corner. F3 hides or shows it.
+- **The city at night.**
+  - Tall towers step back in art-deco tiers with cornices, and the tallest carry
+    spires with red air-warning lights.
+  - Buildings have a stone band over a ground floor of lit shop windows, plus the odd
+    awning.
+  - The Strip and the money towers wear neon tubes up their corners and round
+    their crowns. The tubes keep their color, cut through the fog and bloom.
+  - The Strip's signs glow in color, with long colored smears reflected down the
+    wet street.
+  - Facades have lintels, sills, grime streaks, curtains, blinds and window AC units.
+  - Every street lamp throws a faint cone of light through the rain.
+  - The sky is a low lid of rain cloud lit from below by the city, with a smothered
+    moon and lightning flashing inside the clouds. A distant skyline with lit
+    windows stands past the fog.
+  - Bloom only catches things brighter than white (neon, bulbs, lamp heads,
+    muzzle flashes). The ambient light is a touch darker for more noir contrast.
 - **Performance.**
   - The city's detail layers (trim, fences, fire escapes, rooftop tanks, road paint,
     baked props) are split into a 4x4 grid of tiles. That lets the camera frustum
