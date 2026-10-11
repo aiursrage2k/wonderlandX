@@ -127,6 +127,25 @@ npx http-server -c-1 .     # then visit http://localhost:8080/noir/
   BIG PORK'S DONUTS sign.
 - **Perf overlay.** FPS, frame time, draw calls, triangles and render resolution
   in the top-left corner. F3 hides or shows it.
+- **Driving.** A punchy launch, real brakes, and steering that's sharp at city
+  speeds and steadier flat out. The car leans into corners and squats under
+  throttle, and the lens widens with speed and boost. The car's velocity now
+  stays in the world while it rotates, so grip pulls it back into line and the
+  handbrake gives a real, controllable drift.
+- **Hood guns.** Twin machine guns on the Packard's fenders (click). They
+  alternate barrels, nudge toward your cursor, and overheat after about three
+  seconds of trigger. Sally keeps firing her own rockets.
+- **Rocket crates.** Glowing crates on the roads load a three-tube pod onto the
+  roof: 6 heat-seeking rockets per crate (right mouse in the car). A collected
+  crate comes back elsewhere after 45 seconds.
+- **The cops stay home.** It's a corrupt city: the cops sit at Big Pork's and
+  never chase you. Shooting a civilian still costs you, but nobody comes. The
+  one exception is the Mayor's case, where the badges are on his payroll and
+  come after Mack.
+- **Effects.** Bullet tracers are glowing ribbons. Muzzle flashes, wall-hit
+  sparks and rocket flames are bright enough to bloom, and rockets leave fat
+  smoke trails. Explosions have a white-hot core, a rolling orange fireball, a
+  shockwave, sparks and debris. Paint rounds glow in their own color.
 - **The city at night.**
   - Tall towers step back in art-deco tiers with cornices, and the tallest carry
     spires with red air-warning lights.

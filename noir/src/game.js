@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { NU, splat, stroke, wash, fadeAll, clearPaint, flushPaint, coverage, nmat } from './paint.js';
 import { buildCity, updateCityLOD, knock, L, C, DISTRICTS, roadC, nodeIndex, pushOut, rayDist, clearLine, roadPoint, lamps, vents, cops, copCars, flaskSpots, signs } from './city.js';
 import { rainbowCoat as rainbowMatLocal } from './models.js';
-import { makeDetective, makeSally, makeGangster, makeCar, makePortal, makePrismKing, makeMayor, makeFlask, makeRainbowGoon, makeRoomba, makeTruck, makeCopter, makeMech, makeCultist, makeImp, makeBeast, makeRobot, makeCivilian, setInfected, makeCop, drainModel, GANG_COLORS, gangMat, makeDemonTank, addSkates, compactModel } from './models.js';
+import { makeDetective, makeSally, makeGangster, makeCar, makePortal, makePrismKing, makeMayor, makeFlask, makeRainbowGoon, makeRoomba, makeTruck, makeCopter, makeMech, makeCultist, makeImp, makeBeast, makeRobot, makeCivilian, setInfected, makeCop, drainModel, GANG_COLORS, gangMat, makeDemonTank, addSkates, compactModel, part } from './models.js';
 import { makeRain, Particles, Tracers, Flashes, hexToRgb, fx } from './fx.js';
 import { sfx, setEngine } from './audio.js';
 import { BOSSES, LINES, DONUT_LINES, COP_RETORTS, MONOLOGUES, EVIDENCE, RADIO, RADIO_FILLER } from './story.js';
@@ -143,6 +143,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
   const parts = new Particles(6000);
   scene.add(parts.mesh);
   const tracers = new Tracers(300);
+  tracers.cam = camera;
   scene.add(tracers.mesh);
   const flashes = new Flashes(scene, 3);
 
@@ -159,6 +160,29 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
   scene.add(sallyM.root);
   const carM = makeCar('sedan');
   scene.add(carM.root);
+  // twin .30-cals bolted to the front fenders, and a roof rack for rocket pods (shown when loaded)
+  const carGuns = [];
+  {
+    const gunM = nmat(0x1a1a1c, { kind: 'std', rough: 0.35, metal: 0.8 });
+    const brass = nmat(0xb8963a, { kind: 'std', rough: 0.3, metal: 0.9, keep: 1, paint: false });
+    for (const side of [-1, 1]) {
+      const g = new THREE.Group(); g.position.set(side * 0.92, 1.12, 2.0); carM.body.add(g);
+      part(new THREE.BoxGeometry(0.34, 0.3, 0.9), gunM, 0, 0, 0, 1, 1, 1, g);
+      const bar = part(new THREE.CylinderGeometry(0.07, 0.07, 1.3, 8), gunM, 0, 0.04, 0.95, 1, 1, 1, g); bar.rotation.x = Math.PI / 2;
+      part(new THREE.CylinderGeometry(0.11, 0.11, 0.22, 8), gunM, 0, 0.04, 1.55, 1, 1, 1, g).rotation.x = Math.PI / 2;
+      part(new THREE.BoxGeometry(0.1, 0.22, 0.3), brass, side * -0.2, -0.05, -0.1, 1, 1, 1, g); // ammo box
+      const flash = new THREE.Mesh(new THREE.SphereGeometry(0.28, 8, 6), new THREE.MeshBasicMaterial({ color: new THREE.Color(1, 0.75, 0.35).multiplyScalar(4), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+      flash.position.set(0, 0.04, 1.75); flash.scale.set(1, 1, 2.2); flash.visible = false; g.add(flash);
+      carGuns.push({ g, flash, side });
+    }
+  }
+  const pod = new THREE.Group(); pod.position.set(0, 2.28, -0.7); carM.body.add(pod); pod.visible = false;
+  {
+    const tube = nmat(0x2a2c2a, { kind: 'std', rough: 0.4, metal: 0.6 });
+    const tip = nmat(0xd0102a, { kind: 'std', rough: 0.3, keep: 1, paint: false });
+    part(new THREE.BoxGeometry(1.4, 0.12, 1.6), tube, 0, -0.1, 0, 1, 1, 1, pod);
+    for (const x of [-0.42, 0, 0.42]) { const t = part(new THREE.CylinderGeometry(0.17, 0.17, 1.8, 10), tube, x, 0.18, 0, 1, 1, 1, pod); t.rotation.x = Math.PI / 2; part(new THREE.SphereGeometry(0.16, 8, 6), tip, x, 0.18, 0.9, 1, 1, 1, pod); }
+  }
   const sallyInCar = new THREE.Group(); // Sally's red dress through the passenger window
   {
     const red = sallyM.root.children.find((c) => c.isMesh && c.geometry.type === 'CylinderGeometry');
@@ -173,7 +197,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
   }
   const rocketGeo = new THREE.CylinderGeometry(0.16, 0.16, 1.0, 8);
   rocketGeo.rotateX(Math.PI / 2);
-  const rocketMat = new THREE.MeshBasicMaterial({ color: 0xff1a2a });
+  const rocketMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1, 0.1, 0.16).multiplyScalar(2.2) });
   // Sally's lock-on reticle: a red ring with four ticks, drawn on top of everything
   const lockRet = new THREE.Group();
   {
@@ -202,6 +226,19 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     const pin = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 6), evPin); pin.position.set(0, 1.55, -0.3); g.add(pin);
     const ring = new THREE.Mesh(new THREE.RingGeometry(1.4, 1.6, 30), new THREE.MeshBasicMaterial({ color: 0xff2030, transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false }));
     ring.rotation.x = -Math.PI / 2; ring.position.y = 0.08; g.add(ring);
+    return g;
+  };
+  // a rocket crate: army-green box, stencilled lid, three red warheads poking out, a glow so you can find it
+  const rocketCrateModel = () => {
+    const g = new THREE.Group();
+    const crate = nmat(0x4a5238, { kind: 'std', rough: 0.7, keep: 0.6, paint: false });
+    part(new THREE.BoxGeometry(1.8, 0.9, 1.1), crate, 0, 0, 0, 1, 1, 1, g);
+    part(new THREE.BoxGeometry(1.9, 0.12, 1.2), nmat(0x2a2e22), 0, 0.5, 0, 1, 1, 1, g);
+    const tip = new THREE.MeshBasicMaterial({ color: new THREE.Color(1, 0.12, 0.15).multiplyScalar(3) });
+    for (const x of [-0.5, 0, 0.5]) { const r = part(new THREE.CylinderGeometry(0.13, 0.13, 1.1, 8), nmat(0x6a6c66, { kind: 'std', metal: 0.6 }), x, 0.65, 0, 1, 1, 1, g); r.rotation.z = 0.3; part(new THREE.SphereGeometry(0.14, 8, 6), tip, x - 0.15, 1.17, 0, 1, 1, 1, g); }
+    const halo = new THREE.Mesh(new THREE.RingGeometry(1.4, 1.7, 24), new THREE.MeshBasicMaterial({ color: new THREE.Color(1, 0.2, 0.25).multiplyScalar(2), transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false }));
+    halo.rotation.x = -Math.PI / 2; halo.position.y = -0.55; g.add(halo);
+    g.traverse((o) => { if (o.isMesh) o.castShadow = false; });
     return g;
   };
   const flaskPickupModel = () => { const f = makeFlask(1.4); f.traverse((o) => { if (o.isMesh) o.castShadow = false; }); return f; };
@@ -649,7 +686,13 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     if (byMack) goWanted();
   }
   // ===================================================================== the cops
+  // Rain City's finest don't chase anybody: they're at Big Pork's, eating. The one exception is the
+  // Mayor's case, where the badges are on his payroll and they come for Mack from the start.
   function goWanted() {
+    if (!S.caseDef.cops) {
+      quip('MACK', ['Nobody\'s coming. Nobody ever comes in this town. The cops are at Big Pork\'s, and they\'re staying there.', 'In another city that\'d get me arrested. Here it gets me a free cruller.', 'Somewhere a cop heard that, shrugged, and ordered a bear claw.'], 1, 4);
+      return;
+    }
     if (S.wanted) { say('MACK', pick(['Another one. The cops won\'t forget this.', 'I\'m digging my own grave in the rain.']), 2.2); return; }
     S.wanted = true; S.copT = 3;
     hud.wanted(true);
@@ -930,7 +973,15 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     // flask pickups scattered around
     const spots = flaskSpots.filter((p) => !area || (p.x > area.x0 - 40 && p.x < area.x1 + 40 && p.z > area.z0 - 40 && p.z < area.z1 + 40));
     (spots.length ? spots : flaskSpots).slice(0, 10).forEach((p, i) => addPickup(p.x, p.z, i % 3 === 2 ? 'pills' : 'flask'));
+    CAR.rockets = 0; CAR.heat = 0; CAR.overheat = 0; pod.visible = false;
+    for (let k = 0; k < 4; k++) respawnCrate();
     if (caseDef.hell) makeFissures(caseDef.hell);
+    if (caseDef.cops) later(() => {
+      if (!S || S.wanted) return;
+      S.wanted = true; S.copT = 2; hud.wanted(true);
+      say('PORK', '*over the radio* All units... the Mayor says Malone\'s a menace. Put the crullers down. ...Sorry, Malone. He signs the checks.', 5);
+      later(() => S && say('SALLY', 'The cops are on the Mayor\'s side?! Okay. OKAY. More things to shoot!', 3), 5200);
+    }, 9000);
     // the opening monologue, Sally cutting in; the first stage's own line waits its turn
     const mono = MONOLOGUES[caseDef.id] || [];
     mono.forEach(([w, t], i) => later(() => S && say(w, t, 4.8), 600 + i * 4700));
@@ -1247,7 +1298,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
   }
 
   function addPickup(x, z, kind = 'flask', item = null) {
-    const mesh = kind === 'evidence' ? evidenceModel() : kind === 'pills' ? pillPickupModel() : flaskPickupModel();
+    const mesh = kind === 'evidence' ? evidenceModel() : kind === 'pills' ? pillPickupModel() : kind === 'rockets' ? rocketCrateModel() : flaskPickupModel();
     mesh.position.set(x, 0.6, z);
     scene.add(mesh);
     S.pickups.push({ mesh, x, z, kind, item, t: Math.random() * 6 });
@@ -1364,7 +1415,12 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     const far = clamp(1 - Math.hypot(x - focus().x, z - focus().z) / 140, 0.1, 1);
     sfx.boom(far);
     flashes.light(x, y + 2, z, 2500, 0.25);
-    flashes.ball(x, y, z, r * 0.8, 0.3);
+    // a white-hot core, an orange fireball rolling out of it, and a shockwave across the ground
+    flashes.ball(x, y + 0.5, z, r * 0.45, 0.16, 0xfff0d0, 5);
+    flashes.ball(x, y + 1, z, r * 0.85, 0.42, 0xff7a20, 2.4);
+    flashes.ring(x, z, r * 1.6, 0xffe0b0, 0.35, 0.2);
+    for (let k = 0; k < 24; k++) { const a = Math.random() * 6.28, sp = rand(12, 30); parts.spawn(x, y + 0.5, z, Math.cos(a) * sp, rand(3, 14), Math.sin(a) * sp, { life: rand(0.3, 0.7), size: rand(0.18, 0.35), color: [4, rand(1.6, 2.6), 0.6], grav: 22, drag: 1 }); }
+    for (let k = 0; k < 10; k++) parts.spawn(x, y + 0.5, z, rand(-10, 10), rand(6, 16), rand(-10, 10), { life: rand(0.9, 1.6), size: rand(0.35, 0.6), color: [0.08, 0.08, 0.08], grav: 26 }); // debris
     fx.shake = Math.max(fx.shake, 0.6 * far);
     for (let k = 0; k < 30; k++) parts.spawn(x, y, z, rand(-1, 1) * 18, rand(4, 16), rand(-1, 1) * 18, { life: rand(0.3, 0.8), size: rand(0.3, 0.7), color: [1, 0.95, 0.85], grav: 25, kind: 0 });
     for (let k = 0; k < 16; k++) parts.spawn(x + rand(-2, 2), y + rand(0, 2), z + rand(-2, 2), rand(-3, 3), rand(2, 6), rand(-3, 3), { life: rand(1.2, 2.4), size: rand(3, 6), grow: 4, color: [0.12, 0.12, 0.13], alpha: 0.85, drag: 1.2, kind: 1 });
@@ -1611,7 +1667,8 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     _hp.set(o.x + dx * end, o.y, o.z + dz * end);
     tracers.add(o, _hp, color, 0.09);
     if (!hits.length && wall < range) {
-      for (let k = 0; k < 4; k++) parts.spawn(_hp.x, _hp.y, _hp.z, -dx * rand(2, 6) + rand(-2, 2), rand(1, 4), -dz * rand(2, 6) + rand(-2, 2), { life: 0.3, size: 0.3, color: [0.9, 0.9, 0.9], grav: 12 });
+      for (let k = 0; k < 5; k++) parts.spawn(_hp.x, _hp.y, _hp.z, -dx * rand(3, 9) + rand(-3, 3), rand(1, 6), -dz * rand(3, 9) + rand(-3, 3), { life: 0.25, size: 0.2, color: [4, 3, 1.6], grav: 20 });
+      parts.spawn(_hp.x, _hp.y, _hp.z, -dx * 1.5, 0.5, -dz * 1.5, { life: 0.7, size: 1.2, grow: 2, color: [0.6, 0.6, 0.62], alpha: 0.45, kind: 1 });
     }
     return _hp;
   }
@@ -1640,14 +1697,57 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     sfx.rocket();
   }
 
+  // paint rounds glow in their own color (HDR, so the bloom gives them a halo)
+  const glowMats = new Map();
+  function glowMat(color) {
+    if (!glowMats.has(color)) glowMats.set(color, new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(3.2) }));
+    return glowMats.get(color);
+  }
   function enemyShot(from, dx, dz, color, speed = 34, dmg = 7, kind = 'ball') {
     const big = kind === 'donut' || kind === 'bomb';
-    const mesh = new THREE.Mesh(kind === 'donut' ? donutGeo : ballGeo, gangMat(color));
+    const mesh = new THREE.Mesh(kind === 'donut' ? donutGeo : ballGeo, kind === 'donut' ? gangMat(color) : glowMat(color));
     if (kind === 'bomb') mesh.scale.setScalar(2.2);
     mesh.position.copy(from);
     scene.add(mesh);
     S.shots.push({ mesh, pos: from.clone(), vx: dx * speed, vz: dz * speed, vy: big ? 9 : 0, life: big ? 2.4 : 1.8, color, dmg, big, kind });
     sfx.pop(clamp(1 - Math.hypot(from.x - focus().x, from.z - focus().z) / 90, 0.1, 1));
+  }
+
+  // ===================================================================== car weapons
+  // Left mouse: the hood guns, alternating barrels, a little aim assist toward the cursor, and they overheat.
+  // Right mouse: a heat-seeking rocket from the roof pod, if you've picked any up.
+  function updateCarGuns(dt) {
+    CAR.mgCd = (CAR.mgCd || 0) - dt;
+    CAR.heat = Math.max(0, (CAR.heat || 0) - dt * (CAR.overheat > 0 ? 0.6 : 0.42));
+    if (CAR.overheat > 0) { CAR.overheat -= dt; if (Math.random() < dt * 20) parts.spawn(CAR.pos.x + rand(-1, 1), 1.6, CAR.pos.z + rand(-1, 1), 0, rand(1, 3), 0, { life: 0.8, size: 1.2, grow: 2, color: [0.75, 0.75, 0.78], alpha: 0.4, kind: 1 }); }
+    for (const gn of carGuns) gn.flash.visible = false;
+    if (mouse.down && CAR.mgCd <= 0 && !(CAR.overheat > 0) && !S.over) {
+      CAR.mgCd = 0.065;
+      CAR.mgSide = -(CAR.mgSide || 1);
+      const gn = carGuns[CAR.mgSide > 0 ? 1 : 0];
+      const mp = V(); gn.flash.getWorldPosition(mp);
+      // aim assist: steer the rounds toward the cursor, within a cone off the bonnet
+      const want = Math.atan2(aim.x - mp.x, aim.z - mp.z);
+      const a = CAR.ang + clamp(wrapAngle(want - CAR.ang), -0.38, 0.38) + rand(-0.025, 0.025);
+      shoot(V(mp.x, 1.2, mp.z), Math.sin(a), Math.cos(a), 95, 11, [1, 0.8, 0.45], 1);
+      gn.flash.visible = true; gn.flash.rotation.z = Math.random() * 6;
+      if (Math.random() < 0.5) flashes.light(mp.x, 1.6, mp.z, 220, 0.04);
+      // brass
+      parts.spawn(mp.x, 1.4, mp.z, Math.cos(CAR.ang) * CAR.mgSide * rand(2, 4) + CAR.vx * 0.5, rand(2, 4), -Math.sin(CAR.ang) * CAR.mgSide * rand(2, 4) + CAR.vz * 0.5, { life: 0.5, size: 0.14, color: [1, 0.8, 0.3], grav: 20 });
+      sfx.tommy();
+      CAR.heat += 0.05; // about three seconds of trigger before they cook
+      if (CAR.heat >= 1) { CAR.heat = 1; CAR.overheat = 1.6; sfx.close(); quip('SALLY', ['The guns are COOKING, Mack! Let them breathe!', 'Ow, hot hot hot!', 'Overheated! Like my last boyfriend!'], 1, 2); }
+    }
+    CAR.podCd = (CAR.podCd || 0) - dt;
+    if (mouse.right && CAR.rockets > 0 && CAR.podCd <= 0 && !S.over) {
+      CAR.podCd = 0.32; CAR.rockets--;
+      const s = Math.sin(CAR.ang), c = Math.cos(CAR.ang);
+      const from = V(CAR.pos.x - s * 0.7 + c * (CAR.rockets % 3 - 1) * 0.42, 2.5, CAR.pos.z - c * 0.7 - s * (CAR.rockets % 3 - 1) * 0.42);
+      fireRocket(from, aim.x, aim.z, nearestTarget(aim.x, aim.z, 14) || sallyPick(aim.x, aim.z, 30));
+      flashes.light(from.x, from.y, from.z, 500, 0.08);
+      if (!CAR.rockets) say('MACK', 'Pod\'s empty. Find another crate.', 2);
+    }
+    pod.visible = CAR.rockets > 0;
   }
 
   // ===================================================================== car
@@ -1697,18 +1797,26 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     if (P.inCar && !S.over) {
       const thr = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
       const st = (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0) - (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0);
-      if (thr > 0) vf += (vf < 0 ? 60 : 30) * dt;
-      else if (thr < 0) vf -= (vf > 0 ? 60 : 18) * dt;
-      CAR.steer += (st - CAR.steer) * Math.min(1, dt * 8);
+      // a punchy launch that eases off toward top speed; real brakes; engine drag when you lift off
+      const top = CAR.boosting ? 88 : 58;
+      const vf0 = vf;
+      if (thr > 0) vf += (vf < -1 ? 95 : 52 * (1 - Math.max(0, vf) / top * 0.8)) * dt;
+      else if (thr < 0) vf -= (vf > 1 ? 95 : 28) * dt;
+      else vf *= Math.exp(-0.7 * dt);
+      CAR.acc = (vf - vf0) / Math.max(dt, 1e-4);
+      // quick steering in, quicker back to centre
+      CAR.steer += (st - CAR.steer) * Math.min(1, dt * (st ? 11 : 16));
       const hb = keys.has('Space');
-      vr *= Math.exp(-(hb ? 0.9 : 9) * dt);
-      if (hb) vf *= Math.exp(-0.6 * dt);
+      // grip: tight at city speeds, a little slip when you're flying, and the handbrake lets the back end go
+      const grip = hb ? 3.2 : 11 - Math.min(5, Math.abs(vf) / 14);
+      vr *= Math.exp(-grip * dt);
+      if (hb) vf *= Math.exp(-0.45 * dt);
       // Shift: rocket boost out the tailpipes
       CAR.boosting = (keys.has('ShiftLeft') || keys.has('ShiftRight')) && CAR.boost > 0.02 && thr >= 0;
       if (CAR.boosting) { vf += 70 * dt; CAR.boost = Math.max(0, CAR.boost - dt * 0.45); if (!CAR.wasBoosting) { sfx.boost(); fx.shake = Math.max(fx.shake, 0.3); } }
       else CAR.boost = Math.min(1, CAR.boost + dt * (Math.abs(vr) > 5 ? 0.35 : 0.1)); // drifting refills the tank
       CAR.wasBoosting = CAR.boosting;
-      vf = clamp(vf, -16, CAR.boosting ? 78 : 50);
+      vf = clamp(vf, -20, CAR.boosting ? 88 : 58);
       CAR.drift = Math.abs(vr);
     } else if (CAR.intro && !S.over) {
       const I = CAR.intro;
@@ -1771,11 +1879,15 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       vf *= Math.exp(-2.5 * dt);
     }
     vf *= Math.exp(-0.25 * dt);
-    const turn = CAR.steer * 2.3 * clamp(vf / 10, -1, 1) * (1 - Math.min(0.45, Math.abs(vf) / 110)) * (P.inCar && keys.has('Space') ? 1.7 : 1);
+    // steering: no turning on the spot, sharpest at city speeds, steadier flat out; the handbrake swings the tail
+    const spd = Math.abs(vf);
+    const turn = CAR.steer * 2.7 * Math.min(1, spd / 7) * (1 - Math.min(0.5, spd / 130)) * Math.sign(vf || 1) * (P.inCar && keys.has('Space') ? 1.3 : 1);
     CAR.ang += turn * dt;
     const nfX = Math.sin(CAR.ang), nfZ = Math.cos(CAR.ang), nrX = Math.cos(CAR.ang), nrZ = -Math.sin(CAR.ang);
-    CAR.vx = nfX * vf + nrX * vr;
-    CAR.vz = nfZ * vf + nrZ * vr;
+    // velocity stays in the world while the car rotates under it; grip (above) pulls it back into line next frame.
+    // That lag is the slide: tight with grip, a proper drift on the handbrake.
+    CAR.vx = fwdX * vf + rgtX * vr;
+    CAR.vz = fwdZ * vf + rgtZ * vr;
     CAR.pos.x += CAR.vx * dt;
     CAR.pos.z += CAR.vz * dt;
     CAR.speed = vf;
@@ -1787,7 +1899,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
         CAR.pos.x = p.x - nfX * off; CAR.pos.z = p.z - nfZ * off;
         const vn = CAR.vx * n.x + CAR.vz * n.z;
         if (vn < 0) {
-          CAR.vx -= vn * n.x * 1.4; CAR.vz -= vn * n.z * 1.4;
+          CAR.vx -= vn * n.x * 1.15; CAR.vz -= vn * n.z * 1.15; // kill the push into the wall, keep the slide along it
           if (-vn > 8) { sfx.crash(Math.min(1, -vn / 25)); CAR.hp -= Math.max(0, -vn - 8) * 0.7; smashCar(-vn, p.x - n.x * 1.3, p.z - n.z * 1.3, n.x, n.z); if (CAR.hp <= 0 && CAR.alive) destroyCar(); }
         }
       }
@@ -1814,8 +1926,11 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
         if (CAR.screechT <= 0) { CAR.screechT = 0.2; sfx.screech(drifting ? clamp(Math.abs(vf) / 30, 0.5, 1.2) : 0.7); }
       }
     }
-    carM.body.rotation.z = -CAR.steer * clamp(vf / 40, -1, 1) * 0.06;
-    carM.body.rotation.x = -clamp(vf / 50, -1, 1) * 0.02;
+    // weight transfer: lean out of the turn, squat under throttle, dive under the brakes
+    CAR.roll = (CAR.roll || 0) + (-CAR.steer * clamp(vf / 35, -1, 1) * 0.11 - (CAR.roll || 0)) * Math.min(1, dt * 6);
+    CAR.pitch = (CAR.pitch || 0) + (clamp((CAR.acc || 0) / 400, -0.06, 0.05) - (CAR.pitch || 0)) * Math.min(1, dt * 5);
+    carM.body.rotation.z = CAR.roll;
+    carM.body.rotation.x = -CAR.pitch;
     carM.wheels.forEach((w, i) => { w.children.forEach((c) => (c.rotation.x += vf * dt / 0.42)); if (i < 2) w.rotation.y = CAR.steer * 0.45; });
     sallyInCar.visible = SA.inCar;
     if (P.inCar) setEngine(true, vf);
@@ -1970,7 +2085,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     hud.update({
       score: S.score, mult: S.mult, combo: S.comboT / 5, wave: waveInfo(),
       boost: CAR.boost, hp: P.hp / P.maxHp, flasks: P.flasks, maxFlasks: P.maxFlasks, bleed: Math.min(1, S.bleed), focus: P.focus > 0 || P.focusHeld, focusMeter: P.focusMeter, pills: P.pills, ammo: P.ammo, reloading: P.reload > 0, seeColor: P.color > 0,
-      inCar: P.inCar, carHp: CAR.alive ? CAR.hp / 400 : 0, carAlive: CAR.alive,
+      inCar: P.inCar, carHp: CAR.alive ? CAR.hp / 400 : 0, carAlive: CAR.alive, mgHeat: CAR.heat || 0, overheat: CAR.overheat > 0, carRockets: CAR.rockets || 0,
       player: focus(), enemies: S.enemies, portals: S.portals, car: CAR, sally: SA, boss: S.boss && !S.boss.dead ? S.boss : null,
       civs: S.civs, aim, hint: currentHint(), camera, time: S.time, heading: camMode === 'chase' ? camYaw : Math.PI, speed: Math.abs(CAR.speed), clock: S.time, stageText: S.stage ? S.stage.text : '', objectives: objectiveMarks(), sallyHp: SA.hp / SA.maxHp, sallyDown: SA.down,
     });
@@ -2057,12 +2172,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     P.fireCd -= pdt; P.rollCd -= pdt;
     if (P.inCar) {
       P.pos.copy(CAR.pos);
-      SA.cd -= pdt;
-      if (mouse.down && SA.cd <= 0) {
-        SA.cd = 0.55;
-        const s = Math.sin(CAR.ang), c = Math.cos(CAR.ang);
-        fireRocket(V(CAR.pos.x - c * 1.2, 1.7, CAR.pos.z + s * 1.2), aim.x, aim.z, nearestTarget(aim.x, aim.z, 10) || sallyPick(aim.x, aim.z, 14));
-      }
+      updateCarGuns(pdt);
       return;
     }
     // on foot
@@ -2111,7 +2221,9 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
         S.firing = true;
         sfx.revolver();
         flashes.light(o.x, o.y, o.z, 260, 0.06);
-        parts.spawn(o.x, o.y, o.z, Math.sin(P.face) * 6, 0.5, Math.cos(P.face) * 6, { life: 0.08, size: 2.6, color: [1, 0.9, 0.8], kind: 1 });
+        flashes.ball(o.x + Math.sin(P.face) * 0.4, o.y, o.z + Math.cos(P.face) * 0.4, 0.55, 0.06, 0xffc070, 4);
+        parts.spawn(o.x, o.y, o.z, Math.sin(P.face) * 6, 0.5, Math.cos(P.face) * 6, { life: 0.08, size: 2.6, color: [3, 2.4, 1.6], kind: 1 });
+        for (let k = 0; k < 5; k++) parts.spawn(o.x, o.y, o.z, Math.sin(P.face + rand(-0.5, 0.5)) * rand(8, 16), rand(-1, 2), Math.cos(P.face + rand(-0.5, 0.5)) * rand(8, 16), { life: 0.12, size: 0.25, color: [4, 2.6, 1.2] });
         for (let k = 0; k < 3; k++) parts.spawn(o.x, o.y, o.z, Math.sin(P.face) * 3 + rand(-1, 1), rand(0.5, 1.5), Math.cos(P.face) * 3 + rand(-1, 1), { life: 0.9, size: 1.2, grow: 2, color: [0.7, 0.7, 0.72], alpha: 0.4, kind: 1 });
         fx.shake = Math.max(fx.shake, 0.18);
         P.kick = 1;
@@ -2292,8 +2404,8 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     }
     if (S.time - SA.lastHurt > 6 && SA.hp < SA.maxHp) SA.hp = Math.min(SA.maxHp, SA.hp + 4 * dt);
     if (SA.inCar) {
-      // auto-fire from the passenger window when Mack isn't pointing (not while she's got the wheel)
-      if (!mouse.down && !S.over && !SA.driving) {
+      // auto-fire from the passenger window (not while she's got the wheel); Mack has the hood guns now
+      if (!S.over && !SA.driving) {
         SA.cd -= dt;
         if (SA.cd <= 0) {
           const t = SA.lock;
@@ -3088,7 +3200,11 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       r.pos.y += (ty - r.pos.y) * Math.min(1, dt * 2.5);
       r.mesh.position.copy(r.pos);
       r.mesh.rotation.y = Math.atan2(r.vx, r.vz);
-      parts.spawn(r.pos.x, r.pos.y, r.pos.z, rand(-0.5, 0.5), rand(0.5, 1.5), rand(-0.5, 0.5), { life: 0.9, size: 1.2, grow: 2.5, color: r.enemy ? hexToRgb(r.color) : [0.7, 0.7, 0.72], alpha: 0.5, drag: 2, kind: 1 });
+      // exhaust: a white-hot flame at the tail, a spit of sparks, and a fat smoke trail that hangs in the rain
+      const tsp = Math.hypot(r.vx, r.vz) || 1, tx = r.pos.x - r.vx / tsp * 0.7, tz = r.pos.z - r.vz / tsp * 0.7;
+      parts.spawn(tx, r.pos.y, tz, -r.vx * 0.05, 0, -r.vz * 0.05, { life: 0.07, size: 1.6, color: r.enemy ? hexToRgb(r.color).map((c) => c * 3) : [4, 2.4, 0.9], kind: 1 });
+      if (Math.random() < 0.6) parts.spawn(tx, r.pos.y, tz, -r.vx * 0.15 + rand(-3, 3), rand(-1, 3), -r.vz * 0.15 + rand(-3, 3), { life: 0.25, size: 0.22, color: [4, 2.2, 0.8], grav: 8 });
+      parts.spawn(tx, r.pos.y, tz, rand(-0.5, 0.5), rand(0.5, 1.5), rand(-0.5, 0.5), { life: 1.6, size: 1.5, grow: 3.2, color: r.enemy ? hexToRgb(r.color) : [0.72, 0.72, 0.74], alpha: 0.5, drag: 2, kind: 1 });
       let boom = wall < st || r.life <= 0;
       if (r.enemy) {
         const f = focus();
@@ -3112,6 +3228,16 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     }
   }
 
+  // rocket crates: a few scattered on the roads around wherever the case is, and they come back
+  function respawnCrate() {
+    const f = focus();
+    for (let k = 0; k < 20; k++) {
+      const q = roadPoint(S.area);
+      const d = Math.hypot(q.x - f.x, q.z - f.z);
+      if (d > 60 && d < 260) { addPickup(q.x, q.z, 'rockets'); return; }
+    }
+    const q = roadPoint(S.area); addPickup(q.x, q.z, 'rockets');
+  }
   function updatePickups(dt) {
     const f = focus();
     for (let i = S.pickups.length - 1; i >= 0; i--) {
@@ -3134,6 +3260,13 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       if (Math.hypot(p.x - f.x, p.z - f.z) < (P.inCar ? 3.5 : 2)) {
         scene.remove(p.mesh); S.pickups.splice(i, 1);
         sfx.pickup();
+        if (p.kind === 'rockets') {
+          CAR.rockets = Math.min(18, (CAR.rockets || 0) + 6);
+          hud.floater(V(p.x, 0, p.z), '+6 ROCKETS · RIGHT MOUSE IN THE CAR');
+          if (!S.podHint) { S.podHint = true; say('SALLY', 'ROCKET POD! Mack, bolt it on the roof! Right mouse! RIGHT MOUSE!', 3.2); }
+          later(() => S && respawnCrate(), 45000);
+          continue;
+        }
         if (p.kind === 'pills') { if (P.pills < 4) { P.pills++; hud.floater(V(p.x, 0, p.z), '+PAIN PILLS'); } else { P.hp = Math.min(P.maxHp, P.hp + 25); hud.floater(V(p.x, 0, p.z), '+GRIT'); } }
         else if (P.flasks < P.maxFlasks) { P.flasks++; hud.floater(V(p.x, 0, p.z), '+FLASK'); } else { P.hp = Math.min(P.maxHp, P.hp + 25); hud.floater(V(p.x, 0, p.z), '+GRIT'); }
       }
@@ -3301,6 +3434,9 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       const rate = P.inCar ? 3.2 : P.aiming ? 1.6 : 2.4;
       camYaw += wrapAngle(camYawTarget() - camYaw) * Math.min(1, dt * rate);
     }
+    // speed sells itself: the lens widens as the Packard goes faster, more with the boost lit
+    const fovT = 50 + (P.inCar ? Math.min(12, Math.abs(CAR.speed) * 0.16) + (CAR.boosting ? 7 : 0) : 0);
+    if (Math.abs(camera.fov - fovT) > 0.05) { camera.fov += (fovT - camera.fov) * Math.min(1, dt * 3); camera.updateProjectionMatrix(); }
     const t = camTargets();
     const k = 1 - Math.exp(-dt * (camMode === 'chase' ? (P.inCar ? 9 : 7) : 5));
     camPos.lerp(t.pos, k); camLook.lerp(t.look, k);

@@ -93,6 +93,12 @@ export function createHud() {
       document.getElementById('clock').textContent = `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
     }
     if (s.inCar && s.speed !== undefined) document.getElementById('speed').textContent = Math.round(s.speed * 2.2);
+    if (s.inCar && s.mgHeat !== undefined) {
+      const hf = document.getElementById('heat-fill');
+      hf.style.transform = `scaleX(${s.mgHeat})`;
+      hf.parentElement.classList.toggle('over', !!s.overheat);
+      document.getElementById('pods').textContent = s.carRockets ? `· ROCKETS ×${s.carRockets} (RIGHT MOUSE)` : '';
+    }
     if (s.score !== undefined) {
       el.score.textContent = String(Math.round(s.score)).padStart(7, '0');
       el.mult.textContent = `×${s.mult.toFixed(2).replace(/\.?0+$/, '')}`;

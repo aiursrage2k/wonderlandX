@@ -113,44 +113,67 @@ export class Particles {
 }
 
 // ------------------------------------------------------------------ tracers
+// Bullet tracers: glowing camera-facing ribbons (lines are 1px in WebGL), HDR-bright so the bloom catches them.
+// Each one is a streak from muzzle to hit that fades fast, hottest at the head.
 export class Tracers {
   constructor(n = 300) {
     this.n = n;
-    this.pos = new Float32Array(n * 6);
-    this.col = new Float32Array(n * 8);
-    this.life = new Float32Array(n);
-    this.max = new Float32Array(n);
+    this.a = new Float32Array(n * 3); this.b = new Float32Array(n * 3);
+    this.w = new Float32Array(n); this.c = new Float32Array(n * 3);
+    this.life = new Float32Array(n); this.max = new Float32Array(n);
+    this.pos = new Float32Array(n * 12);
+    this.col = new Float32Array(n * 16);
+    this.uv = new Float32Array(n * 8);
+    const idx = [];
+    for (let i = 0; i < n; i++) { const o = i * 4; idx.push(o, o + 1, o + 2, o, o + 2, o + 3); this.uv.set([-1, 0, 1, 0, 1, 1, -1, 1], i * 8); }
     this.next = 0;
+    this.cam = null;
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage));
     g.setAttribute('rgba', new THREE.BufferAttribute(this.col, 4).setUsage(THREE.DynamicDrawUsage));
+    g.setAttribute('uv', new THREE.BufferAttribute(this.uv, 2));
+    g.setIndex(idx);
     this.geo = g;
-    this.mesh = new THREE.LineSegments(g, new THREE.ShaderMaterial({
-      transparent: true, depthWrite: false,
-      vertexShader: 'attribute vec4 rgba; varying vec4 vC; void main(){ vC = rgba; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
-      fragmentShader: 'varying vec4 vC; void main(){ gl_FragColor = vC; }',
+    this.mesh = new THREE.Mesh(g, new THREE.ShaderMaterial({
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+      vertexShader: 'attribute vec4 rgba; varying vec4 vC; varying vec2 vU; void main(){ vC = rgba; vU = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+      fragmentShader: 'varying vec4 vC; varying vec2 vU; void main(){ float x = 1.0 - abs(vU.x); float core = pow(x, 3.0); gl_FragColor = vec4(vC.rgb * (0.6 + core * 3.0), vC.a * x); }',
     }));
     this.mesh.frustumCulled = false;
+    this._s = new THREE.Vector3(); this._d = new THREE.Vector3(); this._v = new THREE.Vector3();
   }
-  add(a, b, color = [1, 1, 0.9], life = 0.07) {
+  add(a, b, color = [1, 1, 0.9], life = 0.07, width = 0.13) {
     const i = this.next; this.next = (this.next + 1) % this.n;
-    this.pos.set([a.x, a.y, a.z, b.x, b.y, b.z], i * 6);
+    this.a.set([a.x, a.y, a.z], i * 3); this.b.set([b.x, b.y, b.z], i * 3);
+    this.c.set(color, i * 3); this.w[i] = width;
     this.life[i] = life; this.max[i] = life;
-    this.col.set([color[0], color[1], color[2], 0.2, color[0], color[1], color[2], 0.9], i * 8);
   }
   update(dt) {
+    const cam = this.cam;
     for (let i = 0; i < this.n; i++) {
-      if (this.life[i] <= 0) continue;
+      if (this.life[i] <= 0) { if (this.col[i * 16 + 3] !== 0) for (let k = 0; k < 4; k++) this.col[i * 16 + k * 4 + 3] = 0; continue; }
       this.life[i] -= dt;
-      const a = Math.max(0, this.life[i] / this.max[i]);
-      this.col[i * 8 + 3] = 0.2 * a; this.col[i * 8 + 7] = 0.9 * a;
+      const k = Math.max(0, this.life[i] / this.max[i]);
+      const ax = this.a[i * 3], ay = this.a[i * 3 + 1], az = this.a[i * 3 + 2], bx = this.b[i * 3], by = this.b[i * 3 + 1], bz = this.b[i * 3 + 2];
+      // the streak shortens toward the hit as it fades
+      const t0 = 1 - k;
+      const sx = ax + (bx - ax) * t0, sy = ay + (by - ay) * t0, sz = az + (bz - az) * t0;
+      this._d.set(bx - sx, by - sy, bz - sz);
+      if (cam) this._v.set((sx + bx) / 2 - cam.position.x, (sy + by) / 2 - cam.position.y, (sz + bz) / 2 - cam.position.z); else this._v.set(0, 1, 0);
+      this._s.crossVectors(this._d, this._v).normalize().multiplyScalar(this.w[i]);
+      const p = this.pos, o = i * 12;
+      p[o] = sx - this._s.x; p[o + 1] = sy - this._s.y; p[o + 2] = sz - this._s.z;
+      p[o + 3] = sx + this._s.x; p[o + 4] = sy + this._s.y; p[o + 5] = sz + this._s.z;
+      p[o + 6] = bx + this._s.x; p[o + 7] = by + this._s.y; p[o + 8] = bz + this._s.z;
+      p[o + 9] = bx - this._s.x; p[o + 10] = by - this._s.y; p[o + 11] = bz - this._s.z;
+      const r = this.c[i * 3], g = this.c[i * 3 + 1], b = this.c[i * 3 + 2], c = this.col, q = i * 16;
+      c.set([r, g, b, 0.15 * k, r, g, b, 0.15 * k, r, g, b, k, r, g, b, k], q);
     }
     this.geo.attributes.position.needsUpdate = true;
     this.geo.attributes.rgba.needsUpdate = true;
   }
 }
 
-// ------------------------------------------------------------------ helpers
 export function hexToRgb(hex) {
   const c = new THREE.Color(hex);
   return [c.r, c.g, c.b];
@@ -167,8 +190,8 @@ export class Flashes {
     this.k = 0;
     this.balls = [];
     const geo = new THREE.SphereGeometry(1, 16, 12);
-    for (let i = 0; i < 8; i++) {
-      const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthWrite: false }));
+    for (let i = 0; i < 12; i++) {
+      const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
       m.visible = false; scene.add(m);
       this.balls.push({ m, t: 0, max: 1, r: 1 });
     }
@@ -192,9 +215,10 @@ export class Flashes {
     const s = this.lights[this.k]; this.k = (this.k + 1) % this.lights.length;
     s.l.position.set(x, y, z); s.t = life; s.max = life; s.i0 = intensity; s.l.intensity = intensity;
   }
-  ball(x, y, z, r, life = 0.35) {
+  ball(x, y, z, r, life = 0.35, color = 0xffffff, hdr = 1) {
     const b = this.balls[this.bk]; this.bk = (this.bk + 1) % this.balls.length;
     b.m.position.set(x, y, z); b.m.visible = true; b.t = life; b.max = life; b.r = r;
+    b.m.material.color.set(color).multiplyScalar(hdr);
   }
   update(dt) {
     for (const s of this.lights) { if (s.t > 0) { s.t -= dt; s.l.intensity = Math.max(0, s.i0 * (s.t / s.max)); } }

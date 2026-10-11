@@ -273,7 +273,7 @@ export const CASES = [
     gus: 'You\'re running hot, Mack. Take the extra flask. It\'s on the house. Everything\'s on the house. The house is on fire, probably.',
   },
   {
-    id: 8, title: 'Hizzoner', district: 'Civic Center', music: 'high',
+    id: 8, title: 'Hizzoner', district: 'Civic Center', music: 'high', cops: true,
     dame: { name: 'Miss Dolores Fitch', hat: 'cloche', shade: 0x4a4a4c, fur: false },
     blurb: 'The Mayor\'s own stenographer walks in with a ledger. Horace Krane has been selling Rain City\'s grey to the Syndicate, one shade at a time.',
     intro: [
