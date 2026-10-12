@@ -2,7 +2,7 @@
 // and the Last Drop bar. Both sit far outside the city so no paint reaches them.
 import * as THREE from 'three';
 import { nmat, noirify } from './paint.js';
-import { makeDetective, makeSally, makeFlask, makeRobot, makeDame, part } from './models.js';
+import { makeDetective, makeSally, makeFlask, makeRobot, makeDame, part, compactModel } from './models.js';
 import { sfx } from './audio.js';
 
 const OFF = new THREE.Vector3(4000, 0, 4000);
@@ -139,12 +139,41 @@ export function buildOffice() {
   door.position.set(-W / 2 + 0.03, 1.25, 3.6); door.rotation.y = Math.PI / 2; g.add(door);
   part(box, frame, -W / 2 + 0.05, 2.5, 3.6, 0.12, 0.12, 1.6, g);
   // DOTTIE-9 at the reception desk by the door
-  const rdesk = new THREE.Group(); rdesk.position.set(-4.4, 0, 2.4); g.add(rdesk);
+  const rdesk = new THREE.Group(); rdesk.position.set(-4.4, 0, 1.0); g.add(rdesk); // set back so the walk in from the door is clear
   part(box, wood0(), 0, 0.5, 0, 0.8, 1.0, 2.0, rdesk);
   part(box, M(0x1a1a1a, { kind: 'std', rough: 0.3 }), 0, 1.1, 0.3, 0.45, 0.2, 0.5, rdesk); // her typewriter
   bottle(rdesk, 0.1, 1.0, -0.6, 0.55, 0x444444);
-  const dottie = makeRobot(); dottie.root.position.set(-5.4, 0, 2.4); dottie.root.rotation.y = Math.PI / 2; g.add(dottie.root);
-  const dLight = new THREE.PointLight(0xe0e8ff, 5, 6, 1.5); dLight.position.set(-4.9, 2.2, 2.4); g.add(dLight);
+  const dottie = makeRobot(); dottie.root.position.set(-5.4, 0, 1.0); dottie.root.rotation.y = Math.PI / 2; g.add(dottie.root);
+  const dLight = new THREE.PointLight(0xe0e8ff, 5, 6, 1.5); dLight.position.set(-4.9, 2.2, 1.0); g.add(dLight);
+  // ---- furnishing: dark wood wainscot round the room, a worn rug, a coat rack, a client's chair, a water cooler, a radiator
+  const wain = M(0x2e231b, { kind: 'std', rough: 0.45 });
+  part(box, wain, 0, 0.55, -D / 2 + 0.06, W, 1.1, 0.1, g);
+  part(box, wain, 0, 1.12, -D / 2 + 0.1, W, 0.06, 0.16, g);
+  for (const sx of [-1, 1]) { part(box, wain, sx * (W / 2 - 0.06), 0.55, 0, 0.1, 1.1, D, g); part(box, wain, sx * (W / 2 - 0.1), 1.12, 0, 0.16, 0.06, D, g); }
+  const rug = new THREE.Mesh(new THREE.PlaneGeometry(5.2, 3.6), M(0x3a3430, { kind: 'std', rough: 0.9, map: tex(256, 180, (c, w, h) => { c.fillStyle = '#4a423c'; c.fillRect(0, 0, w, h); c.strokeStyle = '#2a2420'; c.lineWidth = 10; c.strokeRect(12, 12, w - 24, h - 24); c.lineWidth = 3; c.strokeRect(28, 28, w - 56, h - 56); c.fillStyle = '#2a2420'; for (let i = 0; i < 6; i++) { c.beginPath(); c.arc(w / 2, h / 2, 10 + i * 12, 0, 7); c.stroke(); } for (let i = 0; i < 2500; i++) { c.fillStyle = `rgba(0,0,0,${Math.random() * 0.15})`; c.fillRect(Math.random() * w, Math.random() * h, 2, 2); } }) }));
+  rug.rotation.x = -Math.PI / 2; rug.position.set(0, 0.012, 0.6); rug.receiveShadow = true; g.add(rug);
+  // coat rack by the door, Mack's spare fedora on top
+  const rack = new THREE.Group(); rack.position.set(-6.2, 0, 5.2); g.add(rack);
+  part(cyl, wain, 0, 1.0, 0, 0.08, 2.0, 0.08, rack);
+  part(cyl, wain, 0, 0.04, 0, 0.6, 0.08, 0.6, rack);
+  for (let k = 0; k < 4; k++) { const hk = part(cyl, wain, Math.cos(k * 1.57) * 0.18, 1.85, Math.sin(k * 1.57) * 0.18, 0.04, 0.4, 0.04, rack); hk.rotation.z = Math.cos(k * 1.57) * 0.8; hk.rotation.x = -Math.sin(k * 1.57) * 0.8; }
+  part(cyl, M(0x2b2926), 0, 2.05, 0, 0.62, 0.04, 0.62, rack); part(cyl, M(0x2b2926), 0, 2.16, 0, 0.36, 0.2, 0.36, rack);
+  part(box, M(0x5b5349), 0.16, 1.4, 0.1, 0.5, 0.9, 0.1, rack).rotation.z = 0.1; // a coat hanging off it
+  // the client's chair, across the desk from Mack
+  const cchair = new THREE.Group(); cchair.position.set(-1.3, 0, 2.1); cchair.rotation.y = Math.PI + 0.3; g.add(cchair);
+  part(box, wood0(), 0, 0.5, 0, 0.7, 0.08, 0.7, cchair);
+  part(box, wood0(), 0, 0.95, -0.32, 0.7, 0.85, 0.07, cchair);
+  for (const [lx, lz] of [[-0.3, -0.3], [0.3, -0.3], [-0.3, 0.3], [0.3, 0.3]]) part(box, wood0(), lx, 0.25, lz, 0.06, 0.5, 0.06, cchair);
+  // water cooler, back corner by the corkboard
+  const cool = new THREE.Group(); cool.position.set(6.2, 0, 4.4); g.add(cool);
+  part(box, M(0xb8b4ac, { kind: 'std', rough: 0.4 }), 0, 0.55, 0, 0.5, 1.1, 0.5, cool);
+  part(cyl, M(0xd0dce4, { kind: 'std', rough: 0.05, transparent: true, opacity: 0.5 }), 0, 1.4, 0, 0.42, 0.6, 0.42, cool);
+  // a radiator under the window, ticking
+  part(box, M(0x4a4846, { kind: 'std', rough: 0.4, metal: 0.6 }), -1.6, 0.45, -D / 2 + 0.3, 2.4, 0.7, 0.18, g);
+  for (let k = 0; k < 14; k++) part(box, M(0x3a3836, { kind: 'std', metal: 0.6 }), -2.7 + k * 0.17, 0.45, -D / 2 + 0.4, 0.06, 0.7, 0.1, g);
+  // a framed photo by the door: Mack and Sally, years ago, both grinning
+  const ph = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.6), M(0xffffff, { map: tex(160, 120, (c, w, h) => { c.fillStyle = '#1a1612'; c.fillRect(0, 0, w, h); c.fillStyle = '#9a948a'; c.fillRect(10, 10, w - 20, h - 20); c.fillStyle = '#4a4440'; c.beginPath(); c.arc(60, 60, 18, 0, 7); c.fill(); c.fillRect(42, 74, 36, 40); c.fillStyle = '#6a2020'; c.beginPath(); c.arc(102, 62, 15, 0, 7); c.fill(); c.fillRect(88, 74, 30, 40); }) }));
+  ph.position.set(-W / 2 + 0.05, 2.0, 5.0); ph.rotation.y = Math.PI / 2; g.add(ph);
 
   // corkboard on the right wall: map + pinned files + red string (the case board)
   const board = new THREE.Group(); board.position.set(W / 2 - 0.06, 2.35, -1.2); board.rotation.y = -Math.PI / 2; g.add(board);
@@ -241,15 +270,10 @@ export function buildOffice() {
   for (let k = 0; k < 16; k++) {
     const a = Math.random() * Math.PI * 2, r = 1.7 + Math.random() * 3.2;
     const x = Math.cos(a) * r, z = -1 + Math.sin(a) * r * 0.8;
-    if (Math.abs(x) > 6.5 || z > 5.5 || z < -5.6) continue;
+    if (Math.abs(x) > 6.5 || z > 5.5 || z < -5.6 || (z > 2.3 && x < 0.5)) continue; // keep the walk in from the door clear
     addFlask(g, x, 0.02 + (Math.random() < 0.6 ? 0.04 : 0), z, 0.45, Math.random() * 6, Math.random() < 0.6 ? Math.PI / 2 : 0);
   }
-  for (let k = 0; k < 3; k++) bottle(g, -3 + k * 0.4, 0, 3 + Math.random(), 0.6);
-  // coat rack with spare fedora
-  const rack = new THREE.Group(); rack.position.set(5.9, 0, 4.7); g.add(rack);
-  part(cyl, frame, 0, 1.0, 0, 0.06, 2.0, 0.06, rack);
-  part(cyl, M(0x2b2926), 0.15, 1.95, 0, 0.6, 0.03, 0.6, rack);
-  part(cyl, M(0x2b2926), 0.15, 2.05, 0, 0.32, 0.18, 0.32, rack);
+  for (let k = 0; k < 3; k++) bottle(g, 3 + k * 0.4, 0, 4.8 + Math.random() * 0.6, 0.6); // empties against the far wall, out of the way
   // ceiling fan
   const fan = new THREE.Group(); fan.position.set(0, H - 0.4, 0.5); g.add(fan);
   part(cyl, M(0x222222), 0, 0.2, 0, 0.05, 0.4, 0.05, fan);
@@ -269,6 +293,7 @@ export function buildOffice() {
   hall.position.copy(OFF).add(new THREE.Vector3(-W / 2 + 0.3, 2.6, 3.6)); hall.target.position.copy(OFF).add(new THREE.Vector3(-2, 0, 2.5)); scene.add(hall, hall.target);
   g.traverse((o) => { if (o.isMesh) { o.receiveShadow = true; if (o.castShadow === undefined) o.castShadow = true; } });
 
+  compactModel({ root: g, keep: [dottie.eyeL, dottie.eyeR] }); // perf: one draw call per material per prop, not per piece
   const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
   const views = {
     menu: { pos: new THREE.Vector3(3.2, 2.5, 5.0), look: new THREE.Vector3(-0.8, 1.55, -1.6) },
@@ -288,9 +313,10 @@ export function buildOffice() {
   let sleep = 0; // 1 = head on the desk
   let dame = null;
   const walkers = [];
-  const walkTo = (model, x, z, speed = 1.6, face) => {
+  // walk a path of waypoints (round the furniture), then face somewhere
+  const walkTo = (model, x, z, speed = 1.6, face, via = []) => {
     for (let i = walkers.length - 1; i >= 0; i--) if (walkers[i].m === model) walkers.splice(i, 1);
-    walkers.push({ m: model, x, z, speed, face });
+    walkers.push({ m: model, path: [...via, [x, z]], x: via.length ? via[0][0] : x, z: via.length ? via[0][1] : z, speed, face });
   };
   const resetActors = () => {
     sally.root.visible = true;
@@ -314,14 +340,14 @@ export function buildOffice() {
     },
     act(a) {
       if (a === 'sleep') { sleep = 1; view = 'desk'; }
-      else if (a === 'dameIn') { sfx.door(); dame.root.visible = true; dame.root.position.set(-7.4, 0, 3.6); walkTo(dame, -3.3, 3.2, 1.4, -Math.PI / 2); view = 'door'; }
-      else if (a === 'dameDesk') { walkTo(dame, 0.5, 2.3, 1.3, Math.PI); view = 'wide'; }
+      else if (a === 'dameIn') { sfx.door(); dame.root.visible = true; dame.root.position.set(-7.4, 0, 3.6); walkTo(dame, -3.3, 3.3, 1.4, -Math.PI / 2, [[-5.6, 3.9]]); view = 'door'; }
+      else if (a === 'dameDesk') { walkTo(dame, 0.4, 2.2, 1.3, Math.PI, [[-0.6, 3.1]]); view = 'wide'; }
       else if (a === 'wake') { sleep = 0; view = 'desk'; }
       else if (a === 'sallyIn') {
         sfx.door(); sfx.crash(0.6);
         sally.root.visible = true; sally.root.position.set(-7.4, 0, 3.6); sally.root.rotation.y = Math.PI / 2;
         sally.armL.rotation.set(-1.4, 0, 0.3); sally.armR.rotation.set(-0.9, 0, 0);
-        walkTo(sally, -2.0, 2.6, 4.5, Math.PI * 0.8);
+        walkTo(sally, -2.4, 2.5, 4.5, Math.PI * 0.8, [[-5.6, 4.1], [-3.4, 3.7]]);
         view = 'wide';
         flash = 0.3;
       } else if (a === 'stamp') { sfx.stamp(); view = 'desk'; }
@@ -393,10 +419,16 @@ export function buildOffice() {
       for (let i = walkers.length - 1; i >= 0; i--) {
         const w = walkers[i], p = w.m.root.position;
         const dx = w.x - p.x, dz = w.z - p.z, d = Math.hypot(dx, dz);
-        if (d < 0.05) { if (w.face !== undefined) w.m.root.rotation.y = w.face; walkers.splice(i, 1); w.m.armL && (w.m.armL.rotation.x = -0.2); continue; }
+        if (d < 0.05) {
+          w.path.shift();
+          if (w.path.length) { [w.x, w.z] = w.path[0]; continue; }
+          if (w.face !== undefined) w.m.root.rotation.y = w.face; walkers.splice(i, 1); w.m.armL && (w.m.armL.rotation.x = -0.2); continue;
+        }
         const st = Math.min(d, w.speed * dt);
         p.x += dx / d * st; p.z += dz / d * st;
-        w.m.root.rotation.y = Math.atan2(dx, dz);
+        // turn smoothly into the direction of travel
+        const want = Math.atan2(dx, dz), ry = w.m.root.rotation.y;
+        w.m.root.rotation.y = ry + Math.atan2(Math.sin(want - ry), Math.cos(want - ry)) * Math.min(1, dt * 10);
         const ph = time * w.speed * 5;
         if (w.m.legL) { w.m.legL.rotation.x = Math.sin(ph) * 0.5; w.m.legR.rotation.x = -Math.sin(ph) * 0.5; }
         w.m.root.position.y = Math.abs(Math.sin(ph)) * 0.05;
@@ -541,6 +573,7 @@ export function buildBar() {
   scene.add(new THREE.HemisphereLight(0x8090a0, 0x1a1410, 0.7));
   g.traverse((o) => { if (o.isMesh) o.receiveShadow = true; });
 
+  compactModel({ root: g, keep: [gusHead] });
   const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
   const pos = new THREE.Vector3(-5.2, 2.4, 3.6).add(OFF), look = new THREE.Vector3(0.2, 1.5, -2.2).add(OFF);
   const home = { pos: pos.clone(), look: look.clone() };

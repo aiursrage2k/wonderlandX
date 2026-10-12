@@ -134,6 +134,25 @@ npx http-server -c-1 .     # then visit http://localhost:8080/noir/
   you click on; street lines queue up and stale ones are dropped. Stage
   directions like *hic* aren't read out. The Voices slider on the title and
   pause screens sets the volume, and 0 turns them off (captions always stay).
+- **Portraits.** Every speaker has a painted noir portrait: Mack under his
+  fedora with a cigarette, Sally's gold bob and red lips, DOTTIE's lamp eyes and
+  martini, Gus's handlebar mustache, Big Pork mid-cruller, the radio set, and
+  each case's dame in her own hat and colors. It pops in beside the cutscene
+  box, and a small one sits at the start of every street caption. The narrator
+  stays a voice in the dark.
+- **Natural voices.** The game picks the most natural-sounding voices your
+  system has first. That means the "Online (Natural)" voices in Edge and
+  Windows, Google's voices in Chrome, and Premium/Enhanced voices on Mac. Each
+  character gets a preferred list, and pitch stays close to normal, because
+  heavy pitch-shifting is what makes them sound robotic.
+- **Faces.** Mack and Sally have proper faces. Mack has a pinched-crown fedora,
+  lapels, a tie, and double-breasted buttons, with his revolver back to a
+  sensible size. Sally has a curled gold bob with swept bangs, red earrings,
+  and a black belt.
+- **The office.** DOTTIE's desk is set back out of the doorway, and walkers
+  follow waypoints round the furniture. The room has a wainscot, a worn rug, a
+  coat rack, a client's chair, a water cooler, a radiator and a framed photo.
+  Static props are merged, so far fewer draw calls.
 - **Juice.**
   - A brief hit-stop on close kills, big blasts and shattering shells.
   - Goons pop in a burst of their own paint with a white flash.

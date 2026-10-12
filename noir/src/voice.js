@@ -4,17 +4,23 @@
 const synth = typeof window !== 'undefined' ? window.speechSynthesis : null;
 
 // who sounds like what: a preferred kind of system voice, then pitch and rate on top of it
+// Pitch stays close to 1: heavy pitch-shifting is what makes synthetic voices sound like robots.
+// The character comes from picking a different natural voice for each, plus pace.
+// `prefer` lists voice names to look for first (Edge/Windows "Online (Natural)" voices, Chrome's Google
+// voices, macOS voices), in order.
 const CAST_VOICE = {
-  MACK: { want: 'male', pitch: 0.62, rate: 0.9 },
-  SALLY: { want: 'female', pitch: 1.35, rate: 1.12 },
-  DOTTIE: { want: 'female', pitch: 1.75, rate: 0.95 },
-  GUS: { want: 'male', pitch: 0.8, rate: 0.95 },
-  PORK: { want: 'male', pitch: 0.5, rate: 0.85 },
-  COP: { want: 'male', pitch: 0.75, rate: 1.05 },
-  RADIO: { want: 'male', pitch: 1.05, rate: 1.18 },
-  NARR: { want: 'male', pitch: 0.7, rate: 0.88 },
-  DAME: { want: 'female', pitch: 1.0, rate: 0.95 },
+  MACK: { want: 'male', pitch: 0.92, rate: 0.92, prefer: ['Christopher', 'Guy', 'Davis', 'Roger', 'Eric', 'Tony', 'Google UK English Male', 'Daniel', 'Alex', 'Fred'] },
+  SALLY: { want: 'female', pitch: 1.06, rate: 1.08, prefer: ['Jenny', 'Ana', 'Aria', 'Michelle', 'Ava', 'Samantha', 'Google US English', 'Zira'] },
+  DOTTIE: { want: 'female', pitch: 1.25, rate: 0.96, prefer: ['Ana', 'Sara', 'Michelle', 'Karen', 'Tessa', 'Google UK English Female', 'Hazel'] },
+  GUS: { want: 'male', pitch: 0.95, rate: 0.95, prefer: ['Ryan', 'Thomas', 'Google UK English Male', 'George', 'Daniel', 'Oliver'] },
+  PORK: { want: 'male', pitch: 0.82, rate: 0.9, prefer: ['Eric', 'Roger', 'Steffan', 'Brian', 'Fred'] },
+  COP: { want: 'male', pitch: 0.95, rate: 1.05, prefer: ['Steffan', 'Brandon', 'Jason', 'Andrew'] },
+  RADIO: { want: 'male', pitch: 1.0, rate: 1.12, prefer: ['Andrew', 'Brian', 'Guy', 'Google US English', 'Alex'] },
+  NARR: { want: 'male', pitch: 0.9, rate: 0.9, prefer: ['Davis', 'Christopher', 'Guy', 'Roger', 'Daniel'] },
+  DAME: { want: 'female', pitch: 1.0, rate: 0.94, prefer: ['Sonia', 'Libby', 'Emma', 'Aria', 'Victoria', 'Moira', 'Google UK English Female'] },
 };
+// how natural a system voice is likely to sound
+const quality = (v) => (/natural|neural|online/i.test(v.name) ? 60 : 0) + (/premium|enhanced|siri/i.test(v.name) ? 45 : 0) + (/^google/i.test(v.name) ? 30 : 0) + (v.localService === false ? 10 : 0) + (/en-US|en-GB/i.test(v.lang) ? 5 : 0);
 
 let voices = [];
 let enabled = true, volume = 0.9;
@@ -33,11 +39,16 @@ const MALE = /male|man|david|mark|george|daniel|alex|fred|ryan|guy|james|tom|art
 function voiceFor(who) {
   if (picked[who] !== undefined) return picked[who];
   const c = CAST_VOICE[who] || CAST_VOICE.NARR;
-  const pool = voices.filter((v) => (c.want === 'female' ? FEMALE.test(v.name) && !/\bmale\b/i.test(v.name) : MALE.test(v.name) && !FEMALE.test(v.name)));
-  // prefer American / British English, and spread different characters across different voices
-  const list = (pool.length ? pool : voices).slice().sort((a, b) => (/US|GB/.test(b.lang) ? 1 : 0) - (/US|GB/.test(a.lang) ? 1 : 0));
+  const pref = (v) => (c.prefer || []).some((n) => v.name.toLowerCase().includes(n.toLowerCase()));
+  const pool = voices.filter((v) => pref(v) || (c.want === 'female' ? FEMALE.test(v.name) && !/\bmale\b/i.test(v.name) : MALE.test(v.name) && !FEMALE.test(v.name)));
   const used = new Set(Object.values(picked).filter(Boolean).map((v) => v.name));
-  picked[who] = list.find((v) => !used.has(v.name)) || list[0] || null;
+  // score: the character's preferred names first, then the most natural-sounding, avoiding voices already cast
+  const score = (v) => {
+    const pi = (c.prefer || []).findIndex((n) => v.name.toLowerCase().includes(n.toLowerCase()));
+    return (pi >= 0 ? 200 - pi * 8 : 0) + quality(v) - (used.has(v.name) ? 150 : 0);
+  };
+  const list = (pool.length ? pool : voices).slice().sort((a, b) => score(b) - score(a));
+  picked[who] = list[0] || null;
   return picked[who];
 }
 

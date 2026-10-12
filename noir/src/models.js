@@ -12,6 +12,19 @@ const G = {
   wheel: new THREE.CylinderGeometry(0.5, 0.5, 0.4, 12),
 };
 
+// a simple face on a head pivot (front is +z): eyes with a glint, brows, nose, mouth
+export function addFace(head, { y = 0.04, z = 0.17, spread = 0.085, brow = 0x1a1a1a, browTilt = 0.18, lip = 0x5a4a44, lipW = 0.11, lash = false, nose = 0xb8ab9e } = {}) {
+  const white = nmat(0xece6dc, { paint: false }), dark = nmat(0x0e0e0e, { paint: false });
+  for (const s of [-1, 1]) {
+    part(G.sph, white, s * spread, y, z, 0.07, 0.05, 0.03, head);
+    part(G.sph, dark, s * spread, y - 0.004, z + 0.014, 0.036, 0.04, 0.02, head);
+    const b = part(G.box, nmat(brow, { paint: false }), s * spread, y + 0.06, z - 0.005, 0.1, 0.022, 0.03, head); b.rotation.z = -s * browTilt;
+    if (lash) { const l = part(G.box, dark, s * (spread + 0.04), y + 0.02, z - 0.01, 0.05, 0.012, 0.02, head); l.rotation.z = -s * 0.5; }
+  }
+  part(G.box, nmat(nose, { paint: false }), 0, y - 0.07, z + 0.03, 0.045, 0.09, 0.05, head);
+  part(G.box, nmat(lip, { paint: false, keep: lip === 0xd0102a ? 1 : 0 }), 0, y - 0.16, z - 0.005, lipW, 0.028, 0.03, head);
+}
+
 export function part(geo, mat, x = 0, y = 0, z = 0, sx = 1, sy = 1, sz = 1, parent) {
   const m = new THREE.Mesh(geo, mat);
   m.position.set(x, y, z);
@@ -55,14 +68,23 @@ export function makeDetective() {
   part(G.cone, coat, 0, 1.15, 0, 1.15, 0.8, 0.95, root);
   part(G.cyl, coat, 0, 1.62, 0, 0.78, 0.62, 0.62, root);
   part(G.box, coatDark, 0, 1.38, 0, 0.82, 0.08, 0.66, root); // belt
-  part(G.box, coatDark, 0, 1.86, 0.18, 0.5, 0.18, 0.2, root); // lapels / collar up
+  part(G.box, nmat(0xd8d2c6), 0, 1.72, 0.29, 0.2, 0.32, 0.04, root); // shirt front
+  part(G.box, nmat(0x1c1c1e), 0, 1.68, 0.315, 0.07, 0.34, 0.03, root); // tie
+  for (const s of [-1, 1]) { const lp = part(G.box, coatDark, s * 0.15, 1.72, 0.3, 0.16, 0.42, 0.05, root); lp.rotation.z = s * 0.35; } // lapels in a V
+  for (const y of [1.5, 1.28]) for (const s of [-1, 1]) part(G.sph, nmat(0x1a1a1a), s * 0.17, y, 0.33, 0.05, 0.05, 0.03, root); // double-breasted buttons
+  part(G.box, coatDark, 0, 1.86, 0.18, 0.5, 0.18, 0.2, root); // collar up
   part(G.box, coatDark, 0, 1.95, -0.05, 0.62, 0.25, 0.42, root);
   const head = pivot(root, 0, 2.12, 0);
   part(G.sph, skin, 0, 0, 0, 0.36, 0.42, 0.38, head);
-  part(G.box, nmat(0x8f857a), 0, -0.08, 0.17, 0.2, 0.1, 0.05, head); // stubble jaw
-  part(G.cyl, hat, 0, 0.14, 0, 0.78, 0.04, 0.78, head);
-  part(G.cyl, hat, 0, 0.27, 0, 0.44, 0.24, 0.44, head);
-  part(G.cyl, nmat(0x111111), 0, 0.19, 0, 0.45, 0.06, 0.45, head);
+  part(G.box, nmat(0x8f857a), 0, -0.1, 0.13, 0.26, 0.14, 0.12, head); // square stubbled jaw
+  part(G.sph, skin, -0.185, 0.0, 0, 0.06, 0.1, 0.06, head); part(G.sph, skin, 0.185, 0.0, 0, 0.06, 0.1, 0.06, head); // ears
+  addFace(head, { y: 0.03, z: 0.165, spread: 0.08, brow: 0x141414, browTilt: -0.12, lip: 0x6a5a52, lipW: 0.1 });
+  // the fedora: snap brim tipped down at the front, a pinched crown, a black band
+  const brim = part(G.cyl, hat, 0, 0.15, 0.02, 0.8, 0.035, 0.8, head); brim.rotation.x = 0.12;
+  part(G.cyl, hat, 0, 0.28, 0, 0.44, 0.24, 0.42, head);
+  part(G.box, nmat(0x1a1817), 0, 0.4, 0, 0.06, 0.05, 0.36, head); // the crease down the crown
+  for (const s of [-1, 1]) part(G.box, nmat(0x1e1c1a), s * 0.1, 0.33, 0.19, 0.06, 0.12, 0.04, head).rotation.z = s * 0.3; // the front pinch
+  part(G.cyl, nmat(0x111111), 0, 0.2, 0, 0.45, 0.06, 0.43, head);
   part(G.box, nmat(0xffffff, { kind: 'basic' }), 0.05, -0.1, 0.2, 0.12, 0.012, 0.012, head); // cigarette
   const armL = pivot(root, -0.42, 1.85, 0), armR = pivot(root, 0.42, 1.85, 0);
   for (const a of [armL, armR]) {
@@ -83,7 +105,7 @@ export function makeDetective() {
   const grip = part(G.box, nmat(0x151010, { kind: 'std', rough: 0.5 }), 0, -0.22, -0.3, 0.12, 0.42, 0.16, gun);
   grip.rotation.x = 0.35;
   part(G.box, red, 0, 0.17, 0.82, 0.03, 0.05, 0.04, gun); // front sight
-  gun.scale.setScalar(1.35);
+  gun.scale.setScalar(0.95); // big for a revolver, but not a cannon
   const muzzle = pivot(gun, 0, 0.05, 0.9);
   // the flask on his hip, always
   const flask = makeFlask(0.42);
@@ -111,12 +133,20 @@ export function makeSally() {
   part(G.cone, red, 0, 1.0, 0, 1.05, 0.75, 0.9, root);
   part(G.cyl, red, 0, 1.5, 0, 0.56, 0.58, 0.44, root);
   part(G.sph, red, 0, 1.75, 0.02, 0.6, 0.28, 0.46, root);
+  part(G.cyl, nmat(0x141414), 0, 1.25, 0, 0.6, 0.07, 0.48, root); // a black patent belt
   const head = pivot(root, 0, 2.02, 0);
   part(G.cyl, skin, 0, -0.14, 0, 0.12, 0.16, 0.12, head);
   part(G.sph, skin, 0, 0.04, 0, 0.32, 0.38, 0.33, head);
-  part(G.sph, hair, 0, 0.1, -0.04, 0.4, 0.38, 0.4, head); // bob
-  part(G.box, hair, 0, -0.04, -0.06, 0.42, 0.22, 0.32, head);
-  part(G.box, red, 0, -0.06, 0.165, 0.08, 0.03, 0.02, head); // lips
+  // a golden finger-wave bob: a full crown, side curls that flip under at the jaw, and swept bangs
+  part(G.sph, hair, 0, 0.1, -0.05, 0.42, 0.4, 0.42, head);
+  for (const s of [-1, 1]) {
+    part(G.sph, hair, s * 0.16, -0.04, -0.02, 0.16, 0.24, 0.26, head);
+    part(G.sph, hair, s * 0.17, -0.15, 0.03, 0.13, 0.1, 0.16, head); // the curl at the jaw
+  }
+  const bang = part(G.sph, hair, 0.05, 0.17, 0.12, 0.3, 0.12, 0.16, head); bang.rotation.z = -0.35;
+  addFace(head, { y: 0.03, z: 0.155, spread: 0.07, brow: 0x8a6a2a, browTilt: 0.25, lip: 0xd0102a, lipW: 0.085, lash: true, nose: 0xcdc3b8 });
+  for (const s of [-1, 1]) part(G.sph, nmat(0xd0102a, { keep: 1, paint: false }), s * 0.165, -0.07, 0.02, 0.04, 0.04, 0.04, head); // red earrings
+
   part(G.sph, red, 0.16, 0.2, 0.05, 0.12, 0.08, 0.12, head); // flower in hair
   const armL = pivot(root, -0.32, 1.72, 0), armR = pivot(root, 0.32, 1.72, 0);
   for (const a of [armL, armR]) {
@@ -878,6 +908,7 @@ export function addSkates(model) {
 export function compactModel(model) {
   const keep = new Set();
   for (const v of Object.values(model)) if (v && v.isObject3D) keep.add(v);
+  if (model.keep) for (const k of model.keep) if (k) keep.add(k); // meshes something animates directly
   const nodes = [];
   model.root.traverse((o) => nodes.push(o));
   for (const node of nodes) {

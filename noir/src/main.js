@@ -11,6 +11,7 @@ import { buildOffice, buildBar } from './interiors.js';
 import { createGame } from './game.js';
 import { createHud } from './hud.js';
 import { voice } from './voice.js';
+import { portrait } from './portraits.js';
 import { CASES, CAST, GUS_HINTS, DOTTIE_IDLE, PATROL, BAR_CLOSERS, TOASTS, DEATH_BAR } from './story.js';
 import { drawCityMap, L, DISTRICTS, C } from './city.js';
 import { fx } from './fx.js';
@@ -179,6 +180,10 @@ function nextLine() {
   if (act && dlg.onAct) dlg.onAct(act);
   const sp = speakerOf(who, dlg.caseDef);
   $('dlg-name').textContent = sp.name;
+  // the speaker's face, painted, beside the box (the narrator stays a voice in the dark)
+  const pc = portrait(who, dlg.caseDef && dlg.caseDef.dame), pcv = $('dlg-portrait');
+  $('dialog').classList.toggle('has-portrait', !!pc);
+  if (pc) { const g2 = pcv.getContext('2d'); g2.clearRect(0, 0, 160, 160); g2.drawImage(pc, 0, 0); pcv.classList.remove('pop'); void pcv.offsetWidth; pcv.classList.add('pop'); }
   $('dlg-name').className = `who-${sp.cls}`;
   $('dialog').classList.toggle('narr', who === 'NARR');
   dlg.full = text; dlg.typed = 0; dlg.idle = 0; dlg.lineT = 0;

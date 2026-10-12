@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { CAST } from './story.js';
 import { voice } from './voice.js';
+import { portraitURL } from './portraits.js';
 import { drawCityMap, L, C } from './city.js';
 import { paintCanvas, PAINT } from './paint.js';
 
@@ -43,7 +44,8 @@ export function createHud() {
     const c = CAST[who] || { name: who, cls: 'dame' };
     const d = document.createElement('div');
     d.className = 'cap';
-    d.innerHTML = `${c.name ? `<b class="who-${c.cls}">${c.name}</b>` : ''}<span class="who-${c.cls}">${text}</span>`;
+    const pu = portraitURL(who);
+    d.innerHTML = `${pu ? `<img class="cap-face who-${c.cls}" src="${pu}" alt="">` : ''}${c.name ? `<b class="who-${c.cls}">${c.name}</b>` : ''}<span class="who-${c.cls}">${text}</span>`;
     const wrap = document.createElement('div');
     wrap.appendChild(d);
     el.captions.appendChild(wrap);
