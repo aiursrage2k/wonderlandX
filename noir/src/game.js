@@ -3596,6 +3596,8 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     const blink = Math.floor(S.time * 6) % 2;
     for (const c of copCars) { c.lightbar.userData.a.visible = !!blink; c.lightbar.userData.b.visible = !blink; }
     cops.forEach((c, i) => { c.arm.rotation.x = -1.6 - Math.max(0, Math.sin(S.time * 1.5 + i)) * 0.9; c.root.rotation.z = Math.sin(S.time * 0.8 + i) * 0.03; });
+    // the amber lamps on the city-line barricades blink slow, all together
+    if (knock.barricadeLamps) knock.barricadeLamps.color.setRGB(1, 0.62, 0.12).multiplyScalar(Math.sin(S.time * 3.2) > 0 ? 3 : 0.25);
     for (const s of signs) {
       if (s.userData.spin) s.rotation.y += rdt * s.userData.spin;
       if (s.userData.prism && s.material.color) s.material.color.setHSL((S.time * 0.1) % 1, 0.5, 0.7);

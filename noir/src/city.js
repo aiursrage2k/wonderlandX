@@ -599,6 +599,54 @@ export function buildCity(scene) {
   for (const m of [poles, arms, heads, streaks, cones]) scene.add(m);
   knock.lamps = { poles, arms, heads, streaks, cones, orig: lamps.map((l, i) => { const a = new THREE.Matrix4(), b = new THREE.Matrix4(), c = new THREE.Matrix4(), d = new THREE.Matrix4(), e = new THREE.Matrix4(); poles.getMatrixAt(i, a); arms.getMatrixAt(i, b); heads.getMatrixAt(i, c); streaks.getMatrixAt(i, d); cones.getMatrixAt(i, e); return [a, b, c, d, e]; }) };
 
+  // ---- the city line: police sawhorses all the way round, amber lamps blinking on top, POLICE LINE signs,
+  // and a cruiser parked across every fourth road out of town. Nobody leaves Rain City tonight.
+  {
+    const E = C.edge - 1.2, step = 3.4;
+    const spots = [];
+    for (let t = -E; t <= E; t += step) { spots.push([t, -E, 0], [t, E, 0], [-E, t, Math.PI / 2], [E, t, Math.PI / 2]); }
+    const n = spots.length;
+    const stripes = canvasTex(256, 32, (g, w, h) => { for (let x = -h; x < w + h; x += 32) { g.fillStyle = '#e8e2d4'; g.beginPath(); g.moveTo(x, 0); g.lineTo(x + 16, 0); g.lineTo(x + 16 - h, h); g.lineTo(x - h, h); g.fill(); g.fillStyle = '#c8102e'; g.beginPath(); g.moveTo(x + 16, 0); g.lineTo(x + 32, 0); g.lineTo(x + 32 - h, h); g.lineTo(x + 16 - h, h); g.fill(); } g.strokeStyle = '#111'; g.lineWidth = 2; g.strokeRect(1, 1, w - 2, h - 2); }, false);
+    const boardM = noirify(new THREE.MeshLambertMaterial({ map: stripes }), { keep: 0.85, paint: false });
+    const legM = nmat(0x6a6a6a);
+    const boards = new THREE.InstancedMesh(new THREE.BoxGeometry(3.1, 0.34, 0.08), boardM, n * 2);
+    const legs = new THREE.InstancedMesh((() => { const g = new THREE.BoxGeometry(0.1, 1.25, 0.1); return g; })(), legM, n * 4);
+    const lampMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1, 0.62, 0.12).multiplyScalar(3) });
+    const lampsI = new THREE.InstancedMesh(new THREE.SphereGeometry(0.13, 8, 6), lampMat, n);
+    const q = new THREE.Quaternion(), e = new THREE.Euler(), one = new THREE.Vector3(1, 1, 1);
+    spots.forEach(([x, z, ry], i) => {
+      const j = (Math.sin(i * 12.9898) * 43758.5453) % 1; // a little wonk, they were put out in a hurry
+      const yaw = ry + j * 0.08;
+      q.setFromEuler(e.set(0, yaw, 0));
+      boards.setMatrixAt(i * 2, new THREE.Matrix4().compose(new THREE.Vector3(x, 1.05, z), q, one));
+      boards.setMatrixAt(i * 2 + 1, new THREE.Matrix4().compose(new THREE.Vector3(x, 0.55, z), q, one));
+      const ax = Math.cos(yaw), az = -Math.sin(yaw); // along the board
+      let k = 0;
+      for (const s of [-1.3, 1.3]) for (const lean of [-0.25, 0.25]) {
+        const lq = new THREE.Quaternion().setFromEuler(new THREE.Euler(lean, yaw, 0, 'YXZ'));
+        legs.setMatrixAt(i * 4 + k++, new THREE.Matrix4().compose(new THREE.Vector3(x + ax * s, 0.62, z + az * s), lq, one));
+      }
+      lampsI.setMatrixAt(i, new THREE.Matrix4().makeTranslation(x + ax * 1.3, 1.32, z + az * 1.3));
+    });
+    for (const m of [boards, legs, lampsI]) { m.castShadow = m !== lampsI; scene.add(m); }
+    knock.barricadeLamps = lampMat;
+    // POLICE LINE signs every so often, facing in
+    const lineTex = textTex('POLICE LINE · DO NOT CROSS', { w: 512, h: 64, font: 'bold 40px Impact', fg: '#111', bg: '#e8d23a' });
+    const signM = noirify(new THREE.MeshBasicMaterial({ map: lineTex }), { keep: 0.9, paint: false });
+    for (let t = -E + 30; t < E; t += 110) for (const [x, z, ry] of [[t, -E + 0.3, 0], [t, E - 0.3, Math.PI], [-E + 0.3, t, Math.PI / 2], [E - 0.3, t, -Math.PI / 2]]) {
+      const sg = new THREE.Mesh(new THREE.PlaneGeometry(6, 0.75), signM); sg.position.set(x, 1.6, z); sg.rotation.y = ry; scene.add(sg);
+    }
+    // cruisers parked across the roads out of town
+    for (let i = 0; i <= C.N; i += 4) for (const [x, z, ry] of [[roadC(i), -E + 4, Math.PI / 2], [roadC(i), E - 4, Math.PI / 2], [-E + 4, roadC(i), 0], [E - 4, roadC(i), 0]]) {
+      const car = makeCar('cop');
+      car.root.position.set(x, 0.3, z); car.root.rotation.y = ry + 0.25;
+      const bar = car.lightbar; car.body.remove(bar); bake(car.root);
+      bar.position.set(x, 0.3 + 1.75, z); bar.rotation.y = ry + 0.25; scene.add(bar);
+      copCars.push(car);
+      addBox(x - 2.8, z - 2.8, x + 2.8, z + 2.8, 2, 'copcar');
+    }
+  }
+
   // ---- street furniture: hydrants, trash cans, newspaper boxes, mailboxes, parking meters
   const steel = nmat(0x4a4c50, { kind: 'std', rough: 0.4, metal: 0.6 });
   const darkP = nmat(0x2a2a2c, { kind: 'std', rough: 0.5, metal: 0.3 });

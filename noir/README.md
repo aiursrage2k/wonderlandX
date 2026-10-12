@@ -134,6 +134,13 @@ npx http-server -c-1 .     # then visit http://localhost:8080/noir/
   you click on; street lines queue up and stale ones are dropped. Stage
   directions like *hic* aren't read out. The Voices slider on the title and
   pause screens sets the volume, and 0 turns them off (captions always stay).
+- **The city line.** Police sawhorses ring the whole city: red-and-white
+  striped boards with amber lamps blinking on top, POLICE LINE · DO NOT CROSS
+  signs every 110 m, and a cruiser parked across every fourth road out of town.
+  Nobody leaves Rain City tonight.
+- **Voices recast.** Mack (and the narration, which is Mack talking to
+  himself) is a natural American man. Chet on WRNC is a British announcer.
+  DOTTIE is an older woman, lower and slower.
 - **Portraits.** Every speaker has a painted noir portrait: Mack under his
   fedora with a cigarette, Sally's gold bob and red lips, DOTTIE's lamp eyes and
   martini, Gus's handlebar mustache, Big Pork mid-cruller, the radio set, and
