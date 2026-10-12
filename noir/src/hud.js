@@ -2,6 +2,7 @@
 // captions (who said what), boss bar, floaters and off-screen pointers.
 import * as THREE from 'three';
 import { CAST } from './story.js';
+import { voice } from './voice.js';
 import { drawCityMap, L, C } from './city.js';
 import { paintCanvas, PAINT } from './paint.js';
 
@@ -31,6 +32,7 @@ export function createHud() {
   let radioT = 0, tutT = 0;
   const bonks = [];
   function say(who, text, dur = 3.5) {
+    voice.say(who, text);
     if (who === 'RADIO') {
       // the radio gets its own little set on the left, not a caption
       document.getElementById('radio-text').textContent = text;
@@ -363,7 +365,7 @@ export function createHud() {
 
   return {
     show, say, stamp, floater, update,
-    hush() { caps.splice(0).forEach((c) => c.wrap.remove()); },
+    hush() { caps.splice(0).forEach((c) => c.wrap.remove()); voice.stop(); },
     // the crosshair flinches on a hit and crosses out on a kill
     hitmark(kill) {
       const c = document.getElementById('cross');
@@ -409,6 +411,7 @@ export function createHud() {
       el.bossFill.style.transform = `scaleX(${frac})`;
     },
     clear() {
+      voice.stop();
       caps.splice(0).forEach((c) => c.wrap.remove());
       floaters.splice(0).forEach((f) => f.d.remove());
       barEls.forEach((d) => (d.style.display = 'none'));

@@ -7,7 +7,8 @@ import { rainbowCoat as rainbowMatLocal } from './models.js';
 import { makeDetective, makeSally, makeGangster, makeCar, makePortal, makePrismKing, makeMayor, makeFlask, makeRainbowGoon, makeRoomba, makeTruck, makeCopter, makeMech, makeCultist, makeImp, makeBeast, makeRobot, makeCivilian, setInfected, makeCop, drainModel, GANG_COLORS, gangMat, makeDemonTank, addSkates, compactModel, part } from './models.js';
 import { makeRain, Particles, Tracers, Flashes, hexToRgb, fx } from './fx.js';
 import { sfx, setEngine } from './audio.js';
-import { BOSSES, LINES, DONUT_LINES, COP_RETORTS, MONOLOGUES, EVIDENCE, RADIO, RADIO_FILLER } from './story.js';
+import { BOSSES, LINES, DONUT_LINES, COP_RETORTS, MONOLOGUES, EVIDENCE, RADIO, RADIO_FILLER, CAR_TALK } from './story.js';
+import { voice } from './voice.js';
 import { clamp, rand, pick, weighted, wrapAngle, Deck } from './util.js';
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -971,7 +972,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       stages: null, routeT: 0, route: null, timers: [],
       evidence: [], evidenceLeft: (EVIDENCE[caseDef.id] || []).slice(),
       civs: [], civT: 0, wanted: false, copT: 0, sirenT: 0,
-      radio: (RADIO[caseDef.id] || []).slice(), radioT: 32,
+      radio: (RADIO[caseDef.id] || []).slice(), radioT: 32, talk: (CAR_TALK[caseDef.id] || []).slice(), talkT: 20,
       score: 0, mult: 1, comboT: 0,
     };
     resetKnocks();
@@ -2082,6 +2083,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     updateCombo(dt);
     updateCivilians(dt);
     // the radio crackles between the action: news, fake news, and the odd hint
+    updateCarTalk(rdt);
     S.radioT -= rdt;
     if (S.radioT <= 0 && !S.over) {
       S.radioT = rand(55, 80);
@@ -2143,6 +2145,22 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     });
     recFrame(rdt);
     pressed.clear();
+  }
+
+  // ride-along talk: cruising with Sally, nothing shooting at them, nobody else talking: they talk the case over
+  function updateCarTalk(dt) {
+    if (S.over || S.replay || !S.talk.length) return;
+    S.talkT -= dt;
+    if (S.talkT > 0) return;
+    const quiet = P.inCar && SA.inCar && !SA.driving && Math.abs(CAR.speed) > 6 && S.quipT <= -2 && !voice.busy
+      && !S.enemies.some((e) => !e.dead && !e.cop && Math.abs(e.pos.x - CAR.pos.x) + Math.abs(e.pos.z - CAR.pos.z) < 70)
+      && !(S.stage && S.stage.goal.type === 'boss');
+    if (!quiet) { S.talkT = 1.5; return; }
+    const ex = S.talk.shift();
+    let t = 0;
+    for (const [w, line] of ex) { later(() => S && !S.over && say(w, line, 3.4 + line.length * 0.035), t * 1000); t += 1.2 + line.length * 0.06; }
+    S.quipT = t + 1; // keep the quips out of the conversation
+    S.talkT = t + rand(25, 40);
   }
 
   function objectiveMarks() {

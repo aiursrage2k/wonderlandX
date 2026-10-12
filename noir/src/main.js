@@ -10,6 +10,7 @@ import { initAudio, audio, playlist, skipTrack, setIndoors, sfx, setEngine } fro
 import { buildOffice, buildBar } from './interiors.js';
 import { createGame } from './game.js';
 import { createHud } from './hud.js';
+import { voice } from './voice.js';
 import { CASES, CAST, GUS_HINTS, DOTTIE_IDLE, PATROL, BAR_CLOSERS, TOASTS, DEATH_BAR } from './story.js';
 import { drawCityMap, L, DISTRICTS, C } from './city.js';
 import { fx } from './fx.js';
@@ -125,7 +126,7 @@ function setMode(m) {
   if (m === 'title') { $('title').classList.remove('hidden'); office.setView('menu'); }
   if (m === 'board') { $('board').classList.remove('hidden'); office.setView('board'); renderBoard(); }
   if (m === 'bar' || m === 'barMid') $('barui').classList.remove('hidden');
-  if (m === 'pause') { $('pause').classList.remove('hidden'); if (game) $('sens').value = game.sensitivity; }
+  if (m === 'pause') { voice.stop(); $('pause').classList.remove('hidden'); if (game) $('sens').value = game.sensitivity; }
   if (m === 'result') $('result').classList.remove('hidden');
   if (m === 'board' || m === 'title') lastIndoor = 'office';
   if (m === 'barOutro' || m === 'bar') lastIndoor = 'bar';
@@ -168,11 +169,12 @@ function nextLine() {
   $('dlg-name').className = `who-${sp.cls}`;
   $('dialog').classList.toggle('narr', who === 'NARR');
   dlg.full = text; dlg.typed = 0;
+  voice.say(who, text, { priority: true }); // cutscenes: the new line cuts off the old one
   $('dlg-text').textContent = '';
 }
 function endDialog() {
   const d = dlg.done;
-  dlg.lines = null; dlg.full = ''; dlg.typed = 0;
+  dlg.lines = null; voice.stop(); dlg.full = ''; dlg.typed = 0;
   $('dialog').classList.add('hidden');
   if (d) d();
 }
@@ -500,6 +502,12 @@ $('vol-music').value = audio.getVolume('music');
 $('vol-sfx').value = audio.getVolume('sfx');
 $('vol-music').oninput = (e) => audio.setVolume('music', +e.target.value);
 $('vol-sfx').oninput = (e) => audio.setVolume('sfx', +e.target.value);
+// spoken dialogue: one volume, 0 switches the voices off (captions always stay)
+for (const id of ['vol-voice', 'vol-voice2']) {
+  $(id).value = voice.enabled ? voice.volume : 0;
+  $(id).oninput = (e) => { const v = parseFloat(e.target.value); voice.setVolume(v); voice.setEnabled(v > 0); for (const o of ['vol-voice', 'vol-voice2']) $(o).value = v; if (v > 0) voice.say('SALLY', 'Testing! Testing!', { priority: true }); };
+}
+if (!voice.supported) for (const id of ['vol-voice', 'vol-voice2']) $(id).closest('label').style.display = 'none';
 // mouse-look sensitivity, set from the pause menu
 $('sens').oninput = (e) => game && game.setSensitivity(parseFloat(e.target.value));
 $('btn-resume').onclick = () => { setMode('play'); try { const r = renderer.domElement.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (e) { /* cursor aiming */ } };

@@ -685,3 +685,80 @@ export const DEATH_BAR = [
   [['GUS', 'Drinking alone, Sally?'], ['SALLY', 'Mack\'s on a little vacation. Face down. Third puddle on the left.'], ['SALLY', 'He\'ll be back. He always comes back. Pour me one for when he does.'], ['NARR', 'An hour later the door swung open, dripping. Mack Malone, still breathing, still on the case.']],
   [['SALLY', 'Gus, if a guy gets shot full of paint, is he still a guy, or is he art?'], ['GUS', 'Ask him when he wakes up.'], ['SALLY', 'Ugh. Fine. One more, then I go scrape him up. Again.'], ['NARR', 'She went. She always went. The Packard was idling at the curb, and the case was waiting in the rain.']],
 ];
+
+// Ride-along talk: when Mack and Sally are cruising with nothing to shoot, they chew over the case.
+// Each case has a handful of short exchanges, played in order, one per quiet stretch of road.
+export const CAR_TALK = {
+  0: [
+    [['SALLY', 'No case, no client, no reason. Just us and the rain. I love a night patrol.'], ['MACK', 'Somebody has to watch the city while it sleeps.'], ['SALLY', 'The city does not sleep, Mack. The city drinks.']],
+    [['MACK', 'You ever think about a quiet life, Sally? A porch. A dog.'], ['SALLY', 'Only if the dog has a rocket launcher.']],
+  ],
+  1: [
+    [['MACK', 'Edna Pruitt\'s husband called the sea blue. Twenty years on the docks and the man never once used a color word.'], ['SALLY', 'Maybe he finally looked at it.'], ['MACK', 'Nobody in Rain City looks at the sea. That\'s the whole point of the sea.']],
+    [['SALLY', 'Big Pork owes me a favor, you know.'], ['MACK', 'What for?'], ['SALLY', 'I didn\'t tell his wife about the eclairs. Any of the eclairs.']],
+    [['MACK', 'Tears in the sky don\'t open themselves. Somebody\'s got a crowbar and a reason.'], ['SALLY', 'And a really big ladder.']],
+    [['SALLY', 'What color do you think it is up there, on the other side?'], ['MACK', 'All of them, kid. That\'s what scares me.']],
+  ],
+  2: [
+    [['SALLY', 'Lola LaRue sang a blue note and it came out BLUE. Like, you could pet it.'], ['MACK', 'A note is supposed to be heard, not seen. Somebody\'s mixing color into the gin.']],
+    [['MACK', 'Vic Vermilion bought the Kaleidoscope Club six weeks ago. Paid cash. Orange cash.'], ['SALLY', 'Is orange cash still good?'], ['MACK', 'At the Kaleidoscope it is.']],
+    [['SALLY', 'Those eyes with legs, Mack. Who builds an eye with legs?'], ['MACK', 'Somebody who wants to see the whole city. Up close.']],
+    [['SALLY', 'Do you think Lola can sing grey again?'], ['MACK', 'She always sang grey, Sally. That was the beauty of it.']],
+  ],
+  3: [
+    [['SALLY', 'A rainbow in a bank vault. Mack, that\'s the most beautiful crime I ever heard of.'], ['MACK', 'It called Penelope\'s father a beige little man.'], ['SALLY', 'Okay, and kind of a mean one.']],
+    [['MACK', 'Prism needs money. Money needs a bank. Somebody\'s financing a revolution.'], ['SALLY', 'In a dress shop?'], ['MACK', 'In every shop.']],
+    [['SALLY', 'Who do you think signs off on tanks, Mack? Like, who\'s the guy with the tank budget?'], ['MACK', 'A banker. Only a banker spends that much and still feels cheap.']],
+  ],
+  4: [
+    [['MACK', 'The Professor says the holes are humming show tunes.'], ['SALLY', 'Which show?'], ['MACK', 'She didn\'t say. She seemed upset that she knew.']],
+    [['SALLY', 'If the sky has holes, does that mean the rain is leaking in from somewhere else?'], ['MACK', 'Don\'t think about it too hard. That\'s how they get you.']],
+    [['MACK', 'Old Town hasn\'t changed in eighty years. Now it\'s got holes in the sky and a Syndicate in the basement.'], ['SALLY', 'Progress!']],
+  ],
+  5: [
+    [['SALLY', 'Slot machines paying out in jellybeans, Mack. I want to be upset, but I want the jellybeans more.'], ['MACK', 'The house always wins. Even when the house is candy.']],
+    [['MACK', 'The Countess says the Prism Palace went up overnight. No permits. No builders. Just a palace.'], ['SALLY', 'Maybe it was always there and we never looked up.']],
+    [['SALLY', 'Chartreuse Charlie runs the lowriders. Bounces them right down the Strip.'], ['MACK', 'A man who drives with his hydraulics up is a man with something to hide.'], ['SALLY', 'Like what?'], ['MACK', 'His feelings, mostly.']],
+  ],
+  6: [
+    [['SALLY', 'The Commissioner turned PINK, Mack. His wife thinks he\'s becoming a cruller.'], ['MACK', 'Nine days in a donut shop. A man becomes what he eats.'], ['SALLY', 'Then you\'re about ninety percent rye.']],
+    [['MACK', 'Every cop in Rain City is parked at the Holy Glaze. Nobody\'s minding the store.'], ['SALLY', 'They ARE the store. It\'s a donut store.']],
+    [['SALLY', 'Do you think Big Pork knew?'], ['MACK', 'Pork knows everything that happens within forty feet of a fryer.']],
+  ],
+  7: [
+    [['MACK', 'Madame Magenta. Syndicate royalty, walking into my office like she paid the rent.'], ['SALLY', 'She smelled like a sunset. I hated it. I loved it. Mostly hated.']],
+    [['SALLY', 'A sunrise in a boxcar. How do you even load a sunrise?'], ['MACK', 'Carefully. Facing east.']],
+    [['MACK', 'Magenta\'s double-crossing somebody. The only question is whether it\'s them or us.'], ['SALLY', 'Why not both?'], ['MACK', 'That\'s what I\'m afraid of.']],
+  ],
+  8: [
+    [['SALLY', 'Mack, the cops are shooting at us. On purpose. The Mayor\'s cops.'], ['MACK', 'Hizzoner signs their paychecks. Tonight he signed ours too. In red ink.']],
+    [['MACK', 'Dolores Fitch kept the Mayor\'s books for eleven years. Then she found the page where he sold the grey.'], ['SALLY', 'Sold it to who?'], ['MACK', 'Whoever pays in color.']],
+    [['SALLY', 'A forty-foot mech. Paid for by the people of Rain City.'], ['MACK', 'I don\'t remember voting for a robot.'], ['SALLY', 'Nobody remembers voting for Krane, Mack. That\'s how he wins.']],
+  ],
+  9: [
+    [['SALLY', 'An engraved invitation. From the Prism King. I\'ve never been invited to anything engraved.'], ['MACK', 'This one\'s forever, Sally. Read the fine print.']],
+    [['MACK', 'Lola sang for the King once. Now she wants him to stop singing back.'], ['SALLY', 'Is he a good singer?'], ['MACK', 'Doesn\'t matter. He\'s loud.']],
+    [['SALLY', 'What do we do when we win, Mack? Like, after?'], ['MACK', 'We go to the Last Drop. We always go to the Last Drop.']],
+  ],
+  10: [
+    [['SALLY', 'A cathedral nobody remembers building. Is that spooky or is it just Old Town?'], ['MACK', 'In Old Town those are the same thing.']],
+    [['MACK', 'Sister Agnes says they\'re baptizing people in paint. One dunk and you see seven colors.'], ['SALLY', 'And the eighth?'], ['MACK', 'The eighth is the hangover.']],
+    [['SALLY', 'Hymns in the key of pink. Mack, I hum when I\'m nervous and now it\'s all coming out pink.'], ['MACK', 'Then hum quieter.']],
+  ],
+  11: [
+    [['SALLY', 'Dottie joined a CHURCH, Mack. Our Dottie. Who once proposed to a parking meter.'], ['MACK', 'She was always looking for something to believe in. Usually it was rye.']],
+    [['MACK', 'Every Paintbot in the city follows her now. She\'s got a congregation of vacuum cleaners.'], ['SALLY', 'That\'s the most Dottie thing that ever happened.']],
+    [['SALLY', 'We\'re bringing her home, right? Even if she\'s all shiny and holy?'], ['MACK', 'We\'re bringing her home. Somebody has to answer the phone.']],
+  ],
+  12: [
+    [['SALLY', 'The ground is cracking, Mack. Little rainbow demons are climbing out of Southside.'], ['MACK', 'Southside always had a basement. Nobody wanted to know what was down there.']],
+    [['MACK', 'The High Chromancer. Conducting it all like it\'s an orchestra.'], ['SALLY', 'I hate orchestras. Too many little sticks.']],
+    [['SALLY', 'If we fall into one of those cracks, do we come out in color?'], ['MACK', 'Don\'t fall into one, and we\'ll never find out.']],
+  ],
+  13: [
+    [['SALLY', 'The last client is the city herself. Mack, she was made of rain and newspaper.'], ['MACK', 'She\'s been talking to me for twenty years, Sally. I just never heard her say please.']],
+    [['MACK', 'Hell\'s in full color tonight. Every shade the Syndicate ever sold, all at once.'], ['SALLY', 'Then let\'s go turn it off.'], ['MACK', 'Like a radio.'], ['SALLY', 'Like a really loud radio.']],
+    [['SALLY', 'Mack. Whatever happens tonight, I want you to know. You\'re my favorite grey.'], ['MACK', '...You\'re my favorite red, kid.']],
+    [['MACK', 'When this is over, the rain\'s going to wash it all out. Every drop of it.'], ['SALLY', 'And then?'], ['MACK', 'Then it\'s Tuesday. And Tuesday is grey.']],
+  ],
+};

@@ -127,6 +127,16 @@ npx http-server -c-1 .     # then visit http://localhost:8080/noir/
   BIG PORK'S DONUTS sign.
 - **Perf overlay.** FPS, frame time, draw calls, triangles and render resolution
   in the top-left corner. F3 hides or shows it.
+- **Voices.** Dialogue is read aloud by the browser's built-in speech synthesis:
+  nothing is downloaded and no API key is needed. Each character has their own
+  voice, pitch and pace: Mack low and slow, Sally bright and quick, DOTTIE high,
+  Big Pork deep, Chet on the radio fast. Cutscene lines cut each other off when
+  you click on; street lines queue up and stale ones are dropped. Stage
+  directions like *hic* aren't read out. The Voices slider on the title and
+  pause screens sets the volume, and 0 turns them off (captions always stay).
+- **Ride-along talk.** When Mack and Sally are cruising with nothing shooting
+  at them, they talk the case over. Every case, plus night patrol, has its own
+  short exchanges, played in order, one per quiet stretch of road.
 - **Third-person shooting.** Click the street and the game takes the mouse: it
   turns the camera, with the crosshair fixed in the centre and the camera over
   Mack's right shoulder. Right mouse pulls in tight to aim, and shots go where the
