@@ -9,13 +9,16 @@ const synth = typeof window !== 'undefined' ? window.speechSynthesis : null;
 // `prefer` lists voice names to look for first (Edge/Windows "Online (Natural)" voices, Chrome's Google
 // voices, macOS voices), in order.
 const CAST_VOICE = {
-  MACK: { want: 'male', pitch: 0.92, rate: 0.92, prefer: ['Christopher', 'Guy', 'Davis', 'Roger', 'Eric', 'Tony', 'Google UK English Male', 'Daniel', 'Alex', 'Fred'] },
-  SALLY: { want: 'female', pitch: 1.06, rate: 1.08, prefer: ['Jenny', 'Ana', 'Aria', 'Michelle', 'Ava', 'Samantha', 'Google US English', 'Zira'] },
-  DOTTIE: { want: 'female', pitch: 1.25, rate: 0.96, prefer: ['Ana', 'Sara', 'Michelle', 'Karen', 'Tessa', 'Google UK English Female', 'Hazel'] },
-  GUS: { want: 'male', pitch: 0.95, rate: 0.95, prefer: ['Ryan', 'Thomas', 'Google UK English Male', 'George', 'Daniel', 'Oliver'] },
-  PORK: { want: 'male', pitch: 0.82, rate: 0.9, prefer: ['Eric', 'Roger', 'Steffan', 'Brian', 'Fred'] },
-  COP: { want: 'male', pitch: 0.95, rate: 1.05, prefer: ['Steffan', 'Brandon', 'Jason', 'Andrew'] },
-  RADIO: { want: 'male', pitch: 1.0, rate: 1.12, prefer: ['Andrew', 'Brian', 'Guy', 'Google US English', 'Alex'] },
+  // Mack: a natural American man, unhurried (the voice the radio announcer used to have)
+  MACK: { want: 'male', lang: 'en-US', pitch: 0.95, rate: 0.93, prefer: ['Andrew', 'Brian', 'Guy', 'Christopher', 'Davis', 'Eric', 'Roger', 'Tony', 'Alex', 'Aaron', 'Fred'] },
+  SALLY: { want: 'female', lang: 'en-US', pitch: 1.06, rate: 1.08, prefer: ['Jenny', 'Aria', 'Ava', 'Michelle', 'Emma', 'Samantha', 'Google US English', 'Zira'] },
+  // DOTTIE: an older woman's voice, a little slow, a little low (macOS even has one called Grandma)
+  DOTTIE: { want: 'female', pitch: 0.9, rate: 0.88, prefer: ['Grandma', 'Moira', 'Fiona', 'Susan', 'Hazel', 'Karen', 'Michelle', 'Tessa', 'Catherine'] },
+  GUS: { want: 'male', lang: 'en-US', pitch: 0.95, rate: 0.95, prefer: ['Roger', 'Steffan', 'Eric', 'Fred', 'Tony'] },
+  PORK: { want: 'male', lang: 'en-US', pitch: 0.82, rate: 0.9, prefer: ['Eric', 'Roger', 'Steffan', 'Brian', 'Fred'] },
+  COP: { want: 'male', lang: 'en-US', pitch: 0.95, rate: 1.05, prefer: ['Steffan', 'Brandon', 'Jason', 'Andrew'] },
+  // Chet on WRNC: a plummy British announcer
+  RADIO: { want: 'male', lang: 'en-GB', pitch: 1.0, rate: 1.08, prefer: ['Ryan', 'Thomas', 'Google UK English Male', 'Daniel', 'Oliver', 'George', 'Arthur', 'Alfie', 'Elliot'] },
   NARR: { want: 'male', pitch: 0.9, rate: 0.9, prefer: ['Davis', 'Christopher', 'Guy', 'Roger', 'Daniel'] },
   DAME: { want: 'female', pitch: 1.0, rate: 0.94, prefer: ['Sonia', 'Libby', 'Emma', 'Aria', 'Victoria', 'Moira', 'Google UK English Female'] },
 };
@@ -37,6 +40,7 @@ if (synth) { loadVoices(); synth.onvoiceschanged = loadVoices; }
 const FEMALE = /female|woman|zira|susan|samantha|victoria|karen|moira|tessa|fiona|serena|hazel|libby|aria|jenny|sonia|emma|ava|allison|kate|veena/i;
 const MALE = /male|man|david|mark|george|daniel|alex|fred|ryan|guy|james|tom|arthur|oliver|aaron|rishi|lee|christopher|eric|roger/i;
 function voiceFor(who) {
+  if (who === 'NARR') return voiceFor('MACK'); // the narration is Mack, talking to himself
   if (picked[who] !== undefined) return picked[who];
   const c = CAST_VOICE[who] || CAST_VOICE.NARR;
   const pref = (v) => (c.prefer || []).some((n) => v.name.toLowerCase().includes(n.toLowerCase()));
@@ -45,7 +49,8 @@ function voiceFor(who) {
   // score: the character's preferred names first, then the most natural-sounding, avoiding voices already cast
   const score = (v) => {
     const pi = (c.prefer || []).findIndex((n) => v.name.toLowerCase().includes(n.toLowerCase()));
-    return (pi >= 0 ? 200 - pi * 8 : 0) + quality(v) - (used.has(v.name) ? 150 : 0);
+    const langOk = !c.lang || v.lang.replace('_', '-').toLowerCase().startsWith(c.lang.toLowerCase());
+    return (pi >= 0 ? 200 - pi * 8 : 0) + quality(v) + (c.lang ? (langOk ? 60 : -80) : 0) - (used.has(v.name) ? 150 : 0);
   };
   const list = (pool.length ? pool : voices).slice().sort((a, b) => score(b) - score(a));
   picked[who] = list[0] || null;
