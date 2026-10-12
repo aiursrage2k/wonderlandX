@@ -244,7 +244,7 @@ leaves a breadcrumb for the finale: an eye painted on the pier, a hymnal called
 
 | # | Case | What happens |
 | --- | --- | --- |
-| 1 | The Blue Period | Meet Big Pork, then four waves of tears in the sky across the whole city: 1, 2, 3, then 4 portals, with a breather between each. |
+| 1 | The Blue Period | Meet Big Pork, then two waves of tears in the sky to ease you in: 1 portal (with the how-to-seal card), a breather, then 2. |
 | 2 | Purple Rain Man | A blue note comes out actually blue. Three waves: walker eyes on spider legs that stalk Little Saxophone spitting skating thugs (shoot the legs, topple it, bonk it with the Packard), then Vic Vermilion. |
 | 3 | The Vault of Many Colors | Bank heists; a rainbow left in the vault mocks the tellers. Three waves: heist crews, demon tanks firing rainbow rocket salvos, then the mob boss Don Lorenzo Lazuli. |
 | 4 | Holes in the Sky | Portals open over Old Town, humming show tunes. |
