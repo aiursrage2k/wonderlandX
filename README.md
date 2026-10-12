@@ -5,6 +5,8 @@ Risk of Rain 2. Fall down the rabbit hole as Alice, loot tea chests, stack
 strange items, find the Looking Glass, and survive the boss while it charges.
 Every minute (and every depth) the garden gets madder.
 
+> **Also in this repo:** [Grey City Blues](noir/), a black-and-white noir shooter about a detective, a red dress and a rocket launcher. Open `noir/` from the same server.
+
 Everything is built from code: the models are primitives, and every texture
 (marble, playing cards, floral porcelain, clock faces, the Cheshire grin in the
 sky) is painted procedurally on canvas. Sound and music are synthesised with
