@@ -267,8 +267,25 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
   addEventListener('keyup', (e) => keys.delete(e.code));
   addEventListener('blur', () => { keys.clear(); mouse.down = false; });
   const canvas = renderer.domElement;
-  canvas.addEventListener('mousemove', (e) => { mouse.x = (e.clientX / innerWidth) * 2 - 1; mouse.y = -(e.clientY / innerHeight) * 2 + 1; });
-  canvas.addEventListener('mousedown', (e) => { if (e.button === 0) mouse.down = true; if (e.button === 2) mouse.right = true; });
+  // ---- mouse look: with the pointer locked the mouse turns the camera (a third-person shooter on foot,
+  // free-look in the car) and the crosshair sits dead centre. Without a lock it falls back to cursor aiming.
+  let locked = false, camPitch = -0.06, lookOff = 0, lookIdle = 9, recoil = 0;
+  let sens = 0.0022;
+  try { sens = parseFloat(localStorage.getItem('gcb-sens')) || sens; } catch (e) { /* ignore */ }
+  document.addEventListener('pointerlockchange', () => { locked = document.pointerLockElement === canvas; if (locked) { mouse.x = 0; mouse.y = 0; } });
+  canvas.addEventListener('mousemove', (e) => {
+    if (locked) {
+      const dx = e.movementX * sens, dy = e.movementY * sens;
+      if (P.inCar) { lookOff = clamp(lookOff - dx, -2.6, 2.6); lookIdle = 0; } else camYaw -= dx;
+      camPitch = clamp(camPitch - dy, -0.55, 0.42);
+      return;
+    }
+    mouse.x = (e.clientX / innerWidth) * 2 - 1; mouse.y = -(e.clientY / innerHeight) * 2 + 1;
+  });
+  canvas.addEventListener('mousedown', (e) => {
+    if (!locked && S && S.running && !S.replay && camMode === 'chase' && canvas.requestPointerLock) { try { const r = canvas.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (err) { /* no lock: cursor aiming */ } }
+    if (e.button === 0) mouse.down = true; if (e.button === 2) mouse.right = true;
+  });
   addEventListener('mouseup', (e) => { if (e.button === 0) mouse.down = false; if (e.button === 2) mouse.right = false; });
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   let zoom = 1;
@@ -504,6 +521,21 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     for (const p of knock.props) if (p.down) { p.down = false; p.mesh.setMatrixAt(p.i, p.orig); p.mesh.instanceMatrix.needsUpdate = true; }
     if (knock.meterHeads) { let j = 0; for (const p of knock.props) if (p.type === 'meter') knock.meterHeads.setMatrixAt(j++, new THREE.Matrix4().makeTranslation(p.x, 0.3, p.z)); knock.meterHeads.instanceMatrix.needsUpdate = true; }
   }
+  // comic-book impact words: the car hitting things should feel like a Sunday strip
+  const BONK = {
+    hit: ['POW!', 'BLAP!', 'ZOK!', 'WHAM!', 'BIFF!', 'THWACK!', 'SPLAT!', 'BAP!'],
+    big: ['KAPOW!', 'BOOM!', 'KABLAM!', 'KER-RUNCH!', 'BLAMMO!', 'KA-BONK!'],
+    prop: ['BONK!', 'CLANG!', 'DONK!', 'TONK!', 'KLUNK!'],
+    crash: ['CRUNCH!', 'BAM!', 'KRAK!', 'SMASH!'],
+  };
+  function bonkFx(x, z, kind = 'hit', big = false) {
+    if (!S || S.replay) return;
+    S.bonkT = S.bonkT || 0;
+    if (S.time - S.bonkT < (big ? 0.05 : 0.14)) return; // don't stack a wall of words
+    S.bonkT = S.time;
+    hud.bonk(V(x, 0, z), pick(BONK[kind]), big);
+    if (big) { fx.shake = Math.max(fx.shake, 0.6); flashes.ring(x, z, 9, 0xffffff, 0.25, 0.4); }
+  }
   function knockAt(x, z, r, vx, vz, power) {
     const cx = Math.floor(x / 12), cz = Math.floor(z / 12);
     for (let i = cx - 1; i <= cx + 1; i++) for (let k = cz - 1; k <= cz + 1; k++) {
@@ -528,6 +560,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     scene.add(g);
     debris.push({ m: g, v: V(vx * 0.4, 2 + power * 0.05, vz * 0.4), w: V(Math.sign(vz || 1) * rand(1.5, 2.5), rand(-0.5, 0.5), -Math.sign(vx || 1) * rand(1.5, 2.5)), rest: false, lamp: true });
     sparks(l.hx || l.x, 7.6, l.z, 24); sfx.crash(0.7); sfx.glass();
+    if ((vx || vz) && power > 8) bonkFx(l.x, l.z, 'prop');
     addScore(40, l.x, l.z, 'LAMP');
   }
   function knockProp(p, vx, vz, power) {
@@ -540,6 +573,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     scene.add(m);
     debris.push({ m, v: V(vx * rand(0.5, 0.9) + rand(-3, 3), rand(4, 9) + power * 0.1, vz * rand(0.5, 0.9) + rand(-3, 3)), w: V(rand(-9, 9), rand(-9, 9), rand(-9, 9)), rest: false });
     sparks(p.x, 0.8, p.z, 8);
+    if ((vx || vz) && power > 8) bonkFx(p.x, p.z, 'prop');
     if (p.type === 'hydrant') { S.geysers = S.geysers || []; S.geysers.push({ x: p.x, z: p.z, t: 12 }); sfx.splash(); }
     else if (p.type === 'meter') { for (let k = 0; k < 10; k++) parts.spawn(p.x, 1.3, p.z, rand(-4, 4), rand(3, 7), rand(-4, 4), { life: 0.9, size: 0.25, color: [0.85, 0.85, 0.8], grav: 20 }); sfx.pickup(); }
     else sfx.crash(0.4);
@@ -1329,6 +1363,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
 
   function destroyCar() {
     CAR.alive = false;
+    bonkFx(CAR.pos.x, CAR.pos.z, 'big', true);
     explode(CAR.pos.x, 1.2, CAR.pos.z, 8, 0, false);
     carM.root.traverse((o) => { if (o.isMesh) { o.userData.origMat = o.userData.origMat || o.material; o.material = new THREE.MeshLambertMaterial({ color: 0x151515 }); } });
     if (P.inCar) exitCar(true);
@@ -1416,8 +1451,8 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     sfx.boom(far);
     flashes.light(x, y + 2, z, 2500, 0.25);
     // a white-hot core, an orange fireball rolling out of it, and a shockwave across the ground
-    flashes.ball(x, y + 0.5, z, r * 0.45, 0.16, 0xfff0d0, 5);
-    flashes.ball(x, y + 1, z, r * 0.85, 0.42, 0xff7a20, 2.4);
+    flashes.ball(x, y + 0.5, z, r * 0.3, 0.14, 0xfff0d0, 3);
+    flashes.ball(x, y + 1, z, r * 0.55, 0.34, 0xff7a20, 1.5);
     flashes.ring(x, z, r * 1.6, 0xffe0b0, 0.35, 0.2);
     for (let k = 0; k < 24; k++) { const a = Math.random() * 6.28, sp = rand(12, 30); parts.spawn(x, y + 0.5, z, Math.cos(a) * sp, rand(3, 14), Math.sin(a) * sp, { life: rand(0.3, 0.7), size: rand(0.18, 0.35), color: [4, rand(1.6, 2.6), 0.6], grav: 22, drag: 1 }); }
     for (let k = 0; k < 10; k++) parts.spawn(x, y + 0.5, z, rand(-10, 10), rand(6, 16), rand(-10, 10), { life: rand(0.9, 1.6), size: rand(0.35, 0.6), color: [0.08, 0.08, 0.08], grav: 26 }); // debris
@@ -1522,7 +1557,8 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     p.flown = 0; p.air = true; p.bonkCd = 0.6;
     fx.shake = Math.max(fx.shake, 0.8); sfx.crash(1); sfx.boom(0.7);
     flashes.ring(p.pos.x, p.pos.z, 10, 0xffffff, 0.35);
-    hud.floater(p.pos, `BONK! ${Math.round(p.pct)}%`);
+    hud.floater(p.pos, `${Math.round(p.pct)}%`);
+    bonkFx(p.pos.x, p.pos.z, 'big', true);
     addScore(200 + Math.round(p.pct * 4), p.pos, 'BONK');
     CAR.vx *= 0.45; CAR.vz *= 0.45; CAR.hp -= 6;
   }
@@ -1620,7 +1656,19 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
 
   // hitscan from (o) in direction (d): returns hit point
   const _hp = V();
-  function shoot(o, dx, dz, range, dmg, color, pierce = 1) {
+  // aim magnetism: if a target sits within a sliver of the line of fire, the round goes to it
+  function assist(ox, oz, a, maxA = 0.07, range = 90) {
+    let best = a, bd = maxA;
+    for (const e of S.enemies) {
+      if (e.dead || (e.cop && !S.wanted) || e.emerge > 0) continue;
+      const dx = e.pos.x - ox, dz = e.pos.z - oz, d = Math.hypot(dx, dz);
+      if (d > range || d < 1) continue;
+      const da = Math.abs(wrapAngle(Math.atan2(dx, dz) - a)) - Math.atan(e.r / d) * 0.5;
+      if (da < bd && clearLine(ox, oz, e.pos.x, e.pos.z)) { bd = da; best = Math.atan2(dx, dz); }
+    }
+    return best;
+  }
+  function shoot(o, dx, dz, range, dmg, color, pierce = 1, byPlayer = false) {
     const wall = rayDist(o.x, o.z, dx, dz, range);
     const hits = [];
     for (const e of S.enemies) {
@@ -1655,6 +1703,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       if (civ) { killCiv(civ, true); continue; }
       if (e) {
         hitEnemy(e, dmg * (n === 1 ? 1 : 0.7));
+        if (byPlayer) hud.hitmark(e.dead);
         for (let k = 0; k < 6; k++) parts.spawn(_hp.x, _hp.y, _hp.z, dx * 5 + rand(-4, 4), rand(1, 5), dz * 5 + rand(-4, 4), { life: 0.4, size: 0.4, color: e.rgb, grav: 15 });
       } else {
         hitPortal(p, dmg, _hp.x, _hp.z);
@@ -1728,8 +1777,10 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       const mp = V(); gn.flash.getWorldPosition(mp);
       // aim assist: steer the rounds toward the cursor, within a cone off the bonnet
       const want = Math.atan2(aim.x - mp.x, aim.z - mp.z);
-      const a = CAR.ang + clamp(wrapAngle(want - CAR.ang), -0.38, 0.38) + rand(-0.025, 0.025);
-      shoot(V(mp.x, 1.2, mp.z), Math.sin(a), Math.cos(a), 95, 11, [1, 0.8, 0.45], 1);
+      const a0 = CAR.ang + clamp(wrapAngle(want - CAR.ang), -0.38, 0.38);
+      const a = assist(mp.x, mp.z, a0, 0.05, 95) + rand(-0.025, 0.025);
+      shoot(V(mp.x, 1.2, mp.z), Math.sin(a), Math.cos(a), 95, 11, [1, 0.8, 0.45], 1, true);
+      recoil += 0.004;
       gn.flash.visible = true; gn.flash.rotation.z = Math.random() * 6;
       if (Math.random() < 0.5) flashes.light(mp.x, 1.6, mp.z, 220, 0.04);
       // brass
@@ -1900,6 +1951,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
         const vn = CAR.vx * n.x + CAR.vz * n.z;
         if (vn < 0) {
           CAR.vx -= vn * n.x * 1.15; CAR.vz -= vn * n.z * 1.15; // kill the push into the wall, keep the slide along it
+          if (-vn > 18 && P.inCar) bonkFx(p.x - n.x * 1.3, p.z - n.z * 1.3, 'crash');
           if (-vn > 8) { sfx.crash(Math.min(1, -vn / 25)); CAR.hp -= Math.max(0, -vn - 8) * 0.7; smashCar(-vn, p.x - n.x * 1.3, p.z - n.z * 1.3, n.x, n.z); if (CAR.hp <= 0 && CAR.alive) destroyCar(); }
         }
       }
@@ -1952,7 +2004,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       for (const l of p.legs) {
         if (!l.alive || (l.hitCd = (l.hitCd || 0) - dt) > 0) continue;
         if (Math.abs(vf) > 6 && Math.hypot(l.footPos.x - CAR.pos.x, l.footPos.z - CAR.pos.z) < 3.2) {
-          l.hitCd = 0.6; l.hp -= Math.abs(vf) * 3.2; l.flash = 0.1;
+          l.hitCd = 0.6; l.hp -= Math.abs(vf) * 3.2; l.flash = 0.1; bonkFx(l.footPos.x, l.footPos.z, 'hit');
           sfx.crash(0.9); fx.shake = Math.max(fx.shake, 0.5); sparks(l.footPos.x, 1.5, l.footPos.z, 10);
           CAR.vx *= 0.6; CAR.vz *= 0.6; CAR.hp -= 5;
           if (l.hp <= 0) breakLeg(p, l);
@@ -1964,10 +2016,10 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       for (const e of S.enemies.slice()) {
         if (e.dead) continue;
         if (e.type === 'lowrider' || e.type === 'roomba' || e.type === 'truck' || e.type === 'copter' || e.type === 'demon' || e.type === 'tank') continue;
-        if (e.type === 'beast' && Math.hypot(e.pos.x - CAR.pos.x, e.pos.z - CAR.pos.z) < 2.4 + e.r) { if (e.hitCd <= 0) { e.hitCd = 1; hitEnemy(e, 50); CAR.vx *= -0.4; CAR.vz *= -0.4; sfx.crash(1); fx.shake = 0.6; } continue; }
+        if (e.type === 'beast' && Math.hypot(e.pos.x - CAR.pos.x, e.pos.z - CAR.pos.z) < 2.4 + e.r) { if (e.hitCd <= 0) { e.hitCd = 1; hitEnemy(e, 50); bonkFx(e.pos.x, e.pos.z, 'big', true); CAR.vx *= -0.4; CAR.vz *= -0.4; sfx.crash(1); fx.shake = 0.6; } continue; }
         if (Math.hypot(e.pos.x - CAR.pos.x, e.pos.z - CAR.pos.z) < 2.4 + e.r) {
-          if (e.type === 'boss') { if (e.hitCd <= 0) { hitEnemy(e, 60); e.hitCd = 1; vf *= 0.3; sfx.crash(1); CAR.vx *= 0.3; CAR.vz *= 0.3; CAR.hp -= 15; smashCar(20, e.pos.x, e.pos.z); } }
-          else { const ex = e.pos.x, ez = e.pos.z; hitEnemy(e, 999); explode(ex, 1.2, ez, 5, 45, true); splat(ex, ez, 3, e.color, 0.5); if (Math.random() < 0.3) quip('SALLY', ['SPLAT!', 'Ten points!', 'Hood ornament!', 'He EXPLODED, Mack! Do it again!'], 1, 3); }
+          if (e.type === 'boss') { if (e.hitCd <= 0) { hitEnemy(e, 60); e.hitCd = 1; bonkFx(e.pos.x, e.pos.z, 'big', true); vf *= 0.3; sfx.crash(1); CAR.vx *= 0.3; CAR.vz *= 0.3; CAR.hp -= 15; smashCar(20, e.pos.x, e.pos.z); } }
+          else { const ex = e.pos.x, ez = e.pos.z; hitEnemy(e, 999); bonkFx(ex, ez, 'hit'); explode(ex, 1.2, ez, 5, 45, true); splat(ex, ez, 3, e.color, 0.5); if (Math.random() < 0.3) quip('SALLY', ['SPLAT!', 'Ten points!', 'Hood ornament!', 'He EXPLODED, Mack! Do it again!'], 1, 3); }
         }
       }
     }
@@ -2000,7 +2052,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     S.quipT -= rdt; S.donutT -= rdt; S.retortT -= rdt;
 
     // aim on the ground plane
-    ray.setFromCamera(new THREE.Vector2(mouse.x, mouse.y), camera);
+    ray.setFromCamera(new THREE.Vector2(locked ? 0 : mouse.x, locked ? 0 : mouse.y), camera);
     if (!ray.ray.intersectPlane(plane, aim)) {
       // looking at the sky: aim far down the line of sight instead
       const d = ray.ray.direction, f0 = focus(), hl = Math.hypot(d.x, d.z) || 1;
@@ -2214,10 +2266,12 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       else {
         // the big red revolver: heavy, slow, punches through two men
         P.fireCd = 0.2; P.ammo--;
-        const sp = (Math.random() - 0.5) * 0.03;
-        const a = P.face + sp;
         const o = V(P.pos.x + Math.sin(P.face) * 2.0 + Math.cos(P.face) * 0.42, 1.8, P.pos.z + Math.cos(P.face) * 2.0 - Math.sin(P.face) * 0.42);
-        shoot(o, Math.sin(a), Math.cos(a), 85, 32, [1, 0.35, 0.3], 2);
+        // from the muzzle to wherever the crosshair is, nudged onto a goon if one's right there
+        const base = Math.atan2(aim.x - o.x, aim.z - o.z);
+        const a = assist(o.x, o.z, base) + (Math.random() - 0.5) * 0.015;
+        shoot(o, Math.sin(a), Math.cos(a), 85, 32, [1, 0.35, 0.3], 2, true);
+        recoil += 0.045; camera.fov -= 1.2; camera.updateProjectionMatrix();
         S.firing = true;
         sfx.revolver();
         flashes.light(o.x, o.y, o.z, 260, 0.06);
@@ -2990,6 +3044,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       if (P.inCar) {
         const rel = Math.hypot(CAR.vx - Math.sin(e.face) * sp, CAR.vz - Math.cos(e.face) * sp);
         hitEnemy(e, rel * 3.5);
+        bonkFx((e.pos.x + CAR.pos.x) / 2, (e.pos.z + CAR.pos.z) / 2, rel > 25 ? 'big' : 'crash', rel > 25);
         damagePlayer(rel * 0.8);
         smashCar(rel, (e.pos.x + CAR.pos.x) / 2, (e.pos.z + CAR.pos.z) / 2, (e.pos.x - CAR.pos.x) / dp, (e.pos.z - CAR.pos.z) / dp);
         spawnDebris(e.pos.x, 1, e.pos.z, -CAR.vx * 0.4, -CAR.vz * 0.4, Math.min(6, Math.floor(rel / 6)));
@@ -3383,7 +3438,12 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     say('MACK', camMode === 'chase' ? 'Down at street level. Where the rain lives.' : 'Bird\'s-eye. Like a pigeon with a pension.', 2);
   }
   function camYawTarget() {
-    if (P.inCar) return Math.abs(CAR.speed) > 2 || !S.camInit ? CAR.ang : camYaw;
+    if (P.inCar) {
+      // free-look: the mouse swings the camera round the car; let go and it drifts back behind
+      if (locked) { lookIdle += 1 / 60; if (lookIdle > 1.2) lookOff *= 0.94; return CAR.ang + lookOff; }
+      return Math.abs(CAR.speed) > 2 || !S.camInit ? CAR.ang : camYaw;
+    }
+    if (locked) return camYaw; // the mouse owns the camera
     if (S.down !== undefined || S.puke !== undefined) return camYaw;
     if (P.aiming) {
       // aiming steers the camera only when you push the sights well off-center
@@ -3399,7 +3459,19 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     if (P.inCar) {
       const sp = Math.abs(CAR.speed);
       const dist = (11 + Math.min(7, sp * 0.09)) * zoom, h = (4.4 + Math.min(1.5, sp * 0.02)) * zoom;
-      return { pos: V(f.x - fx0 * dist, h, f.z - fz0 * dist), look: V(f.x + fx0 * 10, 1.4, f.z + fz0 * 10) };
+      const pl = locked ? camPitch : 0;
+      return { pos: V(f.x - fx0 * dist, Math.max(1.2, h - pl * 7), f.z - fz0 * dist), look: V(f.x + fx0 * 10, 1.4 + pl * 14, f.z + fz0 * 10) };
+    }
+    if (locked) {
+      // over the right shoulder; right mouse pulls in tight; pitch swings the camera up and down around Mack's head
+      const aimK = P.aimT || 0;
+      const dist = (5.4 - aimK * 1.8) * zoom * down, sh = 1.15 + aimK * 0.3, pitch = camPitch + recoil;
+      const cp = Math.cos(pitch), spp = Math.sin(pitch), eye = 1.95;
+      const px = f.x - fx0 * dist * cp + rx * sh, pz = f.z - fz0 * dist * cp + rz * sh;
+      return {
+        pos: V(px, Math.max(0.45, eye + 0.45 - spp * dist), pz),
+        look: V(px + fx0 * 30 * cp, eye + 0.45 - spp * dist + spp * 30, pz + fz0 * 30 * cp),
+      };
     }
     const aimK = P.aimT || 0;
     const dist = (7.5 - aimK * 2.2) * zoom * down, h = (3.7 - aimK * 0.7) * zoom * down, sh = aimK * 1.3;
@@ -3438,7 +3510,8 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     const fovT = 50 + (P.inCar ? Math.min(12, Math.abs(CAR.speed) * 0.16) + (CAR.boosting ? 7 : 0) : 0);
     if (Math.abs(camera.fov - fovT) > 0.05) { camera.fov += (fovT - camera.fov) * Math.min(1, dt * 3); camera.updateProjectionMatrix(); }
     const t = camTargets();
-    const k = 1 - Math.exp(-dt * (camMode === 'chase' ? (P.inCar ? 9 : 7) : 5));
+    const k = 1 - Math.exp(-dt * (camMode === 'chase' ? (P.inCar ? 9 : locked ? 22 : 7) : 5));
+    recoil *= Math.exp(-dt * 9);
     camPos.lerp(t.pos, k); camLook.lerp(t.look, k);
     camera.position.copy(camPos);
     fx.shake = Math.max(0, fx.shake - dt * 2.5);
@@ -3456,6 +3529,9 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
   return {
     scene, camera, start, stop, update, startReplay,
     get running() { return !!(S && S.running); },
+    get locked() { return locked; },
+    setSensitivity(v) { sens = v; try { localStorage.setItem('gcb-sens', String(v)); } catch (e) { /* ignore */ } },
+    get sensitivity() { return sens; },
     get state() { return S; },
     resumeFromBar() { keys.clear(); },
     debug: {
@@ -3468,6 +3544,8 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       spawn(type, x, z) { const p = { x, z }; pushOut(p, 3); return addEnemy(type, p.x, p.z); },
       tp(x, z) { P.pos.set(x, 0, z); if (P.inCar) CAR.pos.set(x, 0, z); snapCamera(); },
       camYaw(a) { camYaw = a; P.face = a; snapCamera(); },
+      fakeLock(on) { locked = on; mouse.x = 0; mouse.y = 0; },
+      look(dx, dy) { if (P.inCar) lookOff -= dx * sens; else camYaw -= dx * sens; camPitch = clamp(camPitch - dy * sens, -0.55, 0.42); },
       hitPortal(p, d, x, z) { hitPortal(p, d, x, z); },
       nextStage() { for (const e of S.enemies.slice()) if (!e.cop) hitEnemy(e, 1e6); for (const p of S.portals.slice()) closePortal(p); nextStage(); },
     },

@@ -29,6 +29,7 @@ export function createHud() {
   function show(on) { el.hud.classList.toggle('hidden', !on); }
 
   let radioT = 0, tutT = 0;
+  const bonks = [];
   function say(who, text, dur = 3.5) {
     if (who === 'RADIO') {
       // the radio gets its own little set on the left, not a caption
@@ -143,6 +144,14 @@ export function createHud() {
       f.d.style.top = `${(-v.y * 0.5 + 0.5) * h}px`;
       f.d.style.opacity = Math.min(1, f.t);
       if (f.t <= 0) { f.d.remove(); floaters.splice(i, 1); }
+    }
+    for (let i = bonks.length - 1; i >= 0; i--) {
+      const b = bonks[i];
+      b.t -= dt;
+      v.set(b.pos.x, b.pos.y + 2.5, b.pos.z).project(s.camera);
+      if (b.t <= 0 || v.z > 1) { b.d.remove(); bonks.splice(i, 1); continue; }
+      b.d.style.left = `${(v.x * 0.5 + 0.5) * w}px`;
+      b.d.style.top = `${(-v.y * 0.5 + 0.5) * h}px`;
     }
     enemyBars(s, w, h);
     civTags(s, w, h);
@@ -355,6 +364,22 @@ export function createHud() {
   return {
     show, say, stamp, floater, update,
     hush() { caps.splice(0).forEach((c) => c.wrap.remove()); },
+    // the crosshair flinches on a hit and crosses out on a kill
+    hitmark(kill) {
+      const c = document.getElementById('cross');
+      c.classList.remove('hit', 'kill'); void c.offsetWidth; c.classList.add(kill ? 'kill' : 'hit');
+    },
+    // comic-book impact bursts, pinned to where the car hit something
+    bonk(pos, word, big = false) {
+      const d = document.createElement('div');
+      d.className = 'bonk' + (big ? ' big' : '');
+      d.innerHTML = `<span>${word}</span>`;
+      d.style.setProperty('--r', `${(Math.random() - 0.5) * 30}deg`);
+      d.style.setProperty('--c', ['#ffe11a', '#ff3a2a', '#18e0ff', '#ff2d95', '#62ff2e'][Math.floor(Math.random() * 5)]);
+      document.getElementById('bonks').appendChild(d);
+      bonks.push({ d, pos: pos.clone(), t: big ? 0.9 : 0.65 });
+      while (bonks.length > 6) bonks.shift().d.remove();
+    },
     // a how-to card pinned beside the case card: a title and numbered steps
     tutorial(lines, sec = 14) {
       const t = document.getElementById('tutorial');
@@ -389,6 +414,7 @@ export function createHud() {
       barEls.forEach((d) => (d.style.display = 'none'));
       tagEls.forEach((d) => (d.style.display = 'none'));
       pctEls.forEach((d) => (d.style.display = 'none'));
+      bonks.splice(0).forEach((b) => b.d.remove());
       el.bossbar.classList.add('hidden');
       radioT = 0; document.getElementById('radio').classList.add('hidden');
       tutT = 0; document.getElementById('tutorial').classList.add('hidden');

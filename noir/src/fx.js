@@ -137,7 +137,7 @@ export class Tracers {
     this.mesh = new THREE.Mesh(g, new THREE.ShaderMaterial({
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
       vertexShader: 'attribute vec4 rgba; varying vec4 vC; varying vec2 vU; void main(){ vC = rgba; vU = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
-      fragmentShader: 'varying vec4 vC; varying vec2 vU; void main(){ float x = 1.0 - abs(vU.x); float core = pow(x, 3.0); gl_FragColor = vec4(vC.rgb * (0.6 + core * 3.0), vC.a * x); }',
+      fragmentShader: 'varying vec4 vC; varying vec2 vU; void main(){ float x = clamp(1.0 - abs(vU.x), 0.0, 1.0); float core = x * x * x; gl_FragColor = vec4(vC.rgb * (0.6 + core * 3.0), vC.a * x); }',
     }));
     this.mesh.frustumCulled = false;
     this._s = new THREE.Vector3(); this._d = new THREE.Vector3(); this._v = new THREE.Vector3();

@@ -37,7 +37,7 @@
         <label>Rain &amp; Lead <input type="range" id="vol-sfx" min="0" max="1" step="0.05" /></label>
       </div>
       <div class="controls">
-        <b>On foot</b> WASD move · Hold right mouse to draw &amp; aim the big red revolver, left mouse to fire · R tuck &amp; roll · E car / doors · Mouse wheel zoom<br />
+        <b>On foot</b> Click the street to grab the mouse: it turns the camera (third-person shooter, crosshair in the centre) · WASD move · Hold right mouse to draw &amp; aim over the shoulder, left mouse to fire · R tuck &amp; roll · E car / doors · Mouse wheel zoom<br />
         <b>Survival</b> F Focus on/off: slows time, burns the color you've stolen · Q flask · G pain pills (full heal, but you see in color)<br />
         <b>Driving</b> W/S gas &amp; brake · A/D steer · Shift rocket boost · Space handbrake drift · Click: hood machine guns (they overheat) · Right mouse: roof rocket pod (find rocket crates) · Sally fires on her own · E get out · Z whistle for the car<br />
         <b>Anytime</b> C chase cam / overhead cam · F3 perf stats · N next jazz track · Esc pause
@@ -130,6 +130,7 @@
     <div id="ebars"></div>
     <div id="civtags"></div>
     <div id="pcts"></div>
+    <div id="bonks"></div>
     <div id="tutorial" class="hidden"></div>
     <div id="floaters"></div>
     <div id="pointers"></div>
@@ -140,6 +141,7 @@
   <div id="pause" class="screen hidden">
     <div class="panel-c">
       <div class="big">PAUSED</div>
+      <div class="vols"><label>Mouse look <input type="range" id="sens" min="0.0008" max="0.006" step="0.0002" /></label></div>
       <button class="btn" id="btn-resume">Back to the rain</button>
       <button class="btn" id="btn-quit">Drop the case</button>
     </div>

@@ -83,6 +83,14 @@ const renderPass = new RenderPass(new THREE.Scene(), new THREE.PerspectiveCamera
 const noirPass = new ShaderPass(NoirShader);
 composer.addPass(renderPass);
 // bloom: only the brightest things (neon, bulbs, lamp heads, lit windows, muzzle flashes) bleed light
+// safety net before the bloom: a single NaN or runaway pixel would otherwise be blurred across the whole frame
+const sanitizePass = new ShaderPass({
+  uniforms: { tDiffuse: { value: null } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+  fragmentShader: `uniform sampler2D tDiffuse; varying vec2 vUv;
+    void main(){ vec4 c = texture2D(tDiffuse, vUv); if (!(c.r == c.r) || !(c.g == c.g) || !(c.b == c.b)) c = vec4(0.0, 0.0, 0.0, 1.0); gl_FragColor = vec4(clamp(c.rgb, 0.0, 24.0), 1.0); }`,
+});
+composer.addPass(sanitizePass);
 const bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.5, 0.3, 1.8); // threshold 1.8: only things deliberately brighter than white (HDR neon, bulbs) bloom
 composer.addPass(bloomPass);
 composer.addPass(noirPass);
@@ -110,13 +118,14 @@ function setMode(m) {
   for (const id of ['title', 'board', 'barui', 'pause', 'result']) $(id).classList.add('hidden');
   hud.show(m === 'play' || m === 'pause' || m === 'reel');
   if (m !== 'play' && m !== 'pause') $('wasted').classList.add('hidden');
+  if (m !== 'play' && document.pointerLockElement) document.exitPointerLock();
   $('newsreel-tag').classList.toggle('hidden', m !== 'reel');
   document.body.classList.toggle('playing', m === 'play');
   $('cross').style.display = m === 'play' ? 'block' : 'none';
   if (m === 'title') { $('title').classList.remove('hidden'); office.setView('menu'); }
   if (m === 'board') { $('board').classList.remove('hidden'); office.setView('board'); renderBoard(); }
   if (m === 'bar' || m === 'barMid') $('barui').classList.remove('hidden');
-  if (m === 'pause') $('pause').classList.remove('hidden');
+  if (m === 'pause') { $('pause').classList.remove('hidden'); if (game) $('sens').value = game.sensitivity; }
   if (m === 'result') $('result').classList.remove('hidden');
   if (m === 'board' || m === 'title') lastIndoor = 'office';
   if (m === 'barOutro' || m === 'bar') lastIndoor = 'bar';
@@ -491,7 +500,9 @@ $('vol-music').value = audio.getVolume('music');
 $('vol-sfx').value = audio.getVolume('sfx');
 $('vol-music').oninput = (e) => audio.setVolume('music', +e.target.value);
 $('vol-sfx').oninput = (e) => audio.setVolume('sfx', +e.target.value);
-$('btn-resume').onclick = () => setMode('play');
+// mouse-look sensitivity, set from the pause menu
+$('sens').oninput = (e) => game && game.setSensitivity(parseFloat(e.target.value));
+$('btn-resume').onclick = () => { setMode('play'); try { const r = renderer.domElement.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (e) { /* cursor aiming */ } };
 $('btn-quit').onclick = () => fade(() => { game.stop(); hud.clear(); setMode('board'); });
 audio.onTrack((name) => { const n = $('np'); n.classList.add('hidden'); void n.offsetWidth; n.textContent = `♪ now playing — "${name}"`; n.classList.remove('hidden'); });
 
@@ -504,7 +515,13 @@ addEventListener('keydown', (e) => {
     else if (mode === 'board') setMode('title');
   }
 });
-addEventListener('mousemove', (e) => { const c = $('cross'); c.style.left = `${e.clientX}px`; c.style.top = `${e.clientY}px`; });
+addEventListener('mousemove', (e) => { if (document.pointerLockElement) return; const c = $('cross'); c.style.left = `${e.clientX}px`; c.style.top = `${e.clientY}px`; });
+// pointer lock: losing it mid-case (Esc, alt-tab) pauses; the crosshair pins to the centre while locked
+document.addEventListener('pointerlockchange', () => {
+  const on = !!document.pointerLockElement;
+  document.body.classList.toggle('locked', on);
+  if (!on && mode === 'play') setMode('pause');
+});
 
 function resize() {
   const w = innerWidth, h = innerHeight;

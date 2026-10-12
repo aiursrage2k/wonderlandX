@@ -323,3 +323,20 @@ body.playing #hud-top { top: 22px; }
 .heatbar > div { background: linear-gradient(90deg, #d8d0b8, #ffb43a, #ff3a20); }
 .heatbar.over { animation: warn 0.3s infinite; }
 #pods { color: #ff5a68; }
+
+/* comic-book bonks: a jagged starburst in a loud color, black-outlined letters, popped in and gone */
+#bonks { position: absolute; inset: 0; pointer-events: none; z-index: 2; overflow: hidden; }
+.bonk { position: absolute; transform: translate(-50%, -50%) rotate(var(--r)); animation: bonk-pop 0.65s cubic-bezier(0.2, 1.8, 0.4, 1) both; }
+.bonk.big { animation-duration: 0.9s; }
+.bonk::before { content: ''; position: absolute; inset: -34px -44px; background: var(--c); clip-path: polygon(50% 0%, 59% 22%, 80% 6%, 74% 30%, 100% 26%, 82% 46%, 98% 62%, 74% 64%, 84% 90%, 60% 76%, 50% 100%, 40% 76%, 16% 92%, 26% 64%, 0% 64%, 18% 46%, 2% 24%, 26% 30%, 20% 6%, 41% 22%); filter: drop-shadow(3px 3px 0 #000); z-index: -1; }
+.bonk span { position: relative; display: block; font: 44px/1 var(--bebas); letter-spacing: 2px; color: #fff; -webkit-text-stroke: 2.5px #000; text-shadow: 4px 4px 0 #000; white-space: nowrap; }
+.bonk.big span { font-size: 70px; }
+.bonk.big::before { inset: -50px -64px; }
+@keyframes bonk-pop { 0% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--r)) scale(0.2); } 20% { opacity: 1; transform: translate(-50%, -50%) rotate(var(--r)) scale(1.25); } 35% { transform: translate(-50%, -50%) rotate(var(--r)) scale(1); } 75% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -60%) rotate(var(--r)) scale(1.05); } }
+
+/* hit / kill markers on the crosshair */
+#cross.hit { animation: hitm 0.18s ease-out; }
+#cross.kill { animation: killm 0.4s ease-out; }
+@keyframes hitm { 0% { transform: scale(1.35); border-color: #fff; box-shadow: 0 0 0 2px #ff3a3a, 0 0 14px #ff3a3a; } 100% { transform: scale(1); } }
+@keyframes killm { 0% { transform: scale(1.6) rotate(45deg); border-color: #ff2a3a; box-shadow: 0 0 0 3px #fff, 0 0 22px #ff2a3a; } 100% { transform: scale(1) rotate(0deg); } }
+body.locked #cross { left: 50% !important; top: 50% !important; }

@@ -127,6 +127,18 @@ npx http-server -c-1 .     # then visit http://localhost:8080/noir/
   BIG PORK'S DONUTS sign.
 - **Perf overlay.** FPS, frame time, draw calls, triangles and render resolution
   in the top-left corner. F3 hides or shows it.
+- **Third-person shooting.** Click the street and the game takes the mouse: it
+  turns the camera, with the crosshair fixed in the centre and the camera over
+  Mack's right shoulder. Right mouse pulls in tight to aim, and shots go where the
+  crosshair points, with a little aim magnetism. The crosshair flinches on a hit
+  and flashes an X on a kill, and the revolver kicks the camera. In the car the
+  mouse free-looks around the Packard and drifts back behind it when you let go.
+  Esc releases the mouse and pauses, and the pause menu has a mouse sensitivity
+  slider. Without a mouse lock, cursor aiming still works.
+- **Bonks.** Every car hit throws up a comic-book burst: POW!, BLAP!, ZOK!,
+  WHAM! when running down goons; BONK!, CLANG! for lamp posts and street props;
+  CRUNCH!, SMASH! for walls; and KAPOW!, BOOM!, KABLAM! for bosses, beasts,
+  bonked eyes and big vehicle hits.
 - **Driving.** A punchy launch, real brakes, and steering that's sharp at city
   speeds and steadier flat out. The car leans into corners and squats under
   throttle, and the lens widens with speed and boost. The car's velocity now

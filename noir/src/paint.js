@@ -203,7 +203,7 @@ export function flushPaint(dt, renderer) {
   uploadT = 1 / 15;
   const props = renderer && renderer.properties.get(paintTex);
   // a full upload when we must (first time, a wipe, a big fade, or lots of tiles at once)
-  if (fullDirty || !props || !props.__webglTexture || dirtyTiles.size > 48) {
+  if (fullDirty || !props || !props.__webglTexture || dirtyTiles.size > 48 || (typeof window !== 'undefined' && window.__paintFull)) {
     paintTex.needsUpdate = true;
   } else {
     const gl = renderer.getContext();
