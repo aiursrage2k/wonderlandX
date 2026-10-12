@@ -90,6 +90,17 @@ export function createHud() {
     el.ptSally.classList.toggle('down', !!s.sallyDown);
     el.carRow.classList.toggle('hidden', !s.inCar);
     if (tutT > 0) { tutT -= dt; if (tutT <= 0) document.getElementById('tutorial').classList.add('hidden'); }
+    // turn-by-turn panel
+    const gp = document.getElementById('gps');
+    if (s.gps) {
+      gp.classList.remove('hidden');
+      const g = s.gps, m = (d) => (d >= 1000 ? `${(d / 1000).toFixed(1)} km` : `${Math.round(d / 10) * 10} m`);
+      const A = { left: '↰', right: '↱', uturn: '⤾', straight: '↑' }, T = { left: 'TURN LEFT', right: 'TURN RIGHT', uturn: 'TURN AROUND', straight: 'STRAIGHT ON' };
+      document.getElementById('gps-arrow').textContent = A[g.act];
+      document.getElementById('gps-act').textContent = g.act === 'left' || g.act === 'right' ? `${T[g.act]} · ${m(g.dist)}` : T[g.act];
+      document.getElementById('gps-sub').textContent = `${g.label ? g.label + ' · ' : ''}${m(g.total)}`;
+      gp.classList.toggle('soon', (g.act === 'left' || g.act === 'right') && g.dist < 45);
+    } else gp.classList.add('hidden');
     if (radioT > 0) { radioT -= dt; if (radioT <= 0) document.getElementById('radio').classList.add('hidden'); }
     if (s.clock !== undefined) {
       const m = Math.floor(s.clock / 60), sec = Math.floor(s.clock % 60);
@@ -309,6 +320,13 @@ export function createHud() {
       mctx.strokeStyle = '#ff2d95'; mctx.lineWidth = 2.5;
       mctx.beginPath(); mctx.arc(x, y, 7 + Math.sin(t * 5) * 1.5, 0, 7); mctx.stroke();
       mctx.fillStyle = q.cracked ? '#fff' : '#ff2d95'; mctx.beginPath(); mctx.arc(x, y, 3, 0, 7); mctx.fill();
+    }
+    // the route, drawn on the street map
+    if (s.route && s.route.length > 1) {
+      mctx.strokeStyle = 'rgba(255, 63, 180, 0.95)'; mctx.lineWidth = 4; mctx.lineJoin = 'round'; mctx.setLineDash([]);
+      mctx.beginPath();
+      s.route.forEach((q, i) => { const [x, y] = P(q.x, q.z); if (i) mctx.lineTo(x, y); else mctx.moveTo(x, y); });
+      mctx.stroke();
     }
     if (s.carAlive && !s.inCar) { const [x, y] = P(s.car.pos.x, s.car.pos.z); upright(x, y, () => { mctx.fillStyle = '#e8e2d4'; mctx.font = 'bold 11px Georgia'; mctx.textAlign = 'center'; mctx.fillText('P', 0, 4); }); }
     if (!s.sally.inCar) { const [x, y] = P(s.sally.pos.x, s.sally.pos.z); mctx.fillStyle = '#ff2a3a'; mctx.beginPath(); mctx.arc(x, y, 3, 0, 7); mctx.fill(); }

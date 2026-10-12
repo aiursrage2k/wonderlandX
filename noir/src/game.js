@@ -6,7 +6,7 @@ import { buildCity, updateCityLOD, knock, L, C, DISTRICTS, roadC, nodeIndex, pus
 import { rainbowCoat as rainbowMatLocal } from './models.js';
 import { makeDetective, makeSally, makeGangster, makeCar, makePortal, makePrismKing, makeMayor, makeFlask, makeRainbowGoon, makeRoomba, makeTruck, makeCopter, makeMech, makeCultist, makeImp, makeBeast, makeRobot, makeCivilian, setInfected, makeCop, drainModel, GANG_COLORS, gangMat, makeDemonTank, addSkates, compactModel, part } from './models.js';
 import { makeRain, Particles, Tracers, Flashes, hexToRgb, fx } from './fx.js';
-import { sfx, setEngine } from './audio.js';
+import { sfx, setEngine, setRainLevel } from './audio.js';
 import { BOSSES, LINES, DONUT_LINES, COP_RETORTS, MONOLOGUES, EVIDENCE, RADIO, RADIO_FILLER, CAR_TALK } from './story.js';
 import { voice } from './voice.js';
 import { clamp, rand, pick, weighted, wrapAngle, Deck } from './util.js';
@@ -770,11 +770,14 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     return { x, z };
   }
   // road-grid route from a to b: along the road you're on, then the cross street
-  function route(ax, az, bx, bz) {
+  function route(ax, az, bx, bz, heading) {
     const ix = nodeIndex(ax), iz = nodeIndex(az), tx = nodeIndex(bx), tz = nodeIndex(bz);
     const onV = Math.abs(ax - roadC(ix)) < 12, onH = Math.abs(az - roadC(iz)) < 12;
     const pts = [{ x: ax, z: az }];
-    if (onV && !onH) { pts.push({ x: roadC(ix), z: roadC(tz) }, { x: roadC(tx), z: roadC(tz) }); }
+    // at a crossroads, carry on the way you're already pointing instead of swinging round
+    const alongZ = heading !== undefined && Math.abs(Math.cos(heading)) > Math.abs(Math.sin(heading));
+    if (onV && onH && alongZ) { pts.push({ x: roadC(ix), z: roadC(tz) }, { x: roadC(tx), z: roadC(tz) }); }
+    else if (onV && !onH) { pts.push({ x: roadC(ix), z: roadC(tz) }, { x: roadC(tx), z: roadC(tz) }); }
     else if (onH && !onV) { pts.push({ x: roadC(tx), z: roadC(iz) }, { x: roadC(tx), z: roadC(tz) }); }
     else { pts.push({ x: roadC(ix), z: roadC(iz) }, { x: roadC(tx), z: roadC(iz) }, { x: roadC(tx), z: roadC(tz) }); }
     pts.push({ x: bx, z: bz });
@@ -804,6 +807,45 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
   beacon.visible = false;
   scene.add(beacon);
   const _cm = new THREE.Matrix4(), _cq = new THREE.Quaternion(), _cs = V(), _cp = V(), _up = V(0, 1, 0);
+  // a big glowing arrow standing in the next intersection, pointing the way to turn (visible over traffic and rain)
+  const turnTex = (() => {
+    const c = document.createElement('canvas'); c.width = 256; c.height = 128; const g = c.getContext('2d');
+    g.shadowColor = '#ff3fb4'; g.shadowBlur = 18; g.fillStyle = '#ffd6f0'; g.strokeStyle = '#ff3fb4'; g.lineWidth = 8;
+    g.beginPath(); g.moveTo(30, 44); g.lineTo(150, 44); g.lineTo(150, 14); g.lineTo(226, 64); g.lineTo(150, 114); g.lineTo(150, 84); g.lineTo(30, 84); g.closePath(); g.fill(); g.stroke();
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+  })();
+  const turnSign = new THREE.Mesh(new THREE.PlaneGeometry(9, 4.5), new THREE.MeshBasicMaterial({ map: turnTex, color: new THREE.Color(2.2, 2.2, 2.2), transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+  turnSign.visible = false; turnSign.renderOrder = 4; scene.add(turnSign);
+  // turn-by-turn: the next corner on the route, which way it bends, and how far
+  function updateTurnByTurn(hd, g) {
+    const R = S.route, f = focus();
+    let dist = 0, corner = null, turn = 0;
+    for (let i = 0; i < R.length - 1; i++) {
+      const a = R[i], b = R[i + 1], len = Math.hypot(b.x - a.x, b.z - a.z);
+      if (i + 2 < R.length) {
+        const c = R[i + 2], len2 = Math.hypot(c.x - b.x, c.z - b.z);
+        if (len > 3 && len2 > 3) {
+          const a1 = Math.atan2(b.x - a.x, b.z - a.z), a2 = Math.atan2(c.x - b.x, c.z - b.z), d = wrapAngle(a2 - a1);
+          if (Math.abs(d) > 0.6) { corner = b; turn = d; dist += len; break; }
+        }
+      }
+      dist += len;
+    }
+    const total = R.reduce((s, p, i) => (i ? s + Math.hypot(p.x - R[i - 1].x, p.z - R[i - 1].z) : 0), 0);
+    // is the first leg behind us? then it's a U-turn
+    const lead = R[1] ? wrapAngle(Math.atan2(R[1].x - f.x, R[1].z - f.z) - hd) : 0;
+    let act = 'straight';
+    if (Math.abs(lead) > 2.2 && Math.hypot(R[1].x - f.x, R[1].z - f.z) > 12) { act = 'uturn'; dist = 0; }
+    else if (corner && dist < 260) act = turn > 0 ? 'left' : 'right';
+    S.gps = { act, dist: Math.round(dist), total: Math.round(total), label: g.label || (g.type === 'lead' ? 'THE TEAR' : '') };
+    // the standing arrow at the corner, facing the camera, pointing the turn
+    if (corner && act !== 'uturn' && dist > 10 && dist < 260) {
+      turnSign.visible = true;
+      turnSign.position.set(corner.x, 6.5 + Math.sin(S.time * 3) * 0.3, corner.z);
+      turnSign.lookAt(camera.position.x, 6.5, camera.position.z);
+      turnSign.scale.set(act === 'left' ? -1 : 1, 1, 1);
+    } else turnSign.visible = false;
+  }
   function updateWayfinding(dt) {
     let g = S.stage && S.stage.goal;
     const f = focus();
@@ -814,11 +856,13 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       g = best ? { type: 'lead', x: best.pos.x, z: best.pos.z } : null;
       if (best && (!S.leadP || S.leadP !== best)) { S.leadP = best; S.route = null; }
     }
-    if (!g || (g.type !== 'goto' && g.type !== 'lead') || S.over) { chevrons.count = 0; pathLine.count = 0; beacon.visible = false; return; }
+    if (!g || (g.type !== 'goto' && g.type !== 'lead') || S.over) { chevrons.count = 0; pathLine.count = 0; beacon.visible = false; turnSign.visible = false; S.gps = null; return; }
     S.routeT -= dt;
-    if (S.routeT <= 0 || !S.route) { S.routeT = 0.25; S.route = route(f.x, f.z, g.x, g.z); S.route[0] = { x: f.x, z: f.z }; }
+    const hd = P.inCar ? CAR.ang : P.face;
+    if (S.routeT <= 0 || !S.route) { S.routeT = 0.25; S.route = route(f.x, f.z, g.x, g.z, hd); S.route[0] = { x: f.x, z: f.z }; }
     S.route[0] = { x: f.x, z: f.z };
     beacon.visible = true;
+    updateTurnByTurn(hd, g);
     beacon.position.set(g.x, 0, g.z);
     bring.scale.setScalar(1 + Math.sin(S.time * 4) * 0.12);
     // walk the polyline, dropping a chevron every 7 units, scrolling with time
@@ -863,20 +907,46 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
   }
 
   // Z: whistle for the Packard and it drives itself to you
+  // Z: get the car. If Sally's on her feet she runs for it and brings it round; otherwise Mack whistles and it comes on its own.
   function summonCar() {
-    if (!CAR.alive || P.inCar) return;
-    if (P.pos.distanceTo(CAR.pos) < 9) return;
+    if (P.inCar) return;
+    if (!CAR.alive) { say('MACK', pick(['The Packard\'s scrap, Sally. We walk.', 'No car to whistle for. Just me and the rain.']), 2.4); return; }
+    if (P.pos.distanceTo(CAR.pos) < 9) { say('SALLY', 'It\'s RIGHT THERE, Mack.', 1.8); return; }
     CAR.intro = null;
-    CAR.auto = { path: route(CAR.pos.x, CAR.pos.z, P.pos.x, P.pos.z), i: 1, t: 0, stuck: 0, rev: 0 };
+    if (SA.driving) {
+      CAR.auto = { path: route(CAR.pos.x, CAR.pos.z, P.pos.x, P.pos.z, CAR.ang), i: 1, t: 0, stuck: 0, rev: 0 };
+      sfx.horn(); say('MACK', 'Sally! Taxi!', 1.8); later(() => S && say('SALLY', 'Beep beep! On my way!', 2), 900);
+      return;
+    }
+    if (!SA.down && !SA.inCar) {
+      // Sally sprints to the car, climbs in behind the wheel and drives it to Mack
+      SA.fetch = true; SA.fetchT = 0;
+      say('MACK', pick(['Sally! Get the car!', 'Sally, bring the car round.', 'Sally! Wheels!']), 1.8);
+      later(() => S && say('SALLY', pick(['On it! Don\'t go anywhere!', 'Ooh, I get to DRIVE!', 'Two minutes! Maybe one! Depends on the lights!']), 2.2), 1000);
+      return;
+    }
+    CAR.auto = { path: route(CAR.pos.x, CAR.pos.z, P.pos.x, P.pos.z, CAR.ang), i: 1, t: 0, stuck: 0, rev: 0 };
     sfx.horn();
     say('MACK', pick(['*whistles* Come to papa.', 'Here, girl. *whistle*', 'The Packard knows the way. Mostly.']), 2.2);
+  }
+  function sallyReachedCar() {
+    SA.fetch = false; SA.inCar = true; SA.fetching = true;
+    sallyM.root.visible = false;
+    sallyInCar.position.x = -1.1; // driver's seat
+    sfx.door();
+    CAR.auto = { path: route(CAR.pos.x, CAR.pos.z, P.pos.x, P.pos.z, CAR.ang), i: 1, t: 0, stuck: 0, rev: 0 };
   }
   function autopilot(dt, vf) {
     const A = CAR.auto;
     A.t -= dt;
     if (A.t <= 0) { A.t = 1; A.path = route(CAR.pos.x, CAR.pos.z, P.pos.x, P.pos.z); A.i = 1; }
     const dp = Math.hypot(P.pos.x - CAR.pos.x, P.pos.z - CAR.pos.z);
-    if (dp < 8) { CAR.auto = null; sfx.horn(); if (SA.driving) SA.parkT = 6; return { thr: -1, st: 0 }; }
+    if (dp < 8) {
+      CAR.auto = null; sfx.horn();
+      if (SA.driving) SA.parkT = 6;
+      if (SA.fetching) { SA.fetching = false; sallyInCar.position.x = 0; say('SALLY', pick(['Your chariot, detective!', 'Get in, loser! Again!', 'I only hit two mailboxes!']), 2.4); }
+      return { thr: -1, st: 0 };
+    }
     let w = A.path[Math.min(A.i, A.path.length - 1)];
     // keep right: offset waypoints into the right-hand lane of travel
     if (Math.hypot(w.x - CAR.pos.x, w.z - CAR.pos.z) < 8 && A.i < A.path.length - 1) { A.i++; w = A.path[A.i]; }
@@ -986,7 +1056,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     const sx = L.office.x, sz = L.office.z + 40;
     P.pos.set(sx - 4, 0, sz - 9); P.hp = P.maxHp; P.flasks = Math.min(P.maxFlasks, 3 + (S.fx.has('extraFlask') ? 2 : 0) + (opts.bonusFlasks || 0));
     P.inCar = false; P.focus = 0; P.roll = 0; P.focusMeter = 0.6; P.pills = 2; P.color = 0; P.ammo = 6; P.reload = 0; P.focusOn = false; P.aiming = false; NU.seeColor.value = 0;
-    SA.pos.set(sx - 7, 0, sz - 9); SA.inCar = false; SA.cd = 2; SA.lock = null; SA.lockT = 0; SA.driving = false; sallyInCar.position.x = 0; SA.hp = SA.maxHp; SA.down = false; SA.downT = 0;
+    SA.pos.set(sx - 7, 0, sz - 9); SA.inCar = false; SA.cd = 2; SA.lock = null; SA.lockT = 0; SA.driving = false; SA.fetch = false; SA.fetching = false; sallyInCar.position.x = 0; SA.hp = SA.maxHp; SA.down = false; SA.downT = 0;
     sallyM.root.rotation.set(0, 0, 0);
     // Sally brings the car round: it comes tearing down the block and skids up beside Mack
     CAR.pos.set(sx - 75, 0, sz - 7); CAR.ang = Math.PI / 2; CAR.auto = null;
@@ -1011,6 +1081,11 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     CAR.rockets = 0; CAR.heat = 0; CAR.overheat = 0; pod.visible = false;
     for (let k = 0; k < 4; k++) respawnCrate();
     if (caseDef.hell) makeFissures(caseDef.hell);
+    // how hard it's raining: case 1 is a drizzle; it gets heavier as the cases go on
+    const rainK = caseDef.rain ?? 1;
+    rain.geometry.setDrawRange(0, Math.round(rain.geometry.attributes.position.count * rainK));
+    setRainLevel(rainK);
+    S.rainK = rainK;
     if (caseDef.cops) later(() => {
       if (!S || S.wanted) return;
       S.wanted = true; S.copT = 2; hud.wanted(true);
@@ -1301,7 +1376,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     if (!S.replay) recEvent(['po', r1(p.x), r1(p.z)]);
     const portal = { g, pos: V(p.x, 0, p.z), hp, maxHp: hp, spawnCd: 3, paintCd: 0, paintR: 4, open: 0, stage: S.stage, color: pick(GANG_COLORS), flash: 0 };
     S.portals.push(portal);
-    if (o && o.walker) makeWalker(portal);
+    if (o && o.walker) makeWalker(portal); else makeShell(portal);
     sfx.portal();
     flashes.light(p.x, 12, p.z, 4000, 0.6);
     fx.flash = Math.max(fx.flash, 0.35);
@@ -1467,7 +1542,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
         if (d < r + e.r) hitEnemy(e, dmg * (1 - 0.5 * d / (r + e.r)), 'rocket');
       }
       for (const p of S.portals.slice()) {
-        if (Math.hypot(p.pos.x - x, p.pos.z - z) < r + (p.walker ? 9 : 4.5)) hitPortal(p, dmg * 0.9, x, z);
+        if (Math.hypot(p.pos.x - x, p.pos.z - z) < r + (p.walker ? 9 : p.shell && !p.cracked ? 7 : 4.5)) hitPortal(p, dmg * 0.9, x, z);
       }
     }
     if (!friendly && !P.inCar && Math.hypot(P.pos.x - x, P.pos.z - z) < r) damagePlayer(25, x, z);
@@ -1477,16 +1552,60 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
   }
 
   // bullets and rockets only crack a portal; Mack has to seal it by hand with his flask of grey
+  // ---- the eye's shell: a cage of crystal shards round every stationary eye. Each hit flashes it and
+  // knocks shards loose as its strength drops; when the last one goes the eye is bare and can be sealed.
+  const SHELL_R = 7.4;
+  const shardEdge = new THREE.LineBasicMaterial({ color: new THREE.Color(1, 0.35, 0.8).multiplyScalar(2.4), transparent: true, opacity: 0.9 });
+  function makeShell(p) {
+    const ico = new THREE.IcosahedronGeometry(SHELL_R, 0);
+    const pos = ico.attributes.position;
+    const mat = new THREE.MeshStandardMaterial({ color: 0xffd6f0, emissive: 0xff3fb4, emissiveIntensity: 0.25, metalness: 0.2, roughness: 0.08, transparent: true, opacity: 0.32, side: THREE.DoubleSide, depthWrite: false });
+    p.shell = { mat, shards: [] };
+    const grp = new THREE.Group(); p.g.add(grp); p.shell.g = grp;
+    for (let f = 0; f < pos.count / 3; f++) {
+      const a = V().fromBufferAttribute(pos, f * 3), b = V().fromBufferAttribute(pos, f * 3 + 1), c = V().fromBufferAttribute(pos, f * 3 + 2);
+      const cen = V().add(a).add(b).add(c).multiplyScalar(1 / 3);
+      // each shard is its own little triangle, shrunk a touch so the seams glow between them
+      const tri = new THREE.BufferGeometry().setFromPoints([a, b, c].map((v) => v.clone().sub(cen).multiplyScalar(0.94)));
+      tri.computeVertexNormals();
+      const m = new THREE.Mesh(tri, mat);
+      m.position.copy(cen);
+      m.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([a, b, c].map((v) => v.clone().sub(cen).multiplyScalar(0.94))), shardEdge));
+      grp.add(m);
+      p.shell.shards.push(m);
+    }
+    // break the shards in a random order so the shell gets ragged, not peeled
+    p.shell.shards.sort(() => Math.random() - 0.5);
+  }
+  function breakShards(p, keep) {
+    const S2 = p.shell;
+    while (S2.shards.length > keep) {
+      const m = S2.shards.pop();
+      const wp = V(); m.getWorldPosition(wp);
+      const dir = wp.clone().sub(V(p.pos.x, p.g.position.y, p.pos.z)).normalize();
+      S2.g.remove(m);
+      m.position.copy(wp); m.scale.setScalar(p.g.scale.x);
+      scene.add(m);
+      debris.push({ m, v: dir.multiplyScalar(rand(8, 16)).add(V(0, rand(3, 8), 0)), w: V(rand(-6, 6), rand(-6, 6), rand(-6, 6)) });
+      for (let k = 0; k < 6; k++) parts.spawn(wp.x, wp.y, wp.z, rand(-6, 6), rand(-2, 6), rand(-6, 6), { life: 0.5, size: 0.3, color: [2.5, 1.2, 2.2], grav: 14 });
+    }
+  }
   function hitPortal(p, dmg, x, z) {
     if (p.walker) { hitWalker(p, dmg, x, z); return; }
     if (p.cracked) return;
     p.hp -= dmg;
     p.flash = 0.1;
+    if (p.shell) {
+      p.shell.mat.emissiveIntensity = 1.6; p.shell.mat.opacity = 0.55; // the hit ripples across the glass
+      const keep = p.hp <= 0 ? 0 : Math.ceil(20 * p.hp / p.maxHp);
+      if (keep < p.shell.shards.length) { breakShards(p, keep); sfx.glass(); }
+      if (p.hp <= 0) { hud.floater(p.pos, 'SHELL SHATTERED — SEAL IT'); sfx.crash(1); flashes.ring(p.pos.x, p.pos.z, 14, 0xff3fb4, 0.5, 1); }
+    }
     if (p.hp <= 0) {
       p.hp = 0; p.cracked = true; p.seal = 0;
       sfx.close();
       for (let k = 0; k < 40; k++) { const a = Math.random() * 6.28; parts.spawn(p.pos.x + Math.cos(a) * 5, 6.5 + Math.sin(a) * 5, p.pos.z, Math.cos(a) * 4, Math.sin(a) * 4, rand(-2, 2), { life: 0.6, size: 0.5, color: [1, 1, 1] }); }
-      hud.floater(p.pos, 'CRACKED — SEAL IT ON FOOT');
+      if (!p.shell) hud.floater(p.pos, 'CRACKED — SEAL IT ON FOOT');
       if (!S.sealHint) { S.sealHint = true; say('MACK', 'It\'s cracked. Now I walk up and jam the flask of grey in it. Hold E. Three seconds. Sally, cover me.', 4); later(() => S && say('SALLY', 'Covering! I\'m covering! I\'m covering EVERYTHING!', 2.4), 4200); }
     }
   }
@@ -1684,7 +1803,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       const t = ex * dx + ez * dz;
       if (t < 0 || t > wall) continue;
       const px = ex - dx * t, pz = ez - dz * t;
-      if (px * px + pz * pz < 20) hits.push([t, null, p]);
+      if (px * px + pz * pz < (p.shell && !p.cracked ? 46 : 20)) hits.push([t, null, p]);
     }
     for (const c of S.civs) {
       if (c.dead) continue;
@@ -1806,6 +1925,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
   function enterCar() {
     P.inCar = true;
     CAR.auto = null;
+    if (SA.fetching || SA.fetch) { SA.fetching = false; SA.fetch = false; sallyInCar.position.x = 0; }
     if (SA.driving) { SA.driving = false; sallyInCar.position.x = 0; quip('SALLY', ['Fine, you drive. I\'ll shoot.', 'Back to the rockets!', 'Did you SEE that? Tell me you saw that.'], 1, 2); }
     if (CAR.intro) { CAR.intro = null; say('SALLY', pick(['Scoot over? No. YOU drive. I shoot.', 'Took you long enough. Shotgun!']), 2.4); }
     SA.inCar = !SA.down;
@@ -2141,7 +2261,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       boost: CAR.boost, hp: P.hp / P.maxHp, flasks: P.flasks, maxFlasks: P.maxFlasks, bleed: Math.min(1, S.bleed), focus: P.focus > 0 || P.focusHeld, focusMeter: P.focusMeter, pills: P.pills, ammo: P.ammo, reloading: P.reload > 0, seeColor: P.color > 0,
       inCar: P.inCar, carHp: CAR.alive ? CAR.hp / 400 : 0, carAlive: CAR.alive, mgHeat: CAR.heat || 0, overheat: CAR.overheat > 0, carRockets: CAR.rockets || 0,
       player: focus(), enemies: S.enemies, portals: S.portals, car: CAR, sally: SA, boss: S.boss && !S.boss.dead ? S.boss : null,
-      civs: S.civs, aim, hint: currentHint(), camera, time: S.time, heading: camMode === 'chase' ? camYaw : Math.PI, speed: Math.abs(CAR.speed), clock: S.time, stageText: S.stage ? S.stage.text : '', objectives: objectiveMarks(), sallyHp: SA.hp / SA.maxHp, sallyDown: SA.down,
+      civs: S.civs, aim, hint: currentHint(), camera, time: S.time, heading: camMode === 'chase' ? camYaw : Math.PI, speed: Math.abs(CAR.speed), clock: S.time, stageText: S.stage ? S.stage.text : '', objectives: objectiveMarks(), gps: S.gps, route: S.gps ? S.route : null, sallyHp: SA.hp / SA.maxHp, sallyDown: SA.down,
     });
     recFrame(rdt);
     pressed.clear();
@@ -2206,7 +2326,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     if (pressed.has('KeyC')) toggleCam();
     if (pressed.has('KeyE') && !(!P.inCar && nearestCracked())) {
       if (P.inCar) exitCar(false, true);
-      else if (CAR.alive && P.pos.distanceTo(CAR.pos) < (SA.driving ? 7 : 5)) enterCar();
+      else if (CAR.alive && P.pos.distanceTo(CAR.pos) < 8.5) enterCar();
       else if (SA.driving && CAR.alive) summonCar(); // Sally, come get me
       else if (!S.barUsed && L.bar.door && Math.hypot(P.pos.x - L.bar.door.x, P.pos.z - L.bar.door.z) < 5) {
         S.barUsed = true;
@@ -2491,6 +2611,20 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       const tube = sallyInCar.userData.tube;
       tube.rotation.y = Math.atan2(aim.x - CAR.pos.x, aim.z - CAR.pos.z) - CAR.ang;
       return;
+    }
+    if (SA.fetch) {
+      if (!CAR.alive || P.inCar) { SA.fetch = false; }
+      else {
+        const fx = CAR.pos.x - SA.pos.x, fz = CAR.pos.z - SA.pos.z, fd = Math.hypot(fx, fz);
+        if (fd < 3) { sallyReachedCar(); return; }
+        const sp2 = 17; // heels or not, she can run
+        SA.pos.x += fx / fd * sp2 * dt; SA.pos.z += fz / fd * sp2 * dt; pushOut(SA.pos, 0.6);
+        SA.fetchT = (SA.fetchT || 0) + dt;
+        if (SA.fetchT > 5) { SA.fetchT = 0; sallyReachedCar(); return; } // a long way off: she cuts through an alley and is already there
+        SA.face = Math.atan2(fx, fz);
+        sallyM.root.position.set(SA.pos.x, 0, SA.pos.z); sallyM.root.rotation.y = SA.face; animWalk(sallyM, sp2, dt);
+        return;
+      }
     }
     // follow Mack, keep a little to his side
     const tx = P.pos.x - Math.sin(P.face) * 3 + Math.cos(P.face) * 2.5, tz = P.pos.z - Math.cos(P.face) * 3 - Math.sin(P.face) * 2.5;
@@ -3112,6 +3246,12 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     for (const p of S.portals.slice()) {
       p.open = Math.min(1, p.open + dt * 0.7);
       if (p.walker) { updateWalker(p, dt); if (!S.portals.includes(p)) continue; }
+      if (p.shell) {
+        const sm = p.shell.mat;
+        sm.emissiveIntensity += (0.25 + Math.sin(S.time * 2 + p.pos.x) * 0.08 - sm.emissiveIntensity) * Math.min(1, dt * 6);
+        sm.opacity += (0.32 - sm.opacity) * Math.min(1, dt * 5);
+        p.shell.g.rotation.y += dt * 0.25; p.shell.g.rotation.x = Math.sin(S.time * 0.4) * 0.2;
+      }
       p.g.userData.uni.t.value = S.time;
       p.g.userData.uni.open.value = p.open;
       p.g.scale.setScalar((0.2 + p.open * 0.8) * (p.flash > 0 ? 1.06 : 1) * (p.cracked ? 0.85 + Math.sin(S.time * 30) * 0.04 - (p.seal || 0) * 0.15 : 1));
@@ -3292,7 +3432,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
         continue;
       }
       if (!boom) for (const e of S.enemies) if (Math.hypot(e.pos.x - r.pos.x, e.pos.z - r.pos.z) < e.r + 1) { boom = true; break; }
-      if (!boom) for (const p of S.portals) if (Math.hypot(p.pos.x - r.pos.x, p.pos.z - r.pos.z) < 4.5) { boom = true; break; }
+      if (!boom) for (const p of S.portals) if (Math.hypot(p.pos.x - r.pos.x, p.pos.z - r.pos.z) < (p.shell && !p.cracked ? 7.5 : 4.5)) { boom = true; break; }
       if (boom) {
         sallyBlast(r.pos.x, r.pos.y, r.pos.z);
         scene.remove(r.mesh);

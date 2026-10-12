@@ -135,7 +135,7 @@ function setMode(m) {
   if (indoors) setEngine(false);
   if (m === 'bar' || m === 'barMid') playlist('bar');
   else if (indoors) playlist('office');
-  noirPass.uniforms.drops.value = indoors ? 0 : 1;
+  noirPass.uniforms.drops.value = indoors ? 0 : (game && game.state && game.state.rainK !== undefined ? game.state.rainK : 1);
 }
 
 function fade(fn, ms = 650) {

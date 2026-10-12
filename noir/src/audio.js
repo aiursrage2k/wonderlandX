@@ -102,12 +102,15 @@ function startRain() {
   src2.start();
 }
 
-// indoors = muffled rain behind glass
-export function setIndoors(on) {
+// indoors = muffled rain behind glass; rainLevel sets how hard it's coming down (case by case)
+let indoors = false, rainLevel = 1;
+function applyRain() {
   if (!ctx) return;
-  rainFilter.frequency.setTargetAtTime(on ? 900 : 5200, ctx.currentTime, 0.4);
-  rainGain.gain.setTargetAtTime(on ? 0.1 : 0.16, ctx.currentTime, 0.4);
+  rainFilter.frequency.setTargetAtTime(indoors ? 900 : 2600 + 2600 * rainLevel, ctx.currentTime, 0.4);
+  rainGain.gain.setTargetAtTime((indoors ? 0.1 : 0.16) * (0.3 + 0.7 * rainLevel), ctx.currentTime, 0.6);
 }
+export function setIndoors(on) { indoors = on; applyRain(); }
+export function setRainLevel(k) { rainLevel = Math.max(0, Math.min(1, k)); applyRain(); }
 
 export function setEngine(on, speed = 0) {
   if (!ctx) return;
@@ -126,7 +129,7 @@ export function setEngine(on, speed = 0) {
   engine.o.frequency.setTargetAtTime(38 + s * 70, t, 0.08);
   engine.o2.frequency.setTargetAtTime(19 + s * 35, t, 0.08);
   engine.f.frequency.setTargetAtTime(250 + s * 700, t, 0.08);
-  engine.g.gain.setTargetAtTime(on ? 0.05 + s * 0.06 : 0, t, 0.15);
+  engine.g.gain.setTargetAtTime(on ? 0.022 + s * 0.028 : 0, t, 0.15); // a purr under the jazz, not over it
 }
 
 // ---------------------------------------------------------------- sfx

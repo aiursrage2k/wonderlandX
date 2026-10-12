@@ -340,3 +340,11 @@ body.playing #hud-top { top: 22px; }
 @keyframes hitm { 0% { transform: scale(1.35); border-color: #fff; box-shadow: 0 0 0 2px #ff3a3a, 0 0 14px #ff3a3a; } 100% { transform: scale(1); } }
 @keyframes killm { 0% { transform: scale(1.6) rotate(45deg); border-color: #ff2a3a; box-shadow: 0 0 0 3px #fff, 0 0 22px #ff2a3a; } 100% { transform: scale(1) rotate(0deg); } }
 body.locked #cross { left: 50% !important; top: 50% !important; }
+
+/* turn-by-turn, under the score/time boxes */
+#gps { position: absolute; top: 84px; left: 50%; transform: translateX(-50%); display: flex; gap: 12px; align-items: center; padding: 6px 16px 6px 10px; background: var(--deco-bg); border: 2px solid var(--gold); box-shadow: 0 6px 18px #000; z-index: 3; min-width: 240px; }
+#gps .gps-arrow { width: 44px; height: 44px; line-height: 44px; text-align: center; font: 38px/44px Georgia, serif; color: #ff3fb4; text-shadow: 0 0 12px rgba(255, 63, 180, 0.7); }
+#gps-act { font: 22px var(--bebas); letter-spacing: 2px; color: #f2ecdc; }
+#gps-sub { font: 12px var(--type); letter-spacing: 1px; color: var(--gold); }
+#gps.soon { border-color: #ff3fb4; animation: gps-pulse 0.6s infinite alternate; }
+@keyframes gps-pulse { to { box-shadow: 0 0 22px rgba(255, 63, 180, 0.8); } }

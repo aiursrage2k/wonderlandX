@@ -134,6 +134,21 @@ npx http-server -c-1 .     # then visit http://localhost:8080/noir/
   you click on; street lines queue up and stale ones are dropped. Stage
   directions like *hic* aren't read out. The Voices slider on the title and
   pause screens sets the volume, and 0 turns them off (captions always stay).
+- **Crystal shells.** Every stationary eye sits in a cage of 20 crystal shards
+  with glowing pink seams. Every hit flashes the glass and knocks shards loose
+  as it weakens. When the last one shatters the eye is bare and you can seal it.
+  Walker eyes are protected by their legs instead.
+- **Z gets the car.** If Sally's on foot she sprints for the Packard, takes the
+  wheel and drives it to Mack, then slides back to the passenger seat. If she's
+  already driving, it calls her over. If she's down, Mack whistles and the car
+  drives itself.
+- **GPS.** A car-nav panel under the score shows the next move (TURN LEFT ·
+  120 m, STRAIGHT ON, TURN AROUND) with the destination and distance left, and
+  pulses as a turn comes up. A big glowing arrow stands in the next
+  intersection pointing the way. The route is drawn on the radar, and it
+  carries on the way you're already heading instead of swinging you round.
+- **Weather by case.** Case 1 is a light drizzle: fewer drops, softer rain,
+  fewer drops on the lens. The engine is a quieter purr.
 - **Cutscenes play themselves.** Office intros, bar debriefs and toasts move to
   the next line one second after the current line has finished typing and been
   spoken. With voices off, the wait is a reading pause sized to the line.

@@ -17,7 +17,7 @@ export const CAST = {
 // stage goal types: kill (any gang), portals (close the portals this stage opens), boss
 export const CASES = [
   {
-    id: 1, title: 'The Blue Period', district: 'City', music: 'low',
+    id: 1, title: 'The Blue Period', district: 'City', music: 'low', rain: 0.3,
     dame: { name: 'Mrs. Edna Pruitt', hat: 'cloche', shade: 0x6a6460, fur: false },
     blurb: 'A dockworker came home off the night shift and called the sea "blue." Then the sky started tearing open over town. Two waves of it, by the sound of things.',
     intro: [
@@ -39,7 +39,7 @@ export const CASES = [
     ],
     stages: [
       { text: 'Meet Big Pork at the Holy Glaze — he owes Sally a favor', goal: { type: 'goto', at: 'donut', r: 30, label: 'BIG PORK', arrive: [['PORK', '*chew* Malone. Sally. You didn\'t see me. I\'m a cop. I\'m eating. Those are the same thing.'], ['PORK', 'Kids on Pier 9 are pushing Prism, but that ain\'t the worst of it. There\'s holes opening up in the sky, Malone. Little tears. Guys with spray cans climb out of \'em.'], ['PORK', 'One tonight. More tomorrow. The more you leave open, the more come out. Seal \'em. And next time bring a cruller.'], ['MACK', 'Thanks, Pork. Fat pig.'], ['PORK', 'I heard that! ...It\'s fair.']] }, mix: {}, max: 0, interval: 9, line: ['SALLY', 'Big Pork! Best snitch in the 13th. Follow the red arrows, Mack — or hit Z and the Packard comes to you!'] },
-      { text: 'Wave 1 of 2 — a tear in the sky. Find it, crack it, seal it', stamp: 'WAVE 1', tutorial: ['HOW TO SEAL A TEAR', 'SHOOT the eye until it cracks: hold RIGHT MOUSE to aim, CLICK to fire. Sally\'s rockets help.', 'WALK UP to the cracked eye. You have to be on foot (E gets you out of the car).', 'HOLD E for three seconds: Mack jams the flask of grey in it. Sealed.'], goal: { type: 'portals', n: 1 }, portals: 1, guards: 2, spread: true, minD: 150, maxD: 320, perPortal: 4, mix: { dauber: 1 }, max: 6, interval: 2.6, line: ['MACK', 'There it is. A hole in the sky, spitting out painters. Shoot the ring till it cracks, then walk up and jam my flask of grey in it.'] },
+      { text: 'Wave 1 of 2 — a tear in the sky. Find it, crack it, seal it', stamp: 'WAVE 1', tutorial: ['HOW TO SEAL A TEAR', 'SHOOT the crystal shell off the eye: every hit knocks shards loose. Hold RIGHT MOUSE to aim, CLICK to fire. Sally\'s rockets help.', 'WALK UP to the cracked eye. You have to be on foot (E gets you out of the car).', 'HOLD E for three seconds: Mack jams the flask of grey in it. Sealed.'], goal: { type: 'portals', n: 1 }, portals: 1, guards: 2, spread: true, minD: 150, maxD: 320, perPortal: 4, mix: { dauber: 1 }, max: 6, interval: 2.6, line: ['MACK', 'There it is. A hole in the sky, spitting out painters. Shoot the ring till it cracks, then walk up and jam my flask of grey in it.'] },
       { text: 'Breather — reload, take a pull, breathe the rain', goal: { type: 'breather', t: 20 }, mix: {}, max: 0, interval: 9, banter: [['SALLY', 'One down! Mack, that was SO fun. Is it always this fun?'], ['MACK', 'Pork said one tonight. Pork also said he\'s on a diet. Stay sharp.']] },
       { text: 'Wave 2 of 2 — two more tears, opposite ends of town', stamp: 'WAVE 2', goal: { type: 'portals', n: 2 }, portals: 2, guards: 2, spread: true, minD: 160, maxD: 420, perPortal: 4, mix: { dauber: 0.7, hood: 0.3 }, max: 8, interval: 2.4, line: ['SALLY', 'Two of \'em! One each? No — I\'m with you. I\'m always with you. Drive!'] },
     ],
