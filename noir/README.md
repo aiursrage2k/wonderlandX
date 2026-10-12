@@ -134,6 +134,10 @@ npx http-server -c-1 .     # then visit http://localhost:8080/noir/
   you click on; street lines queue up and stale ones are dropped. Stage
   directions like *hic* aren't read out. The Voices slider on the title and
   pause screens sets the volume, and 0 turns them off (captions always stay).
+- **Cutscenes play themselves.** Office intros, bar debriefs and toasts move to
+  the next line one second after the current line has finished typing and been
+  spoken. With voices off, the wait is a reading pause sized to the line.
+  Clicking (or Space) still skips ahead, and the skip/door button still ends it.
 - **Ride-along talk.** When Mack and Sally are cruising with nothing shooting
   at them, they talk the case over. Every case, plus night patrol, has its own
   short exchanges, played in order, one per quiet stretch of road.

@@ -168,7 +168,7 @@ function nextLine() {
   $('dlg-name').textContent = sp.name;
   $('dlg-name').className = `who-${sp.cls}`;
   $('dialog').classList.toggle('narr', who === 'NARR');
-  dlg.full = text; dlg.typed = 0;
+  dlg.full = text; dlg.typed = 0; dlg.idle = 0; dlg.lineT = 0;
   voice.say(who, text, { priority: true }); // cutscenes: the new line cuts off the old one
   $('dlg-text').textContent = '';
 }
@@ -178,8 +178,20 @@ function endDialog() {
   $('dialog').classList.add('hidden');
   if (d) d();
 }
+// Auto-advance: once a line is fully typed and its voice has finished, wait a beat (1 s) and move on.
+// With voices off, the wait is a reading pause sized to the line. Clicking still skips ahead.
+const AUTO_GAP = 1.0;
 function tickDialog(dt) {
-  if (!dlg.lines || dlg.typed >= dlg.full.length) return;
+  if (!dlg.lines) return;
+  if (dlg.typed >= dlg.full.length) {
+    dlg.lineT = (dlg.lineT || 0) + dt;
+    const talking = voice.enabled && voice.busy && dlg.lineT < 4 + dlg.full.length * 0.12; // safety cap if a voice never reports done
+    if (talking) { dlg.idle = 0; return; }
+    dlg.idle = (dlg.idle || 0) + dt;
+    const wait = AUTO_GAP + (voice.enabled && voice.supported ? 0 : Math.min(4, dlg.full.length * 0.035));
+    if (dlg.idle >= wait) nextLine();
+    return;
+  }
   dlg.timer += dt;
   while (dlg.timer > 0.018 && dlg.typed < dlg.full.length) {
     dlg.timer -= 0.018;
@@ -645,7 +657,7 @@ function boot() {
   $('splash-status').textContent = 'Click to light a cigarette';
   requestAnimationFrame(frame);
   if (params.has('debug')) window.__noir = {
-    game, office, bar, save, setMode, beginCase, startStreets, CASES, L, renderer, composer, playReel, loadReel, get mode() { return mode; },
+    game, office, bar, save, setMode, beginCase, startStreets, CASES, L, renderer, composer, tickDialog, dlg, playReel, loadReel, get mode() { return mode; },
     // fast-forward the streets without rendering (headless testing)
     step(sec, dt = 1 / 30) { for (let t = 0; t < sec && mode === 'play'; t += dt) game.update(dt); },
   };
