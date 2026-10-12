@@ -450,8 +450,32 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     }
     while (debris.length > 140) scene.remove(debris.shift().m);
   }
+  // scorch marks: a ring buffer of soft black burns on the road
+  const scorchTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d'); const gr = g.createRadialGradient(64, 64, 4, 64, 64, 64); gr.addColorStop(0, 'rgba(0,0,0,0.85)'); gr.addColorStop(0.5, 'rgba(0,0,0,0.55)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); for (let k = 0; k < 40; k++) { g.fillStyle = 'rgba(0,0,0,0.4)'; const a = Math.random() * 6.28, d = 30 + Math.random() * 30; g.beginPath(); g.arc(64 + Math.cos(a) * d, 64 + Math.sin(a) * d, 2 + Math.random() * 5, 0, 7); g.fill(); } return new THREE.CanvasTexture(c); })();
+  const SCORCH = 60;
+  const scorches = new THREE.InstancedMesh((() => { const g = new THREE.PlaneGeometry(1, 1); g.rotateX(-Math.PI / 2); return g; })(), new THREE.MeshBasicMaterial({ map: scorchTex, transparent: true, depthWrite: false, opacity: 0.85 }), SCORCH);
+  scorches.count = 0; scorches.frustumCulled = false; scorches.renderOrder = 1; scene.add(scorches);
+  let scorchI = 0;
+  function scorch(x, z, r) {
+    scorches.setMatrixAt(scorchI, new THREE.Matrix4().compose(V(x, 0.05 + scorchI * 0.0004, z), new THREE.Quaternion().setFromAxisAngle(_up, Math.random() * 6.28), V(r * 2, 1, r * 2)));
+    scorchI = (scorchI + 1) % SCORCH; scorches.count = Math.max(scorches.count, scorchI || SCORCH);
+    scorches.instanceMatrix.needsUpdate = true;
+  }
+  // a shockwave pulse for the post shader: where on screen, and how hard
+  function shockAt(x, y, z, k) {
+    const v = V(x, y, z).project(camera);
+    if (v.z > 1 || Math.abs(v.x) > 1.2 || Math.abs(v.y) > 1.2) return;
+    fx.shock = { u: v.x * 0.5 + 0.5, v: v.y * 0.5 + 0.5, k, t: 0 };
+  }
   function updateDebris(dt) {
-    for (const d of debris) {
+    for (let i = debris.length - 1; i >= 0; i--) {
+      const d = debris[i];
+      if (d.life !== undefined) {
+        // short-lived bits (glass) shrink away instead of littering the street
+        d.life -= dt;
+        if (d.life < 0.8) d.m.scale.multiplyScalar(Math.max(0, 1 - dt * 4));
+        if (d.life <= 0) { scene.remove(d.m); debris.splice(i, 1); continue; }
+      }
       if (d.rest) continue;
       d.v.y -= 22 * dt;
       d.m.position.addScaledVector(d.v, dt);
@@ -1065,6 +1089,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     carM.root.visible = true; carM.root.traverse((o) => { if (o.userData.origMat) o.material = o.userData.origMat; });
     restoreCar();
     while (debris.length) scene.remove(debris.pop().m);
+    scorches.count = 0; scorchI = 0; fx.shock = null;
     mack.root.visible = true; sallyM.root.visible = false;
     if (opts.inCar && L.bar.door) {
       // straight out of the Last Drop: the Packard's idling at the curb, Mack at the wheel, Sally riding shotgun
@@ -1419,6 +1444,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
 
   function damagePlayer(d, fromX, fromZ) {
     if (S.over) return;
+    fx.aberr = Math.max(fx.aberr || 0, Math.min(1.4, 0.35 + d / 25)); // the world smears when Mack gets tagged
     if (P.inCar) {
       CAR.hp -= d * 0.8;
       if (Math.random() < 0.3) sparks(CAR.pos.x, 1.2, CAR.pos.z, 5);
@@ -1480,6 +1506,15 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
   function killEnemy(e, silent = false) {
     if (e.dead) return;
     e.dead = true;
+    if (!silent) {
+      // the pop: a burst of his own paint, a white flash, a little freeze if he was close
+      const dm = Math.hypot(e.pos.x - focus().x, e.pos.z - focus().z), far = clamp(1 - dm / 110, 0.15, 1);
+      sfx.killPop(far);
+      flashes.ball(e.pos.x, 1.5, e.pos.z, 1.6, 0.12, 0xffffff, 2);
+      for (let k = 0; k < 14; k++) { const a = Math.random() * 6.28; parts.spawn(e.pos.x, 1.4, e.pos.z, Math.cos(a) * rand(6, 13), rand(2, 7), Math.sin(a) * rand(6, 13), { life: 0.45, size: 0.55, color: e.rgb.map((c) => c * 2.2), grav: 14 }); }
+      splat(e.pos.x, e.pos.z, 1.6, e.color, 0.5, 6);
+      if (dm < 45) S.hitStop = Math.max(S.hitStop || 0, e.type === 'boss' ? 0.18 : BIG.has(e.type) ? 0.09 : 0.035);
+    }
     S.enemies.splice(S.enemies.indexOf(e), 1);
     const big = S.fx.has('bigWash') ? 1.6 : 1;
     wash(e.pos.x, e.pos.z, (e.type === 'boss' ? 60 : e.type === 'roomba' || e.type === 'truck' || e.type === 'beast' ? 34 : e.type === 'lowrider' ? 22 : 16) * big, 1);
@@ -1524,6 +1559,11 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
 
   function explode(x, y, z, r, dmg, friendly = true, civR = r * 0.8) {
     const far = clamp(1 - Math.hypot(x - focus().x, z - focus().z) / 140, 0.1, 1);
+    // a scorch mark burned into the wet street, and smoke that hangs and rises
+    scorch(x, z, r * 0.9);
+    for (let k = 0; k < 10; k++) parts.spawn(x + rand(-r, r) * 0.4, y + 1, z + rand(-r, r) * 0.4, rand(-1.2, 1.2), rand(2, 5), rand(-1.2, 1.2), { life: rand(2.5, 4), size: rand(3, 5), grow: 2.5, color: [0.18, 0.18, 0.19], alpha: 0.55, drag: 0.8, kind: 1 });
+    for (let k = 0; k < 8; k++) parts.spawn(x, y + 0.5, z, rand(-4, 4), rand(1, 4), rand(-4, 4), { life: rand(0.4, 0.8), size: rand(2, 3.5), grow: 3, color: [3, 1.2, 0.3], alpha: 0.8, drag: 2, kind: 1 }); // rolling fire
+    if (far > 0.6 && r >= 5) { S.hitStop = Math.max(S.hitStop || 0, 0.05); shockAt(x, y + 1, z, Math.min(1, r / 9) * far); }
     sfx.boom(far);
     flashes.light(x, y + 2, z, 2500, 0.25);
     // a white-hot core, an orange fireball rolling out of it, and a shockwave across the ground
@@ -1586,7 +1626,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       S2.g.remove(m);
       m.position.copy(wp); m.scale.setScalar(p.g.scale.x);
       scene.add(m);
-      debris.push({ m, v: dir.multiplyScalar(rand(8, 16)).add(V(0, rand(3, 8), 0)), w: V(rand(-6, 6), rand(-6, 6), rand(-6, 6)) });
+      debris.push({ m, v: dir.multiplyScalar(rand(8, 16)).add(V(0, rand(3, 8), 0)), w: V(rand(-6, 6), rand(-6, 6), rand(-6, 6)), life: rand(2.5, 4) });
       for (let k = 0; k < 6; k++) parts.spawn(wp.x, wp.y, wp.z, rand(-6, 6), rand(-2, 6), rand(-6, 6), { life: 0.5, size: 0.3, color: [2.5, 1.2, 2.2], grav: 14 });
     }
   }
@@ -1598,8 +1638,8 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     if (p.shell) {
       p.shell.mat.emissiveIntensity = 1.6; p.shell.mat.opacity = 0.55; // the hit ripples across the glass
       const keep = p.hp <= 0 ? 0 : Math.ceil(20 * p.hp / p.maxHp);
-      if (keep < p.shell.shards.length) { breakShards(p, keep); sfx.glass(); }
-      if (p.hp <= 0) { hud.floater(p.pos, 'SHELL SHATTERED — SEAL IT'); sfx.crash(1); flashes.ring(p.pos.x, p.pos.z, 14, 0xff3fb4, 0.5, 1); }
+      if (keep < p.shell.shards.length) { breakShards(p, keep); sfx.shatter(false); }
+      if (p.hp <= 0) { hud.floater(p.pos, 'SHELL SHATTERED — SEAL IT'); sfx.shatter(true); S.hitStop = 0.12; fx.shake = Math.max(fx.shake, 0.7); flashes.ring(p.pos.x, p.pos.z, 14, 0xff3fb4, 0.5, 1); }
     }
     if (p.hp <= 0) {
       p.hp = 0; p.cracked = true; p.seal = 0;
@@ -1823,8 +1863,11 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       if (civ) { killCiv(civ, true); continue; }
       if (e) {
         hitEnemy(e, dmg * (n === 1 ? 1 : 0.7));
-        if (byPlayer) hud.hitmark(e.dead);
+        if (byPlayer) { hud.hitmark(e.dead); sfx.tick(e.dead); if (Math.random() < 0.6) sfx.impact(0.8); }
         for (let k = 0; k < 6; k++) parts.spawn(_hp.x, _hp.y, _hp.z, dx * 5 + rand(-4, 4), rand(1, 5), dz * 5 + rand(-4, 4), { life: 0.4, size: 0.4, color: e.rgb, grav: 15 });
+        // the round shoves him back a step and a hot spark marks the hit
+        if (!e.dead && !BIG.has(e.type) && e.type !== 'tank') { e.pos.x += dx * dmg * 0.025; e.pos.z += dz * dmg * 0.025; }
+        parts.spawn(_hp.x, _hp.y, _hp.z, 0, 0, 0, { life: 0.07, size: 1.6, color: [3, 2.6, 2], kind: 1 });
       } else {
         hitPortal(p, dmg, _hp.x, _hp.z);
         parts.spawn(_hp.x, 4 + Math.random() * 5, _hp.z, rand(-3, 3), rand(-3, 3), 0, { life: 0.3, size: 0.6, color: hexToRgb(p.color) });
@@ -1837,6 +1880,7 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     tracers.add(o, _hp, color, 0.09);
     if (!hits.length && wall < range) {
       for (let k = 0; k < 5; k++) parts.spawn(_hp.x, _hp.y, _hp.z, -dx * rand(3, 9) + rand(-3, 3), rand(1, 6), -dz * rand(3, 9) + rand(-3, 3), { life: 0.25, size: 0.2, color: [4, 3, 1.6], grav: 20 });
+      if (byPlayer && Math.random() < 0.35) sfx.ricochet(clamp(1 - Math.hypot(_hp.x - focus().x, _hp.z - focus().z) / 80, 0.2, 1));
       parts.spawn(_hp.x, _hp.y, _hp.z, -dx * 1.5, 0.5, -dz * 1.5, { life: 0.7, size: 1.2, grow: 2, color: [0.6, 0.6, 0.62], alpha: 0.45, kind: 1 });
     }
     return _hp;
@@ -2162,7 +2206,10 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
     P.focusHeld = P.focusOn;
     const slowed = P.focus > 0 || P.focusHeld;
     const slow = S.down !== undefined ? 0.3 : slowed ? 0.3 : 1;
-    const dt = rdt * slow, pdt = rdt * (slowed ? 0.85 : 1);
+    // hit-stop: a sliver of a freeze on kills and big blasts, so they land
+    let hs = 1;
+    if ((S.hitStop || 0) > 0) { S.hitStop -= rdt; hs = 0.08; }
+    const dt = rdt * slow * hs, pdt = rdt * (slowed ? 0.85 : 1) * (hs < 1 ? 0.25 : 1);
     S.time += dt;
     P.focus = Math.max(0, P.focus - rdt);
     // pain pills: the world floods with color for a while
@@ -3367,6 +3414,9 @@ export function createGame({ renderer, hud, onEnd, onBar }) {
       if (sd > 0 && rayDist(s.pos.x, s.pos.z, s.vx * dt / sd, s.vz * dt / sd, sd) < sd) hitWall = true;
       s.pos.x = nx; s.pos.z = nz;
       if (s.big) { s.vy -= 14 * dt; s.pos.y += s.vy * dt; s.mesh.rotation.x += dt * 5; }
+      // a glowing smear of paint behind every round, so you can read the incoming fire
+      if (!s.rgb) s.rgb = hexToRgb(s.color).map((c) => c * 2.6);
+      if (Math.random() < 0.8) parts.spawn(s.pos.x, s.pos.y, s.pos.z, -s.vx * 0.04, 0, -s.vz * 0.04, { life: 0.22, size: s.big ? 1.1 : 0.55, color: s.rgb, kind: 1, alpha: 0.85 });
       s.mesh.position.copy(s.pos);
       const pr = P.inCar ? 2.6 : 0.9;
       let hitP = !s.big && Math.hypot(s.pos.x - f.x, s.pos.z - f.z) < pr;

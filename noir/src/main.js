@@ -34,9 +34,9 @@ renderer.toneMappingExposure = 1.3;
 
 // film grain, vignette, rain on the lens, lightning, hurt and flask focus
 const NoirShader = {
-  uniforms: { tDiffuse: { value: null }, time: { value: 0 }, grain: { value: 0.05 }, vign: { value: 1.0 }, flash: { value: 0 }, focus: { value: 0 }, drops: { value: 1 }, res: { value: new THREE.Vector2(1, 1) }, scratch: { value: 1 }, dream: { value: 0 } },
+  uniforms: { tDiffuse: { value: null }, time: { value: 0 }, grain: { value: 0.05 }, vign: { value: 1.0 }, flash: { value: 0 }, focus: { value: 0 }, drops: { value: 1 }, res: { value: new THREE.Vector2(1, 1) }, scratch: { value: 1 }, dream: { value: 0 }, shock: { value: new THREE.Vector4(0.5, 0.5, 0, 0) }, aberr: { value: 0 } },
   vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
-  fragmentShader: `uniform sampler2D tDiffuse; uniform float time, grain, vign, flash, focus, drops, scratch, dream; uniform vec2 res; varying vec2 vUv;
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float time, grain, vign, flash, focus, drops, scratch, dream, aberr; uniform vec4 shock; uniform vec2 res; varying vec2 vUv;
     float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     void main(){
       vec2 uv = vUv;
@@ -57,7 +57,20 @@ const NoirShader = {
         off.x += (sin(uv.y * 38.0 + time * 7.0) * 0.010 + sin(uv.y * 9.0 - time * 3.0) * 0.018) * dream;
         off.y += sin(uv.x * 22.0 + time * 5.0) * 0.006 * dream;
       }
+      // blast shockwave: a ring of refraction racing out from the explosion on screen
+      if (shock.z > 0.0) {
+        vec2 sd = (uv - shock.xy) * vec2(res.x / res.y, 1.0);
+        float sr = length(sd), front = shock.w * 0.9;
+        float ring = smoothstep(0.09, 0.0, abs(sr - front)) * shock.z * (1.0 - shock.w);
+        off += normalize(sd + 1e-5) * ring * 0.035;
+      }
       vec3 col = texture2D(tDiffuse, uv + off).rgb;
+      // chromatic split on big hits: red and blue pull apart toward the edges
+      if (aberr > 0.0) {
+        vec2 ca = (uv - 0.5) * aberr * 0.02;
+        col.r = texture2D(tDiffuse, uv + off + ca).r;
+        col.b = texture2D(tDiffuse, uv + off - ca).b;
+      }
       if (dream > 0.0) {
         vec3 ghost = texture2D(tDiffuse, uv + off * 2.5 + vec2(0.012, 0.0) * dream).rgb;
         col = mix(col, ghost, 0.35 * dream);
@@ -636,6 +649,12 @@ function frame(now) {
   renderPass.scene = scene; renderPass.camera = camera;
   noirPass.uniforms.time.value = time;
   noirPass.uniforms.flash.value = mode === 'play' || mode === 'reel' ? fx.flash : 0;
+  // shockwave + chromatic split, both decaying fast
+  const sh = mode === 'play' && fx.shock;
+  if (sh) { sh.t += dt; if (sh.t > 0.55) fx.shock = null; }
+  noirPass.uniforms.shock.value.set(sh ? sh.u : 0.5, sh ? sh.v : 0.5, sh ? sh.k : 0, sh ? sh.t / 0.55 : 0);
+  fx.aberr = Math.max(0, (fx.aberr || 0) - dt * 3);
+  noirPass.uniforms.aberr.value = mode === 'play' ? Math.max(fx.aberr, sh ? sh.k * (1 - sh.t / 0.55) * 1.5 : 0, Math.min(1, fx.shake * 0.6)) : 0;
   noirPass.uniforms.focus.value = mode === 'play' && (game.debug.player.focus > 0 || game.debug.player.focusHeld) ? 1 : mode === 'reel' ? 0.5 : 0;
   noirPass.uniforms.grain.value = mode === 'reel' ? 0.13 : 0.05;
   noirPass.uniforms.scratch.value = mode === 'reel' ? 3 : 1;

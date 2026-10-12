@@ -134,6 +134,20 @@ npx http-server -c-1 .     # then visit http://localhost:8080/noir/
   you click on; street lines queue up and stale ones are dropped. Stage
   directions like *hic* aren't read out. The Voices slider on the title and
   pause screens sets the volume, and 0 turns them off (captions always stay).
+- **Juice.**
+  - A brief hit-stop on close kills, big blasts and shattering shells.
+  - Goons pop in a burst of their own paint with a white flash.
+  - Shots shove goons back a step, with a hot spark at the hit, a hit tick, and a
+    heavier clunk on a kill. Missed rounds whine off brick.
+  - Explosions leave scorch marks on the road and a hanging column of smoke,
+    and send a refraction shockwave and a chromatic split across the screen.
+    Getting hit smears the colors too.
+  - Enemy paint rounds leave glowing trails, and shell shards shrink away
+    instead of littering the street.
+  - Sounds: gunshots and blasts echo off the buildings. The revolver has a crack
+    and a chest-thump, rockets launch with a pop and a whoosh, explosions are
+    layered (crack, sub-bass drop, roar, debris raining down), and the shell
+    has its own shatter.
 - **Crystal shells.** Every stationary eye sits in a cage of 20 crystal shards
   with glowing pink seams. Every hit flashes the glass and knocks shards loose
   as it weakens. When the last one shatters the eye is bare and you can seal it.

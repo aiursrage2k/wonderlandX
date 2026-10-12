@@ -5,6 +5,7 @@ import { pick } from './util.js';
 
 let ctx = null;
 let master, musicBus, sfxBus, ambBus, reverb, noiseBuf;
+let room = null; // sfx that should echo down the street go here
 const vol = { music: 0.6, sfx: 0.8 };
 const listeners = [];
 
@@ -46,6 +47,16 @@ export function initAudio() {
   reverb.buffer = ir;
   const rvGain = ctx.createGain(); rvGain.gain.value = 0.32;
   reverb.connect(rvGain).connect(musicBus);
+  // the street: gunshots and blasts slap off the buildings and roll away down the block
+  const slen = ctx.sampleRate * 1.6, sir = ctx.createBuffer(2, slen, ctx.sampleRate);
+  for (let c = 0; c < 2; c++) {
+    const ch = sir.getChannelData(c);
+    for (let i = 0; i < slen; i++) { const tt = i / ctx.sampleRate; ch[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / slen, 2.4) * (tt < 0.09 ? 0.35 : 1) + (Math.abs(tt - 0.11 - c * 0.02) < 0.004 ? (Math.random() - 0.5) * 2 : 0); }
+  }
+  const street = ctx.createConvolver(); street.buffer = sir;
+  const stGain = ctx.createGain(); stGain.gain.value = 0.4;
+  street.connect(stGain).connect(sfxBus);
+  room = ctx.createGain(); room.gain.value = 1; room.connect(sfxBus); room.connect(street);
   startRain();
   setInterval(tickMusic, 40);
 }
@@ -141,11 +152,13 @@ export const sfx = {
     tone(t, 140, 0.08, { type: 'square', gain: 0.12, endFreq: 50 });
   },
   revolver() {
+    // the big red .45: a sharp crack, a chest-thump of body, and the street throwing it back
     if (!ctx) return; const t = at();
-    noise(t, 0.35, { type: 'lowpass', freq: 2600, gain: 0.55, endFreq: 300 });
-    tone(t, 95, 0.3, { type: 'sine', gain: 0.45, endFreq: 38 });
-    noise(t, 0.05, { type: 'highpass', freq: 3500, gain: 0.25 });
-    noise(t + 0.08, 0.6, { type: 'bandpass', freq: 500, q: 0.7, gain: 0.08, attack: 0.05 }); // echo down the street
+    noise(t, 0.035, { type: 'highpass', freq: 2800, gain: 0.55, out: room });
+    noise(t, 0.32, { type: 'lowpass', freq: 3200, gain: 0.6, endFreq: 260, out: room });
+    tone(t, 120, 0.28, { type: 'sine', gain: 0.6, endFreq: 36 });
+    tone(t, 62, 0.4, { type: 'triangle', gain: 0.25, endFreq: 30 });
+    noise(t + 0.25, 0.05, { type: 'bandpass', freq: 4200, q: 3, gain: 0.04 }); // the hammer settles
   },
   radio() {
     if (!ctx) return; const t = at();
@@ -204,19 +217,60 @@ export const sfx = {
     noise(t, 0.22, { type: 'highpass', freq: 5000, gain: 0.05 * far, attack: 0.03 });
   },
   rocket() {
+    // launch: a punchy pop out of the tube, then the motor whooshing away
     if (!ctx) return; const t = at();
-    noise(t, 0.7, { type: 'bandpass', freq: 600, q: 0.6, gain: 0.3, endFreq: 3500, attack: 0.02 });
-    tone(t, 90, 0.3, { type: 'sawtooth', gain: 0.1, endFreq: 40 });
+    noise(t, 0.06, { type: 'lowpass', freq: 1800, gain: 0.5, out: room });
+    tone(t, 140, 0.12, { type: 'sine', gain: 0.35, endFreq: 50 });
+    noise(t + 0.03, 0.9, { type: 'bandpass', freq: 500, q: 0.8, gain: 0.32, endFreq: 4200, attack: 0.04 });
+    noise(t + 0.05, 0.7, { type: 'highpass', freq: 5000, gain: 0.06, attack: 0.1 }); // hiss
   },
   boom(far = 1) {
+    // a proper blast: the crack, a sub-bass punch that drops through the floor, the roar, then debris raining down
     if (!ctx) return; const t = at();
-    noise(t, 1.4, { type: 'lowpass', freq: 1400, gain: 0.7 * far, endFreq: 80 });
-    tone(t, 70, 0.9, { type: 'sine', gain: 0.6 * far, endFreq: 25 });
-    noise(t + 0.02, 0.25, { type: 'highpass', freq: 2500, gain: 0.25 * far });
+    const lp = 600 + far * 3400; // far away loses the top end
+    noise(t, 0.08, { type: 'highpass', freq: 1800, gain: 0.6 * far * far, out: room });
+    tone(t, 110, 0.7, { type: 'sine', gain: 0.85 * far, endFreq: 22 });
+    tone(t, 55, 1.1, { type: 'sine', gain: 0.5 * far, endFreq: 18, attack: 0.01 });
+    noise(t, 1.6, { type: 'lowpass', freq: lp, gain: 0.75 * far, endFreq: 70, out: room });
+    noise(t + 0.05, 0.9, { type: 'bandpass', freq: 900, q: 0.5, gain: 0.25 * far, endFreq: 200 });
+    for (let k = 0; k < 9; k++) noise(t + 0.25 + Math.random() * 0.9, 0.04, { type: 'bandpass', freq: 1500 + Math.random() * 3500, q: 4, gain: 0.07 * far }); // debris ticking down
   },
   hit() {
     if (!ctx) return; const t = at();
     tone(t, 220, 0.12, { type: 'square', gain: 0.1, endFreq: 90 });
+  },
+  // a bullet into a body: a dull wet thump
+  impact(far = 1) {
+    if (!ctx) return; const t = at();
+    noise(t, 0.09, { type: 'lowpass', freq: 700, gain: 0.35 * far, endFreq: 120 });
+    tone(t, 160, 0.07, { type: 'sine', gain: 0.18 * far, endFreq: 60 });
+  },
+  // a round off brick: the ricochet whine
+  ricochet(far = 1) {
+    if (!ctx) return; const t = at();
+    noise(t, 0.03, { type: 'highpass', freq: 3000, gain: 0.2 * far });
+    const f = 2200 + Math.random() * 2400;
+    tone(t + 0.01, f, 0.35, { type: 'sine', gain: 0.045 * far, endFreq: f * 0.45 });
+  },
+  // the crosshair's tick when a shot lands, and a heavier clunk on a kill
+  tick(kill = false) {
+    if (!ctx) return; const t = at();
+    if (kill) { tone(t, 1300, 0.09, { type: 'square', gain: 0.05, endFreq: 650 }); tone(t + 0.05, 330, 0.18, { type: 'triangle', gain: 0.14, endFreq: 110 }); }
+    else tone(t, 1900, 0.04, { type: 'square', gain: 0.035 });
+  },
+  // a goon bursting into the paint he was made of
+  killPop(far = 1) {
+    if (!ctx) return; const t = at();
+    noise(t, 0.22, { type: 'bandpass', freq: 900, q: 0.7, gain: 0.32 * far, endFreq: 180 });
+    tone(t, 240, 0.18, { type: 'sine', gain: 0.22 * far, endFreq: 70 });
+    for (let k = 0; k < 4; k++) noise(t + 0.05 + k * 0.04, 0.06, { type: 'lowpass', freq: 700, gain: 0.08 * far }); // splatter
+  },
+  // crystal shell breaking: bright tinkling and a crunch
+  shatter(big = false) {
+    if (!ctx) return; const t = at();
+    noise(t, big ? 0.5 : 0.18, { type: 'highpass', freq: 3000, gain: big ? 0.35 : 0.16, endFreq: 7000, out: room });
+    for (let i = 0; i < (big ? 18 : 6); i++) tone(t + Math.random() * (big ? 0.6 : 0.2), 2400 + Math.random() * 5000, 0.18, { type: 'triangle', gain: big ? 0.05 : 0.035 });
+    if (big) tone(t, 180, 0.4, { type: 'sine', gain: 0.3, endFreq: 50 });
   },
   hurt() {
     if (!ctx) return; const t = at();
